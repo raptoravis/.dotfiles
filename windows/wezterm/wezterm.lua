@@ -3,6 +3,30 @@ local K = require('keybinds')
 local F = require('functions')
 local config = wezterm.config_builder()
 
+-- ---------------------------------------------------------------------------
+-- Window size persistence
+-- Default 140x40 if no saved state. Rewritten on every resize so the next
+-- launch reopens at the same dimensions.
+-- ---------------------------------------------------------------------------
+local state_path = wezterm.config_dir .. '/window-state.json'
+
+local function read_window_state()
+    local f = io.open(state_path, 'r')
+    if not f then return nil, nil end
+    local content = f:read('*a')
+    f:close()
+    local cols = tonumber(content:match('"cols"%s*:%s*(%d+)'))
+    local rows = tonumber(content:match('"rows"%s*:%s*(%d+)'))
+    return cols, rows
+end
+
+local function write_window_state(cols, rows)
+    local f = io.open(state_path, 'w')
+    if not f then return end
+    f:write(string.format('{"cols":%d,"rows":%d}\n', cols, rows))
+    f:close()
+end
+
 -- Launch
 config.default_prog = F.get_default_program()
 config.automatically_reload_config = true
@@ -50,6 +74,11 @@ config.window_padding = {
     bottom = 0,
 }
 
+-- Initial window size — restore last saved dimensions or fall back to default.
+local saved_cols, saved_rows = read_window_state()
+config.initial_cols = saved_cols or 140
+config.initial_rows = saved_rows or 40
+
 -- Font
 config.font = wezterm.font_with_fallback({ 'FiraCode Nerd Font', 'FiraCode NF', 'JetBrains Mono' })
 config.font_size = F.get_os_font_size()
@@ -91,6 +120,16 @@ end)
 
 wezterm.on('opacity-reset', function(window, _)
     F.reset_opacity(window, config)
+end)
+
+-- Persist window size on resize so the next launch reopens at the same size.
+-- Skipped while in fullscreen so F11 toggles don't clobber the saved dims.
+wezterm.on('window-resized', function(window, pane)
+    if window:get_dimensions().is_full_screen then return end
+    local dims = pane:get_dimensions()
+    if dims and dims.cols and dims.viewport_rows then
+        write_window_state(dims.cols, dims.viewport_rows)
+    end
 end)
 
 return config
