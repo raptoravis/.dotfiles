@@ -21,6 +21,7 @@ function K.keybinds()
         { key = 'Enter', mods = 'ALT',       action = action.ShowLauncherArgs({ flags = 'LAUNCH_MENU_ITEMS' }) },
         { key = 'Enter', mods = 'CMD|SHIFT', action = action.ToggleFullScreen },
         { key = 'p', mods = 'ALT', action = action.ActivateCommandPalette },
+        { key = 'p', mods = 'CTRL|SHIFT', action = action.ActivateCommandPalette },
         { key = 'q', mods = 'ALT', action = action.QuitApplication },
 
         -- Search

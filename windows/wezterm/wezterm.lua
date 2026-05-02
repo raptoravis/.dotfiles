@@ -99,7 +99,7 @@ config.use_fancy_tab_bar = true
 
 -- Keys
 config.enable_kitty_keyboard = false
-config.disable_default_key_bindings = true
+config.disable_default_key_bindings = false
 config.keys = K.keybinds()
 
 -- Events
