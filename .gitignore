@@ -65,3 +65,4 @@ target/
 
 # LLM 
 .claude/
+windows/bin/**/TrafficHistory.json
