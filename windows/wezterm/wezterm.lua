@@ -29,6 +29,7 @@ end
 
 -- Launch
 config.default_prog = F.get_default_program()
+config.default_cwd = 'D:\\dev'
 config.automatically_reload_config = true
 config.launch_menu = {
     { label = 'PowerShell 7',       args = { 'pwsh.exe', '-NoLogo' } },
@@ -84,6 +85,7 @@ config.initial_rows = saved_rows or 40
 -- Font
 config.font = wezterm.font_with_fallback({ 'FiraCode Nerd Font', 'FiraCode NF', 'JetBrains Mono' })
 config.font_size = F.get_os_font_size()
+config.warn_about_missing_glyphs = false
 
 -- Scrolling
 config.enable_scroll_bar = false
