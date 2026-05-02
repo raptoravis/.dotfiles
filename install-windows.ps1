@@ -20,12 +20,12 @@ Set-StrictMode -Version Latest
 function Write-Step  ($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn2 ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
-function Has-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 
 # ---------------------------------------------------------------------------
 # 1) Scoop (user-scope package manager — no admin required)
 # ---------------------------------------------------------------------------
-if (-not (Has-Cmd scoop)) {
+if (-not (Test-Cmd scoop)) {
     Write-Step 'Installing Scoop'
     # Scoop's installer requires RemoteSigned for the current user.
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
@@ -35,7 +35,7 @@ if (-not (Has-Cmd scoop)) {
 }
 
 # git is needed for buckets and many manifests; install up-front and silently.
-if (-not (Has-Cmd git)) {
+if (-not (Test-Cmd git)) {
     Write-Step 'Installing git via Scoop'
     scoop install git | Out-Null
 }
@@ -97,7 +97,7 @@ if (Test-Path $ScoopFile) {
 # ---------------------------------------------------------------------------
 # 5) Rust toolchain (rustup-init silent install)
 # ---------------------------------------------------------------------------
-if (-not (Has-Cmd rustup)) {
+if (-not (Test-Cmd rustup)) {
     Write-Step 'Installing Rust toolchain (silent)'
     $rustupInit = Join-Path $env:TEMP 'rustup-init.exe'
     Invoke-WebRequest -Uri 'https://win.rustup.rs/x86_64' -OutFile $rustupInit -UseBasicParsing
@@ -105,7 +105,7 @@ if (-not (Has-Cmd rustup)) {
     Remove-Item $rustupInit -ErrorAction SilentlyContinue
     $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 }
-if (Has-Cmd rustup) {
+if (Test-Cmd rustup) {
     rustup component add clippy rustfmt 2>$null | Out-Null
 }
 
@@ -123,15 +123,74 @@ cargo install coreutils --features windows
 if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed: coreutils' }
 
 # ---------------------------------------------------------------------------
+# 6b) PowerShell modules (PSGallery, current-user scope)
+# ---------------------------------------------------------------------------
+Write-Step 'Installing PowerShell modules from PSGallery'
+
+# Bootstrap NuGet provider — required for first-time Install-Module.
+if (-not (Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue)) {
+    Install-PackageProvider -Name NuGet -Scope CurrentUser -Force | Out-Null
+}
+
+# Trust PSGallery so Install-Module doesn't prompt.
+if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+}
+
+$PsModules = @(
+    'git-aliases',
+    'Microsoft.WinGet.Client',
+    'PSReadLine',
+    'PowerType',
+    'PSFzf',
+    'z',
+    'Terminal-Icons'
+)
+foreach ($m in $PsModules) {
+    if (Get-Module -ListAvailable -Name $m) {
+        Write-Host "  $m already installed"
+    } else {
+        Write-Host "  installing $m"
+        Install-Module -Name $m -Scope CurrentUser -Force -AllowClobber -ErrorAction Continue
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 6c) Wire $PROFILE to dotfiles PowerShell profile
+#     Detects each host's actual profile path (handles OneDrive redirect).
+# ---------------------------------------------------------------------------
+$DotfilesProfile = Join-Path $DotfilesDir 'windows\powershell\Microsoft.PowerShell_profile.ps1'
+if (Test-Path $DotfilesProfile) {
+    Write-Step 'Wiring $PROFILE -> dotfiles powershell profile'
+    $loader = ". `"$DotfilesProfile`""
+    $shells = @()
+    if (Test-Cmd powershell) { $shells += 'powershell' }
+    if (Test-Cmd pwsh)       { $shells += 'pwsh' }
+    foreach ($sh in $shells) {
+        $pp = (& $sh -NoProfile -Command 'Write-Output $PROFILE.CurrentUserCurrentHost').Trim()
+        if (-not $pp) { continue }
+        $pdir = Split-Path -Parent $pp
+        if (-not (Test-Path $pdir)) { New-Item -ItemType Directory -Path $pdir -Force | Out-Null }
+        $existing = if (Test-Path $pp) { Get-Content $pp -Raw -ErrorAction SilentlyContinue } else { '' }
+        if ($existing -and ($existing -match [regex]::Escape($DotfilesProfile))) {
+            Write-Host "  $sh profile already wired"
+        } else {
+            Add-Content -Path $pp -Value $loader -Encoding UTF8
+            Write-Host "  wired $sh profile: $pp"
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # 7) uv (Python) + uv tools
 # ---------------------------------------------------------------------------
-if (-not (Has-Cmd uv)) {
+if (-not (Test-Cmd uv)) {
     Write-Step 'Installing uv'
     Invoke-RestMethod -Uri 'https://astral.sh/uv/install.ps1' | Invoke-Expression
     $env:PATH = "$env:USERPROFILE\.local\bin;$env:PATH"
 }
 $UvFile = Join-Path $DotfilesDir 'uv-tools.txt'
-if ((Test-Path $UvFile) -and (Has-Cmd uv)) {
+if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     Write-Step "Installing uv tools from $UvFile"
     Get-Content $UvFile | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
         uv tool install $_ 2>$null
@@ -144,18 +203,18 @@ if ((Test-Path $UvFile) -and (Has-Cmd uv)) {
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
-if (-not (Has-Cmd rtk)) {
+if (-not (Test-Cmd rtk)) {
     Write-Step 'Installing rtk (LLM output compressor + Claude Code hook)'
     cargo install --git https://github.com/rtk-ai/rtk
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk install failed' }
 }
-if (Has-Cmd rtk) {
+if (Test-Cmd rtk) {
     Write-Step 'Wiring rtk into Claude Code (rtk init -g)'
     rtk init -g
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk init -g failed' }
 }
 
-if (Has-Cmd graphify) {
+if (Test-Cmd graphify) {
     Write-Step 'Registering graphify skill with Claude Code'
     graphify claude install
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  graphify claude install failed' }
@@ -171,7 +230,7 @@ Write-Step 'Setting user environment variables'
 # ---------------------------------------------------------------------------
 # 9) Symlinks via dotter
 # ---------------------------------------------------------------------------
-if (Has-Cmd dotter) {
+if (Test-Cmd dotter) {
     Write-Step 'Symlinking dotfiles via dotter'
     Push-Location $DotfilesDir
     try { dotter -v } catch { Write-Warn2 "dotter exited with errors: $_" }
