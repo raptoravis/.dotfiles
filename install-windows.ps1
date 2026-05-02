@@ -51,7 +51,7 @@ scoop bucket add nerd-fonts 2>$null | Out-Null
 # 3) Core tools, languages, dependencies (matches Makefile.toml `windows-tools`)
 # ---------------------------------------------------------------------------
 $Tools = @(
-    'lazygit', 'neovim', 'yazi', 'wezterm-nightly',
+    'lazygit', 'neovim', 'yazi', 'wezterm',
     'fzf', 'ripgrep', 'bat', 'yasb', 'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
