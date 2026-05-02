@@ -1,0 +1,632 @@
+{
+  "Skin": "DarkFlat_Classic",
+  "TopMost": false,
+  "AutoStart": true,
+  "RefreshMs": 1000,
+  "AnimationSpeed": 0.35,
+  "Position": {
+    "IsEmpty": false,
+    "X": 1863,
+    "Y": 531
+  },
+  "AutoCheckUpdate": true,
+  "HorizontalMode": false,
+  "Opacity": 0.85,
+  "Language": "zh",
+  "ClickThrough": false,
+  "AutoHide": true,
+  "ClampToScreen": true,
+  "PanelWidth": 240,
+  "UIScale": 1,
+  "PreferredNetwork": "",
+  "LastAutoNetwork": "\u4EE5\u592A\u7F51",
+  "PreferredDisk": "",
+  "LastAutoDisk": "YMTC PC41Q-1TB-B",
+  "PreferredCpuFan": "",
+  "PreferredCpuPump": "",
+  "PreferredCaseFan": "",
+  "PreferredMoboTemp": "",
+  "ScreenDevice": "\\\\.\\DISPLAY1",
+  "ShowTaskbar": true,
+  "HorizontalFollowsTaskbar": false,
+  "HideMainForm": true,
+  "HideTrayIcon": false,
+  "TaskbarAlignLeft": true,
+  "TaskbarPresetStyle": 1,
+  "TaskbarCustomLayout": false,
+  "TaskbarFontFamily": "Microsoft YaHei UI",
+  "TaskbarFontSize": 10,
+  "TaskbarFontBold": true,
+  "TaskbarItemSpacing": 6,
+  "TaskbarInnerSpacing": 8,
+  "TaskbarVerticalPadding": 3,
+  "HorizontalItemSpacing": 12,
+  "HorizontalInnerSpacing": 8,
+  "HorizontalSingleLine": false,
+  "TaskbarMonitorDevice": "",
+  "TaskbarClickThrough": false,
+  "TaskbarSingleLine": false,
+  "TaskbarHoverShowAll": true,
+  "TaskbarManualOffset": 0,
+  "TaskbarCustomStyle": false,
+  "TaskbarColorLabel": "#141414",
+  "TaskbarColorSafe": "#008040",
+  "TaskbarColorWarn": "#B57500",
+  "TaskbarColorCrit": "#C03030",
+  "TaskbarColorBg": "#D2D2D2",
+  "MainFormDoubleClickAction": 0,
+  "TaskbarDoubleClickAction": 0,
+  "MemoryDisplayMode": 0,
+  "UseWinPerCounters": true,
+  "IgnoreSmbTraffic": true,
+  "RecordedMaxCpuPower": 65,
+  "RecordedMaxCpuClock": 4200,
+  "RecordedMaxGpuPower": 100,
+  "RecordedMaxGpuClock": 1800,
+  "RecordedMaxFps": 144,
+  "RecordedMaxCpuFan": 4000,
+  "RecordedMaxCpuPump": 5000,
+  "RecordedMaxGpuFan": 3500,
+  "RecordedMaxChassisFan": 3000,
+  "MaxLimitTipShown": false,
+  "AlertTempEnabled": true,
+  "AlertTempThreshold": 80,
+  "WebServerEnabled": false,
+  "WebServerPort": 5000,
+  "WebServerPassword": "",
+  "Thresholds": {
+    "Load": {
+      "Warn": 60,
+      "Crit": 85
+    },
+    "Temp": {
+      "Warn": 50,
+      "Crit": 70
+    },
+    "DiskIOMB": {
+      "Warn": 2,
+      "Crit": 8
+    },
+    "NetUpMB": {
+      "Warn": 1,
+      "Crit": 2
+    },
+    "NetDownMB": {
+      "Warn": 2,
+      "Crit": 8
+    },
+    "DataUpMB": {
+      "Warn": 512,
+      "Crit": 1024
+    },
+    "DataDownMB": {
+      "Warn": 2048,
+      "Crit": 5096
+    }
+  },
+  "GroupAliases": {},
+  "MonitorItems": [
+    {
+      "Key": "DASH.HOST",
+      "UserLabel": "",
+      "TaskbarLabel": " ",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 0,
+      "TaskbarSortIndex": 106
+    },
+    {
+      "Key": "DASH.Time",
+      "UserLabel": "",
+      "TaskbarLabel": " ",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 1,
+      "TaskbarSortIndex": 107
+    },
+    {
+      "Key": "DASH.Uptime",
+      "UserLabel": "",
+      "TaskbarLabel": " ",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 2,
+      "TaskbarSortIndex": 108
+    },
+    {
+      "Key": "DASH.IP",
+      "UserLabel": "",
+      "TaskbarLabel": " ",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 3,
+      "TaskbarSortIndex": 109
+    },
+    {
+      "Key": "CPU.Load",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 4,
+      "TaskbarSortIndex": 0
+    },
+    {
+      "Key": "CPU.Temp",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 5,
+      "TaskbarSortIndex": 1
+    },
+    {
+      "Key": "CPU.Clock",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 6,
+      "TaskbarSortIndex": 2
+    },
+    {
+      "Key": "CPU.Power",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 7,
+      "TaskbarSortIndex": 3
+    },
+    {
+      "Key": "CPU.Voltage",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 8,
+      "TaskbarSortIndex": 4
+    },
+    {
+      "Key": "CPU.Fan",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 9,
+      "TaskbarSortIndex": 5
+    },
+    {
+      "Key": "CPU.Pump",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 10,
+      "TaskbarSortIndex": 6
+    },
+    {
+      "Key": "GPU.Load",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 11,
+      "TaskbarSortIndex": 11
+    },
+    {
+      "Key": "GPU.Temp",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 12,
+      "TaskbarSortIndex": 12
+    },
+    {
+      "Key": "GPU.Clock",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 13,
+      "TaskbarSortIndex": 13
+    },
+    {
+      "Key": "GPU.Power",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 14,
+      "TaskbarSortIndex": 14
+    },
+    {
+      "Key": "GPU.Fan",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 15,
+      "TaskbarSortIndex": 15
+    },
+    {
+      "Key": "GPU.VRAM",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 16,
+      "TaskbarSortIndex": 16
+    },
+    {
+      "Key": "MEM.Load",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 17,
+      "TaskbarSortIndex": 21
+    },
+    {
+      "Key": "FPS",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 18,
+      "TaskbarSortIndex": 22
+    },
+    {
+      "Key": "MOBO.Temp",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 19,
+      "TaskbarSortIndex": 23
+    },
+    {
+      "Key": "DISK.Temp",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 20,
+      "TaskbarSortIndex": 24
+    },
+    {
+      "Key": "CASE.Fan",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 21,
+      "TaskbarSortIndex": 25
+    },
+    {
+      "Key": "BAT.Percent",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 22,
+      "TaskbarSortIndex": 26
+    },
+    {
+      "Key": "BAT.Power",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 23,
+      "TaskbarSortIndex": 27
+    },
+    {
+      "Key": "BAT.Voltage",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 24,
+      "TaskbarSortIndex": 28
+    },
+    {
+      "Key": "BAT.Current",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": false,
+      "VisibleInTaskbar": false,
+      "SortIndex": 25,
+      "TaskbarSortIndex": 29
+    },
+    {
+      "Key": "DISK.Read",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 26,
+      "TaskbarSortIndex": 35
+    },
+    {
+      "Key": "DISK.Write",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 27,
+      "TaskbarSortIndex": 36
+    },
+    {
+      "Key": "NET.Up",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 28,
+      "TaskbarSortIndex": 45
+    },
+    {
+      "Key": "NET.Down",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": true,
+      "SortIndex": 29,
+      "TaskbarSortIndex": 46
+    },
+    {
+      "Key": "DATA.DayUp",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 30,
+      "TaskbarSortIndex": 55
+    },
+    {
+      "Key": "DATA.DayDown",
+      "UserLabel": "",
+      "TaskbarLabel": "",
+      "UnitPanel": null,
+      "UnitTaskbar": null,
+      "VisibleInPanel": true,
+      "VisibleInTaskbar": false,
+      "SortIndex": 31,
+      "TaskbarSortIndex": 56
+    }
+  ],
+  "PluginInstances": [
+    {
+      "Id": "Bilibili",
+      "TemplateId": "Bilibili",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "vmid": "946974"
+      },
+      "Targets": [
+        {
+          "vmid": "946974"
+        }
+      ]
+    },
+    {
+      "Id": "Crypto",
+      "TemplateId": "Crypto",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "symbol": "BTC",
+        "display_mode": "percent_price"
+      },
+      "Targets": [
+        {
+          "symbol": "BTC",
+          "display_mode": "percent_price"
+        }
+      ]
+    },
+    {
+      "Id": "Exchange",
+      "TemplateId": "Exchange",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "from": "USD",
+        "to": "CNY"
+      },
+      "Targets": [
+        {
+          "from": "USD",
+          "to": "CNY"
+        }
+      ]
+    },
+    {
+      "Id": "GitHub",
+      "TemplateId": "GitHub",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "repo_path": "diorser/LiteMonitor",
+        "display_mode": "star_only"
+      },
+      "Targets": [
+        {
+          "repo_path": "diorser/LiteMonitor",
+          "display_mode": "star_only"
+        }
+      ]
+    },
+    {
+      "Id": "Hitokoto",
+      "TemplateId": "Hitokoto",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "category": "a"
+      },
+      "Targets": [
+        {
+          "category": "a"
+        }
+      ]
+    },
+    {
+      "Id": "Holiday",
+      "TemplateId": "Holiday",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {},
+      "Targets": []
+    },
+    {
+      "Id": "ProxyLatency",
+      "TemplateId": "ProxyLatency",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "proxy_server": "127.0.0.1:7890",
+        "target_url": "http://www.gstatic.com/generate_204"
+      },
+      "Targets": [
+        {
+          "proxy_server": "127.0.0.1:7890",
+          "target_url": "http://www.gstatic.com/generate_204"
+        }
+      ]
+    },
+    {
+      "Id": "PublicIP",
+      "TemplateId": "PublicIP",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {},
+      "Targets": []
+    },
+    {
+      "Id": "Stock",
+      "TemplateId": "Stock",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "query": "\u4E0A\u8BC1\u6307\u6570",
+        "display_mode": "percent_price"
+      },
+      "Targets": [
+        {
+          "query": "\u4E0A\u8BC1\u6307\u6570",
+          "display_mode": "percent_price"
+        }
+      ]
+    },
+    {
+      "Id": "UniversalAPI",
+      "TemplateId": "UniversalAPI",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "target_url": "",
+        "json_path": "",
+        "custom_label": "\u81EA\u5B9A\u4E49",
+        "custom_color": "0"
+      },
+      "Targets": [
+        {
+          "target_url": "",
+          "json_path": "",
+          "custom_label": "\u81EA\u5B9A\u4E49",
+          "custom_color": "0"
+        }
+      ]
+    },
+    {
+      "Id": "Weather",
+      "TemplateId": "Weather",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {
+        "city": "",
+        "style": "standard"
+      },
+      "Targets": [
+        {
+          "city": "",
+          "style": "standard"
+        }
+      ]
+    },
+    {
+      "Id": "WeiboHot",
+      "TemplateId": "WeiboHot",
+      "Enabled": false,
+      "CustomInterval": 0,
+      "InputValues": {},
+      "Targets": []
+    }
+  ]
+}
