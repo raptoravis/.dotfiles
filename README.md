@@ -37,9 +37,33 @@ Both platforms converge on the same `common/` configs for the shell and dev tool
 
 ## How to Install
 
+### Quick install (no prerequisites)
+
+One-shot bootstrap scripts that install everything from scratch — package manager, Rust, cargo-make, all tools, oh-my-zsh, and symlinks. Designed to run silently / non-interactively. Idempotent, safe to re-run.
+
+```bash
+git clone https://github.com/msetsma/.dotfiles.git ~/.dotfiles
+cd ~/.dotfiles
+
+# macOS
+./install-mac.sh
+
+# Linux / WSL2
+./install-linux.sh
+# WSL2 with a distinct hostname for dotter:
+SET_HOSTNAME=my-wsl ./install-linux.sh
+
+# Windows host (PowerShell)
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+```
+
+On Windows, run `install-windows.ps1` on the host first, then `wsl --install`, then `install-linux.sh` inside WSL2.
+
+Override the dotfiles location with `DOTFILES_DIR=...` (Linux/macOS) or `-DotfilesDir ...` (Windows).
+
 ### Prerequisites
 
-Install Rust and cargo-make:
+If you prefer the `cargo make init` flow instead of the bootstrap scripts, install Rust and cargo-make first:
 
 ```bash
 # Install Rust

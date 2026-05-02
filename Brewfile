@@ -1,7 +1,6 @@
 # Taps
 tap "nikitabobko/tap"
 tap "FelixKratz/formulae"
-tap "homebrew/cask-fonts"
 
 # Window Management & Status Bar
 cask "aerospace"

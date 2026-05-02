@@ -3,6 +3,7 @@
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1"
   },
   "includeCoAuthoredBy": false,
+  "skipAutoPermissionPrompt": true,
   "permissions": {
     "allow": [
       "WebSearch",
