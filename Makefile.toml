@@ -101,6 +101,7 @@ script = [
     "echo --- Installing Tools ---",
     "scoop bucket add extras 2>nul || echo extras bucket already added",
     "scoop bucket add nerd-fonts 2>nul || echo nerd-fonts bucket already added",
+    "scoop bucket add versions 2>nul || echo versions bucket already added",
     "scoop install lazygit neovim yazi wezterm fzf ripgrep bat yasb FiraCode-NF",
 
     "echo --- Installing Languages ---",

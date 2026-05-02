@@ -10,8 +10,12 @@
 
 [CmdletBinding()]
 param(
-    [string]$DotfilesDir = (Join-Path $env:USERPROFILE '.dotfiles')
+    [string]$DotfilesDir = $PSScriptRoot
 )
+
+if (-not $DotfilesDir) {
+    $DotfilesDir = Join-Path $env:USERPROFILE '.dotfiles'
+}
 
 $ErrorActionPreference = 'Continue'   # keep going on per-package errors
 Set-StrictMode -Version Latest
@@ -43,9 +47,10 @@ if (-not (Test-Cmd git)) {
 # ---------------------------------------------------------------------------
 # 2) Scoop buckets
 # ---------------------------------------------------------------------------
-Write-Step 'Adding Scoop buckets (extras, nerd-fonts)'
+Write-Step 'Adding Scoop buckets (extras, nerd-fonts, versions)'
 scoop bucket add extras     2>$null | Out-Null
 scoop bucket add nerd-fonts 2>$null | Out-Null
+scoop bucket add versions   2>$null | Out-Null
 
 # ---------------------------------------------------------------------------
 # 3) Core tools, languages, dependencies (matches Makefile.toml `windows-tools`)
@@ -106,21 +111,45 @@ if (-not (Test-Cmd rustup)) {
     $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 }
 if (Test-Cmd rustup) {
-    rustup component add clippy rustfmt 2>$null | Out-Null
+    $installedComponents = rustup component list --installed 2>$null
+    foreach ($c in @('clippy', 'rustfmt')) {
+        if ($installedComponents | Select-String -SimpleMatch -Pattern $c -Quiet) {
+            Write-Host "  rustup component $c already installed"
+        } else {
+            rustup component add $c 2>$null | Out-Null
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
 # 6) Cargo tools
 # ---------------------------------------------------------------------------
 Write-Step 'Installing Cargo tools'
-$CargoTools = @('dotter', 'cargo-update', 'vivid', 'eza', 'bottom', 'bat', 'mise')
-foreach ($t in $CargoTools) {
+# Map crate name -> binary name to detect (some differ: bottom->btm, cargo-update->cargo-install-update).
+$CargoTools = [ordered]@{
+    'dotter'       = 'dotter'
+    'cargo-update' = 'cargo-install-update'
+    'vivid'        = 'vivid'
+    'eza'          = 'eza'
+    'bottom'       = 'btm'
+    'bat'          = 'bat'
+    'mise'         = 'mise'
+}
+foreach ($t in $CargoTools.Keys) {
+    if (Test-Cmd $CargoTools[$t]) {
+        Write-Host "  $t already installed ($($CargoTools[$t]) on PATH)"
+        continue
+    }
     cargo install $t
     if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed: $t" }
 }
 Write-Step 'Installing coreutils (windows feature)'
-cargo install coreutils --features windows
-if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed: coreutils' }
+if (Test-Cmd coreutils) {
+    Write-Host '  coreutils already installed'
+} else {
+    cargo install coreutils --features windows
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed: coreutils' }
+}
 
 # ---------------------------------------------------------------------------
 # 6b) PowerShell modules (PSGallery, current-user scope)
@@ -192,9 +221,19 @@ if (-not (Test-Cmd uv)) {
 $UvFile = Join-Path $DotfilesDir 'uv-tools.txt'
 if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     Write-Step "Installing uv tools from $UvFile"
+    # Snapshot installed tools once -- avoids per-tool network call to PyPI.
+    $installedUvTools = @(uv tool list 2>$null | ForEach-Object {
+        # Lines look like "ruff v0.4.0" or indented "- ruff" entries; first token is the tool name.
+        ($_ -split '\s+', 2)[0]
+    } | Where-Object { $_ -and $_ -notmatch '^-' })
     Get-Content $UvFile | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object {
-        uv tool install $_ 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  skip $_ (already installed or failed)" }
+        $tool = $_.Trim()
+        if ($installedUvTools -contains $tool) {
+            Write-Host "  $tool already installed"
+        } else {
+            uv tool install $tool 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  skip $tool (already installed or failed)" }
+        }
     }
 }
 
@@ -224,8 +263,17 @@ if (Test-Cmd graphify) {
 # 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME, PATH)
 # ---------------------------------------------------------------------------
 Write-Step 'Setting user environment variables'
-[Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', "$env:USERPROFILE\.config",      'User')
-[Environment]::SetEnvironmentVariable('YAZI_CONFIG_HOME', "$env:USERPROFILE\.config\yazi", 'User')
+function Set-UserEnvVarIfChanged($name, $value) {
+    $current = [Environment]::GetEnvironmentVariable($name, 'User')
+    if ($current -eq $value) {
+        Write-Host "  $name already set"
+    } else {
+        [Environment]::SetEnvironmentVariable($name, $value, 'User')
+        Write-Host "  set $name = $value"
+    }
+}
+Set-UserEnvVarIfChanged 'XDG_CONFIG_HOME'  "$env:USERPROFILE\.config"
+Set-UserEnvVarIfChanged 'YAZI_CONFIG_HOME' "$env:USERPROFILE\.config\yazi"
 
 # Add dotfiles windows/bin to the user PATH (idempotent, case-insensitive match).
 $BinDir = Join-Path $DotfilesDir 'windows\bin'
