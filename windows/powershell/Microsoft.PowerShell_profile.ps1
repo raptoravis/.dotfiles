@@ -187,6 +187,14 @@ $env:UV_LINK_MODE = "copy"
 #$env:OLLAMA_HOST="127.0.0.1:8181"
 
 # ---------------------------------------------------------------------------
+# Starship prompt — must run before the prompt wrapper below so Set-Title
+# can wrap starship's `prompt` function.
+# ---------------------------------------------------------------------------
+if (Get-Command starship -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& starship init powershell)
+}
+
+# ---------------------------------------------------------------------------
 # Window title — git repo root if inside one, else current path.
 # Hooked into prompt so the title refreshes on every directory change.
 # ---------------------------------------------------------------------------
