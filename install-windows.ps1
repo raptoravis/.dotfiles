@@ -221,11 +221,28 @@ if (Test-Cmd graphify) {
 }
 
 # ---------------------------------------------------------------------------
-# 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME)
+# 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME, PATH)
 # ---------------------------------------------------------------------------
 Write-Step 'Setting user environment variables'
 [Environment]::SetEnvironmentVariable('XDG_CONFIG_HOME', "$env:USERPROFILE\.config",      'User')
 [Environment]::SetEnvironmentVariable('YAZI_CONFIG_HOME', "$env:USERPROFILE\.config\yazi", 'User')
+
+# Add dotfiles windows/bin to the user PATH (idempotent, case-insensitive match).
+$BinDir = Join-Path $DotfilesDir 'windows\bin'
+if (Test-Path $BinDir) {
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    $entries  = if ($userPath) { $userPath -split ';' } else { @() }
+    $already  = $entries | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $BinDir.TrimEnd('\')) }
+    if ($already) {
+        Write-Host "  windows\bin already on user PATH"
+    } else {
+        $newPath = if ($userPath) { "$userPath;$BinDir" } else { $BinDir }
+        [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+        Write-Host "  added to user PATH: $BinDir"
+    }
+} else {
+    Write-Warn2 "windows\bin not found at $BinDir — skipping PATH update"
+}
 
 # ---------------------------------------------------------------------------
 # 9) Symlinks via dotter
