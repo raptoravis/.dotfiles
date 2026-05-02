@@ -20,7 +20,7 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/claude/skills/handoff-refresh" = "~/.claude/skills/handoff-refresh"
 
 [windows.files]
-"windows/startup/startup.vbs" = "C:\\Users\\2015m\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\startup.vbs"
+"windows/startup/startup.vbs" = "~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/startup.vbs"
 "windows/komorebi" = "~/.config/komorebi"
 "windows/yasb" = "~/.config/yasb"
 "windows/nushell" = "~/.config/nushell"

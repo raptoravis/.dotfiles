@@ -31,8 +31,10 @@ end
 config.default_prog = F.get_default_program()
 config.automatically_reload_config = true
 config.launch_menu = {
+    { label = 'PowerShell 7',       args = { 'pwsh.exe', '-NoLogo' } },
     { label = 'WSL (zsh)',          args = { 'wsl.exe', '--cd', '~' } },
     { label = 'Windows PowerShell', args = { 'powershell.exe' } },
+    { label = 'Command Prompt',     args = { 'cmd.exe' } },
 }
 
 -- Colors

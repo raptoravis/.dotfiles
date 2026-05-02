@@ -27,3 +27,18 @@ export ALGOLIA_CLI_TELEMETRY=0
 export GOTELEMETRY=off
 export AUTOMATEDLAB_TELEMETRY_OPTOUT=1
 export POWERSHELL_TELEMETRY_OPTOUT=1
+
+# ---------------------------------------------------------------------------
+# Proxy (Clash / mihomo default port 7890)
+# macOS: Clash runs on this Mac. WSL2: works because .wslconfig has
+# networkingMode=mirrored, so 127.0.0.1 reaches the Windows host's loopback.
+# Comment out the exports below to disable auto-enable; use proxy_on /
+# proxy_off (autoloaded functions) to toggle at runtime.
+# ---------------------------------------------------------------------------
+export PROXY_URL="http://127.0.0.1:7890"
+export http_proxy="$PROXY_URL"
+export https_proxy="$PROXY_URL"
+export all_proxy="$PROXY_URL"
+export HTTP_PROXY="$PROXY_URL"
+export HTTPS_PROXY="$PROXY_URL"
+export ALL_PROXY="$PROXY_URL"

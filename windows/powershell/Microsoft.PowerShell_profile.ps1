@@ -117,6 +117,26 @@ function gpa {
 }
 
 # ---------------------------------------------------------------------------
+# dotter wrapper — downgrade "already exists. Skipping." [ERROR] to [WARN ].
+# Call dotter.exe explicitly to avoid recursing into this function.
+# ---------------------------------------------------------------------------
+function dotter {
+    $softErrorPattern = 'already exists\. Skipping\.|Some files were skipped\.'
+    & dotter.exe @args 2>&1 | ForEach-Object {
+        $line = $_.ToString()
+        if ($line -match '^\[ERROR\]') {
+            if ($line -match $softErrorPattern) {
+                Write-Host ($line -replace '^\[ERROR\]', '[WARN ]') -ForegroundColor Yellow
+            } else {
+                Write-Host $line -ForegroundColor Red
+            }
+        } else {
+            Write-Host $line
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Conda environment helpers
 # ---------------------------------------------------------------------------
 function pve {
@@ -130,6 +150,25 @@ function pve {
 function pved {
     conda deactivate
 }
+
+# ---------------------------------------------------------------------------
+# Proxy (Clash / mihomo default port 7890)
+# Comment out `proxy_on` below to disable auto-enable; use proxy_on / proxy_off
+# to toggle at runtime.
+# ---------------------------------------------------------------------------
+$env:PROXY_URL = 'http://127.0.0.1:7890'
+
+function proxy_on {
+    $env:HTTP_PROXY  = $env:PROXY_URL
+    $env:HTTPS_PROXY = $env:PROXY_URL
+    $env:ALL_PROXY   = $env:PROXY_URL
+}
+
+function proxy_off {
+    Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:ALL_PROXY -ErrorAction SilentlyContinue
+}
+
+proxy_on
 
 # ---------------------------------------------------------------------------
 # uv (Python) — China mirrors

@@ -293,12 +293,57 @@ if (Test-Path $BinDir) {
 }
 
 # ---------------------------------------------------------------------------
+# 8b) Enable Developer Mode (lets non-admin users create symlinks)
+#     Required so dotter symlinks configs instead of copying. Setting the
+#     HKLM key requires admin; if not elevated, warn and continue (dotter
+#     will fall back to file copies).
+# ---------------------------------------------------------------------------
+$DevModeKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+$DevModeVal = 'AllowDevelopmentWithoutDevLicense'
+$devCurrent = Get-ItemProperty -Path $DevModeKey -Name $DevModeVal -ErrorAction SilentlyContinue
+if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
+    Write-Step 'Developer Mode already enabled'
+} else {
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isAdmin) {
+        Write-Step 'Enabling Developer Mode (for symlink permission)'
+        if (-not (Test-Path $DevModeKey)) {
+            New-Item -Path $DevModeKey -Force | Out-Null
+        }
+        New-ItemProperty -Path $DevModeKey -Name $DevModeVal -PropertyType DWord -Value 1 -Force | Out-Null
+        Write-Host '  Developer Mode enabled — dotter can now create symlinks'
+    } else {
+        Write-Warn2 'Developer Mode is OFF and shell is not elevated.'
+        Write-Warn2 '  dotter will fall back to copying files instead of symlinking.'
+        Write-Warn2 '  To enable: re-run this script in an admin PowerShell, or toggle'
+        Write-Warn2 '  Settings -> Privacy & security -> For developers -> Developer Mode'
+    }
+}
+
+# ---------------------------------------------------------------------------
 # 9) Symlinks via dotter
 # ---------------------------------------------------------------------------
 if (Test-Cmd dotter) {
     Write-Step 'Symlinking dotfiles via dotter'
     Push-Location $DotfilesDir
-    try { dotter -v } catch { Write-Warn2 "dotter exited with errors: $_" }
+    try {
+        # Dotter labels "already exists. Skipping." and the trailing
+        # "Some files were skipped." summary as [ERROR], but those are
+        # not real failures -- downgrade them to [WARN ] (yellow).
+        $softErrorPattern = 'already exists\. Skipping\.|Some files were skipped\.'
+        dotter -v 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+            if ($line -match '^\[ERROR\]') {
+                if ($line -match $softErrorPattern) {
+                    Write-Host ($line -replace '^\[ERROR\]', '[WARN ]') -ForegroundColor Yellow
+                } else {
+                    Write-Host $line -ForegroundColor Red
+                }
+            } else {
+                Write-Host $line
+            }
+        }
+    } catch { Write-Warn2 "dotter exited with errors: $_" }
     Pop-Location
 } else {
     Write-Warn2 'dotter not on PATH — open a new shell so cargo bin is loaded, then re-run.'
