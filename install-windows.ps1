@@ -140,6 +140,28 @@ if ((Test-Path $UvFile) -and (Has-Cmd uv)) {
 }
 
 # ---------------------------------------------------------------------------
+# 7b) Claude Code companion CLIs (rtk hook, graphify skill)
+#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
+#     declared in common/claude/settings.json and load at Claude Code startup.
+# ---------------------------------------------------------------------------
+if (-not (Has-Cmd rtk)) {
+    Write-Step 'Installing rtk (LLM output compressor + Claude Code hook)'
+    cargo install --git https://github.com/rtk-ai/rtk
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk install failed' }
+}
+if (Has-Cmd rtk) {
+    Write-Step 'Wiring rtk into Claude Code (rtk init -g)'
+    rtk init -g
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk init -g failed' }
+}
+
+if (Has-Cmd graphify) {
+    Write-Step 'Registering graphify skill with Claude Code'
+    graphify claude install
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  graphify claude install failed' }
+}
+
+# ---------------------------------------------------------------------------
 # 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME)
 # ---------------------------------------------------------------------------
 Write-Step 'Setting user environment variables'

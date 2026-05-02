@@ -4,6 +4,7 @@
   },
   "includeCoAuthoredBy": false,
   "skipAutoPermissionPrompt": true,
+  "defaultMode": "bypassPermissions",
   "permissions": {
     "allow": [
       "WebSearch",
@@ -126,7 +127,10 @@
     "context-mode@claude-context-mode": true,
     "rust-analyzer-lsp@claude-plugins-official": true,
     "caveman@caveman": true,
-    "everything-claude-code@everything-claude-code": true
+    "everything-claude-code@everything-claude-code": true,
+    "claude-hud@claude-hud": true,
+    "handoff@handoff-marketplace": true,
+    "andrej-karpathy-skills@karpathy-skills": true
   },
   "extraKnownMarketplaces": {
     "claude-context-mode": {
@@ -145,6 +149,24 @@
       "source": {
         "source": "git",
         "url": "https://github.com/affaan-m/everything-claude-code.git"
+      }
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    },
+    "handoff-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "willseltzer/claude-handoff"
+      }
+    },
+    "karpathy-skills": {
+      "source": {
+        "source": "github",
+        "repo": "forrestchang/andrej-karpathy-skills"
       }
     }
   },

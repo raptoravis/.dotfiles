@@ -26,3 +26,5 @@
 - Use `TypedDict` only for typed dict literals (e.g., kwargs)
 - Prefer `collections.abc` types (`Sequence`, `Mapping`) over concrete types in signatures
 - Use `X | None` syntax (PEP 604), not `Optional[X]`
+
+@RTK.md

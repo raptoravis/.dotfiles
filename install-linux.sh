@@ -142,6 +142,26 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
+# 8b) Claude Code companion CLIs (rtk hook, graphify skill)
+#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
+#     declared in common/claude/settings.json and load at Claude Code startup.
+# ---------------------------------------------------------------------------
+if ! command -v rtk >/dev/null 2>&1; then
+  log "Installing rtk (LLM output compressor + Claude Code hook)"
+  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh \
+    || warn "  rtk install script failed"
+fi
+if command -v rtk >/dev/null 2>&1; then
+  log "Wiring rtk into Claude Code (rtk init -g)"
+  rtk init -g 2>/dev/null || warn "  rtk init -g failed"
+fi
+
+if command -v graphify >/dev/null 2>&1; then
+  log "Registering graphify skill with Claude Code"
+  graphify claude install 2>/dev/null || warn "  graphify claude install failed"
+fi
+
+# ---------------------------------------------------------------------------
 # 9) WSL-only: deploy /etc/wsl.conf and (optionally) set hostname
 # ---------------------------------------------------------------------------
 if (( IS_WSL )); then
