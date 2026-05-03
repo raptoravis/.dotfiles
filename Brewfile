@@ -40,5 +40,4 @@ brew "python"
 brew "node"
 
 # Fonts
-cask "font-fira-code"
-cask "font-hack-nerd-font"
+cask "font-fira-code-nerd-font"
