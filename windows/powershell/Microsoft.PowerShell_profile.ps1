@@ -4,18 +4,12 @@
 
 # PSReadLine — predictive intellisense + history dropdown + tab menu
 Import-Module PSReadLine
-Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView
+Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView
 Set-PSReadLineOption -EditMode Windows -HistorySearchCursorMovesToEnd
 Set-PSReadLineKeyHandler -Key Tab           -Function MenuComplete
 Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow     -Function HistorySearchForward
 Set-PSReadLineKeyHandler -Key RightArrow    -Function ForwardChar  # accept inline ghost text
-
-# PowerType — context-aware completions
-if (Get-Module -ListAvailable -Name PowerType) {
-    Import-Module PowerType
-    Enable-PowerType
-}
 
 # PSFzf — Ctrl+D file search, Ctrl+R history search
 if (Get-Module -ListAvailable -Name PSFzf) {

@@ -171,7 +171,6 @@ $PsModules = @(
     'git-aliases',
     'Microsoft.WinGet.Client',
     'PSReadLine',
-    'PowerType',
     'PSFzf',
     'z',
     'Terminal-Icons'
