@@ -31,7 +31,7 @@ opt.splitright = true
 opt.clipboard = 'unnamedplus' -- Sync clipboard between OS and Neovim
 opt.backspace = 'indent,eol,start' -- Allow unrestricted backspacing
 opt.mouse = 'a'
-opt.undodir = os.getenv('HOME') .. '/.vim/undodir'
+opt.undodir = vim.fn.expand('~/.vim/undodir')
 
 -- Searching
 opt.ignorecase = true

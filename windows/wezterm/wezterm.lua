@@ -69,6 +69,7 @@ config.adjust_window_size_when_changing_font_size = false
 config.text_background_opacity = 1.0
 config.window_background_opacity = 1.0
 config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
+config.window_close_confirmation = 'NeverPrompt'
 config.integrated_title_button_alignment = 'Right'
 config.integrated_title_buttons = { 'Hide', 'Maximize', 'Close' }
 config.window_padding = {
