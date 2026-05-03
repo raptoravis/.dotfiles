@@ -140,6 +140,7 @@ $CargoTools = [ordered]@{
     'bottom'       = 'btm'
     'bat'          = 'bat'
     'mise'         = 'mise'
+    'psmux'        = 'psmux'
     'pstop'        = 'pstop'
     'psnet'        = 'psnet'
 }
