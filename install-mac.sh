@@ -209,34 +209,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11) WezTerm plugins (cloned manually, not via wezterm.plugin.require).
-#     wezterm-session-manager: save/load/restore tabs and panes.
-#     The plugin hardcodes its state path inside wezterm.config_dir; that
-#     directory is watched by automatically_reload_config, so writing the
-#     file there triggers a reload mid-session and breaks restore. Patch
-#     to ~/.local/share/wezterm/sessions/ instead.
-#     No-op if dotter hasn't created ~/.config/wezterm yet.
+# 11) WezTerm session state directory (created by common/wezterm/wezterm.lua
+#     for save/restore — pre-create so the lua mkdir fallback never runs).
 # ---------------------------------------------------------------------------
-WEZTERM_DIR="$HOME/.config/wezterm"
-if [[ -d "$WEZTERM_DIR" ]]; then
-  SM_DIR="$WEZTERM_DIR/wezterm-session-manager"
-  SM_FILE="$SM_DIR/session-manager.lua"
-  if [[ -d "$SM_DIR/.git" ]]; then
-    log "wezterm-session-manager already cloned"
-  else
-    log "Cloning wezterm-session-manager into ~/.config/wezterm/"
-    git clone --depth 1 https://github.com/danielcopper/wezterm-session-manager.git "$SM_DIR" \
-      || warn "  clone failed"
-  fi
-  if [[ -f "$SM_FILE" ]] && grep -q '/.config/wezterm/wezterm-session-manager/wezterm_state_' "$SM_FILE"; then
-    log "Patching session-manager.lua state path -> ~/.local/share/wezterm/sessions/"
-    # macOS BSD sed: -i needs an explicit suffix arg ('' = no backup).
-    sed -i '' \
-      's|/.config/wezterm/wezterm-session-manager/wezterm_state_|/.local/share/wezterm/sessions/wezterm_state_|g' \
-      "$SM_FILE"
-  fi
-  mkdir -p "$HOME/.local/share/wezterm/sessions"
-fi
+mkdir -p "$HOME/.local/share/wezterm/sessions"
 
 # ---------------------------------------------------------------------------
 # 12) Default shell

@@ -3,30 +3,27 @@ local K = require('keybinds')
 local F = require('functions')
 local config = wezterm.config_builder()
 
--- Session save/load (wezterm-session-manager).
--- Cloned manually into ~/.config/wezterm/wezterm-session-manager/ by the
--- install script; pcall'd so a missing clone doesn't break startup.
+-- ---------------------------------------------------------------------------
+-- Session save/restore — self-contained, no external plugin.
+--
+-- Was previously based on danielcopper/wezterm-session-manager but its
+-- restore reused initial_pane:send_text("exit\r") + spawn_tab loop, which
+-- visibly flashes on Windows. We now reuse the initial pane via `cd <path>`
+-- (no kill+spawn round-trip) so only the *additional* tabs spawn fresh
+-- pwsh's. Cuts the flash and saves one full pwsh-profile load on launch.
+--
+-- State file: ~/.local/share/wezterm/sessions/wezterm_state_<workspace>.json
+-- Outside wezterm.config_dir on purpose: automatically_reload_config watches
+-- config_dir, and writing the state file there triggers a config reload
+-- mid-session that resets wezterm.GLOBAL and re-fires gui-startup.
 --
 -- Behavior:
---   - manual save  : Alt+s    (with toast)
---   - manual restore: Alt+r   (with toast)
---   - auto-save    : silent_save_state on window-focus-changed when the
---                    window loses focus. Catches alt-tab and most close
---                    paths (X button drops focus before window destruction).
---                    Also wired into Alt+q (save-then-quit) as a guaranteed
---                    save path. wezterm 20240203 has no before-quit event,
---                    so X-click-while-already-focused may miss the save.
---   - auto-restore : gui-startup spawns default window; first
---                    window-config-reloaded fire restores the saved state.
---                    gui-startup MUST spawn a window itself, otherwise
---                    wezterm sits with no windows and flashes on Windows.
-local ok, session_manager = pcall(require, 'wezterm-session-manager/session-manager')
-if not ok then session_manager = nil end
-
--- ~/.local/share/wezterm/sessions/ — used by both silent_save_state and the
--- patched session-manager.lua plugin. Outside config_dir on purpose:
--- automatically_reload_config watches config_dir, so writing the state file
--- there triggers a config reload mid-session and breaks restore.
+--   - Alt+s             manual save (with toast)
+--   - Alt+r             manual restore (with toast)
+--   - Alt+q             save-then-quit
+--   - window-focus-changed (lose focus) -> silent auto-save
+--   - gui-startup -> deferred silent auto-restore
+-- ---------------------------------------------------------------------------
 local sessions_dir = wezterm.home_dir .. '/.local/share/wezterm/sessions'
 do
     local sep = package.config:sub(1, 1)
@@ -38,39 +35,54 @@ do
     end
 end
 
+local function state_file(workspace)
+    return sessions_dir .. '/wezterm_state_' .. workspace .. '.json'
+end
+
+-- Convert a wezterm cwd string ('file:///D:/path' or 'file://host/path') back
+-- to a filesystem path the shell can `cd` into.
+local function cwd_uri_to_path(uri)
+    if not uri or uri == '' then return nil end
+    local p = tostring(uri):gsub('^file://[^/]*', '')
+    p = p:gsub('^/([A-Za-z]:)', '%1') -- /D:/x -> D:/x on Windows
+    return p
+end
+
+local function collect_state(window)
+    local mux_win = window:mux_window()
+    if not mux_win then return nil end
+    local data = { name = window:active_workspace(), tabs = {} }
+    for _, tab in ipairs(mux_win:tabs()) do
+        local tab_data = { tab_id = tostring(tab:tab_id()), panes = {} }
+        for _, info in ipairs(tab:panes_with_info()) do
+            table.insert(tab_data.panes, {
+                pane_id = tostring(info.pane:pane_id()),
+                index = info.index,
+                is_active = info.is_active,
+                is_zoomed = info.is_zoomed,
+                left = info.left,
+                top = info.top,
+                width = info.width,
+                height = info.height,
+                pixel_width = info.pixel_width,
+                pixel_height = info.pixel_height,
+                cwd = tostring(info.pane:get_current_working_dir()),
+                tty = tostring(info.pane:get_foreground_process_name()),
+            })
+        end
+        table.insert(data.tabs, tab_data)
+    end
+    return data
+end
+
 local function silent_save_state(window)
-    -- Skip auto-saves while session_save_blocked is set (during the brief
-    -- gui-startup -> restore window). Otherwise a focus change during
-    -- restore could overwrite the saved file with partial state.
     if wezterm.GLOBAL.session_save_blocked then return end
     pcall(function()
-        local mux_win = window:mux_window()
-        if not mux_win then return end
-        local data = { name = window:active_workspace(), tabs = {} }
-        for _, tab in ipairs(mux_win:tabs()) do
-            local tab_data = { tab_id = tostring(tab:tab_id()), panes = {} }
-            for _, info in ipairs(tab:panes_with_info()) do
-                table.insert(tab_data.panes, {
-                    pane_id = tostring(info.pane:pane_id()),
-                    index = info.index,
-                    is_active = info.is_active,
-                    is_zoomed = info.is_zoomed,
-                    left = info.left,
-                    top = info.top,
-                    width = info.width,
-                    height = info.height,
-                    pixel_width = info.pixel_width,
-                    pixel_height = info.pixel_height,
-                    cwd = tostring(info.pane:get_current_working_dir()),
-                    tty = tostring(info.pane:get_foreground_process_name()),
-                })
-            end
-            table.insert(data.tabs, tab_data)
-        end
+        local data = collect_state(window)
+        if not data then return end
         local json = wezterm.json_encode(data)
         if json == wezterm.GLOBAL.session_last_json then return end
-        local path = sessions_dir .. '/wezterm_state_' .. data.name .. '.json'
-        local f = io.open(path, 'w')
+        local f = io.open(state_file(data.name), 'w')
         if f then
             f:write(json)
             f:close()
@@ -79,47 +91,117 @@ local function silent_save_state(window)
     end)
 end
 
-if session_manager then
-    wezterm.on('save_session',    function(window) session_manager.save_state(window) end)
-    wezterm.on('restore_session', function(window) session_manager.restore_state(window) end)
-
-    -- Auto-save on focus loss only (no periodic / no update-status save).
-    wezterm.on('window-focus-changed', function(window, _)
-        if wezterm.GLOBAL.session_save_blocked then return end
-        if not window:is_focused() then silent_save_state(window) end
-    end)
-
-    -- Save-then-quit: Alt+q first persists state, then quits. Defined here
-    -- (not in keybinds.lua) because it needs the silent_save_state closure.
-    wezterm.on('save_and_quit', function(window, _)
-        silent_save_state(window)
-        window:perform_action(wezterm.action.QuitApplication, window:active_pane())
-    end)
-
-    -- Auto-restore via gui-startup: fires exactly once per wezterm-gui process,
-    -- unaffected by automatically_reload_config (which re-fires
-    -- window-config-reloaded and resets wezterm.GLOBAL — observed empirically
-    -- on wezterm 20240203 despite docs saying GLOBAL persists). Restore is
-    -- deferred so the GUI window object is realized before the plugin's
-    -- restore_state walks it. session_save_blocked prevents focus-change
-    -- auto-save from racing the restore process.
-    wezterm.on('gui-startup', function(cmd)
-        wezterm.mux.spawn_window(cmd or {})
-        wezterm.GLOBAL.session_save_blocked = true
-        wezterm.time.call_after(0.5, function()
-            for _, mux_win in ipairs(wezterm.mux.all_windows()) do
-                local gui = mux_win:gui_window()
-                if gui then
-                    session_manager.restore_state(gui)
-                    break
-                end
-            end
-        end)
-        wezterm.time.call_after(4, function()
-            wezterm.GLOBAL.session_save_blocked = false
-        end)
-    end)
+local function split_direction(curr, prev)
+    return (curr.left == prev.left) and 'Bottom' or 'Right'
 end
+
+-- Returns true if the given foreground process name looks like a shell we can
+-- safely send a `cd` line to without disturbing a running TUI.
+local function is_shell(fg)
+    if not fg then return false end
+    fg = fg:lower()
+    return fg:find('sh$') or fg:find('cmd%.exe$')
+        or fg:find('powershell%.exe$') or fg:find('pwsh%.exe$')
+        or fg:find('nu%.exe$') or fg:find('nu$')
+end
+
+local function silent_restore_state(window)
+    local mux_win = window:mux_window()
+    if not mux_win then return false end
+    local tabs = mux_win:tabs()
+    if #tabs ~= 1 or #tabs[1]:panes() ~= 1 then
+        return false -- only restore into a fresh window
+    end
+
+    local f = io.open(state_file(window:active_workspace()), 'r')
+    if not f then return false end
+    local content = f:read('*a')
+    f:close()
+    local data = wezterm.json_parse(content)
+    if not data or not data.tabs or #data.tabs == 0 then return false end
+
+    local initial_pane = window:active_pane()
+    local fg = initial_pane:get_foreground_process_name() or ''
+
+    -- 1st saved tab reuses the initial tab/pane: send `cd` to the existing
+    -- shell instead of killing it and spawning a new one. Avoids the flash.
+    local first_tab = data.tabs[1]
+    local first_cwd = cwd_uri_to_path(first_tab.panes[1].cwd)
+    if first_cwd and is_shell(fg) then
+        local cd
+        if fg:lower():find('cmd%.exe$') then
+            cd = string.format('cd /d "%s"\r', first_cwd)
+        else
+            cd = string.format('cd "%s"\r', first_cwd)
+        end
+        initial_pane:send_text(cd)
+    end
+    for j = 2, #first_tab.panes do
+        local pd = first_tab.panes[j]
+        local cwd = cwd_uri_to_path(pd.cwd)
+        local opts = { direction = split_direction(pd, first_tab.panes[j - 1]) }
+        if cwd then opts.cwd = cwd end
+        pcall(function() initial_pane:split(opts) end)
+    end
+
+    for i = 2, #data.tabs do
+        local td = data.tabs[i]
+        local cwd = cwd_uri_to_path(td.panes[1].cwd)
+        local new_tab = mux_win:spawn_tab(cwd and { cwd = cwd } or {})
+        if not new_tab then break end
+        for j = 2, #td.panes do
+            local pd = td.panes[j]
+            local pcwd = cwd_uri_to_path(pd.cwd)
+            local opts = { direction = split_direction(pd, td.panes[j - 1]) }
+            if pcwd then opts.cwd = pcwd end
+            pcall(function() new_tab:active_pane():split(opts) end)
+        end
+    end
+    return true
+end
+
+wezterm.on('save_session', function(window)
+    silent_save_state(window)
+    window:toast_notification('WezTerm', 'Workspace state saved', nil, 4000)
+end)
+
+wezterm.on('restore_session', function(window)
+    if silent_restore_state(window) then
+        window:toast_notification('WezTerm', 'Workspace state restored', nil, 4000)
+    else
+        window:toast_notification('WezTerm', 'No saved state for ' .. window:active_workspace(), nil, 4000)
+    end
+end)
+
+wezterm.on('window-focus-changed', function(window, _)
+    if wezterm.GLOBAL.session_save_blocked then return end
+    if not window:is_focused() then silent_save_state(window) end
+end)
+
+wezterm.on('save_and_quit', function(window, _)
+    silent_save_state(window)
+    window:perform_action(wezterm.action.QuitApplication, window:active_pane())
+end)
+
+-- Auto-restore via gui-startup: fires once per wezterm-gui process, immune to
+-- the automatically_reload_config / GLOBAL-reset issue we hit before. Restore
+-- is deferred ~0.5s so the GUI window is realized.
+wezterm.on('gui-startup', function(cmd)
+    wezterm.mux.spawn_window(cmd or {})
+    wezterm.GLOBAL.session_save_blocked = true
+    wezterm.time.call_after(0.5, function()
+        for _, mux_win in ipairs(wezterm.mux.all_windows()) do
+            local gui = mux_win:gui_window()
+            if gui then
+                silent_restore_state(gui)
+                break
+            end
+        end
+    end)
+    wezterm.time.call_after(4, function()
+        wezterm.GLOBAL.session_save_blocked = false
+    end)
+end)
 
 -- ---------------------------------------------------------------------------
 -- Window size persistence
