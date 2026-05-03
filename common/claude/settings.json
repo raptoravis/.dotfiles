@@ -2,7 +2,6 @@
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1"
   },
-  "autoMemoryEnabled": true,
   "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
@@ -131,7 +130,8 @@
     "claude-hud@claude-hud": true,
     "handoff@handoff-marketplace": true,
     "andrej-karpathy-skills@karpathy-skills": true,
-    "zero-review@atum-marketplace": true
+    "zero-review@atum-marketplace": true,
+    "pyright-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-context-mode": {
@@ -168,6 +168,7 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "tui": "default",
-  "verbose": true,
-  "skipDangerousModePermissionPrompt": true
+  "autoMemoryEnabled": true,
+  "skipDangerousModePermissionPrompt": true,
+  "verbose": true
 }
