@@ -18,6 +18,7 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/claude/settings.json" = "~/.claude/settings.json"
 "common/claude/statusline.ps1" = "~/.claude/statusline.ps1"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
+"common/claude/RTK.md" = "~/.claude/RTK.md"
 "common/claude/skills/handoff-refresh" = "~/.claude/skills/handoff-refresh"
 
 [windows.files]

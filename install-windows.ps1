@@ -275,6 +275,24 @@ function Set-UserEnvVarIfChanged($name, $value) {
 Set-UserEnvVarIfChanged 'XDG_CONFIG_HOME'  "$env:USERPROFILE\.config"
 Set-UserEnvVarIfChanged 'YAZI_CONFIG_HOME' "$env:USERPROFILE\.config\yazi"
 
+# Add ~/.cargo/bin to the user PATH so cargo-installed tools (dotter, eza, btm…) are found
+# in new shells without requiring a rustup-managed PATH update.
+$CargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+if (Test-Path $CargoBin) {
+    $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    $entries  = if ($userPath) { $userPath -split ';' } else { @() }
+    $already  = $entries | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $CargoBin.TrimEnd('\')) }
+    if ($already) {
+        Write-Host '  ~/.cargo/bin already on user PATH'
+    } else {
+        $newPath = if ($userPath) { "$userPath;$CargoBin" } else { $CargoBin }
+        [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+        Write-Host "  added to user PATH: $CargoBin"
+    }
+} else {
+    Write-Warn2 '~/.cargo/bin not found — Rust may not be installed yet; re-run after rustup'
+}
+
 # Add dotfiles windows/bin to the user PATH (idempotent, case-insensitive match).
 $BinDir = Join-Path $DotfilesDir 'windows\bin'
 if (Test-Path $BinDir) {
@@ -321,7 +339,19 @@ if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
 }
 
 # ---------------------------------------------------------------------------
-# 9) Symlinks via dotter
+# 9) Ensure .dotter/local.toml exists (gitignored, machine-local)
+#    Tells dotter which package set to apply without needing a hostname file.
+# ---------------------------------------------------------------------------
+$LocalToml = Join-Path $DotfilesDir '.dotter\local.toml'
+if (Test-Path $LocalToml) {
+    Write-Step '.dotter/local.toml already exists'
+} else {
+    Write-Step 'Creating .dotter/local.toml (packages: common + windows)'
+    Set-Content -Path $LocalToml -Value 'packages = [ "common", "windows" ]' -Encoding UTF8
+}
+
+# ---------------------------------------------------------------------------
+# 10) Symlinks via dotter
 # ---------------------------------------------------------------------------
 if (Test-Cmd dotter) {
     Write-Step 'Symlinking dotfiles via dotter'

@@ -189,7 +189,19 @@ if [[ ! -f "$HOME/.zshenv" ]] || ! grep -q 'ZDOTDIR' "$HOME/.zshenv" 2>/dev/null
 fi
 
 # ---------------------------------------------------------------------------
-# 11) Symlinks via dotter
+# 11) Ensure .dotter/local.toml exists (gitignored, machine-local)
+#     Tells dotter which package set to apply without needing a hostname file.
+# ---------------------------------------------------------------------------
+LOCAL_TOML="$DOTFILES_DIR/.dotter/local.toml"
+if [[ -f "$LOCAL_TOML" ]]; then
+  log ".dotter/local.toml already exists"
+else
+  log "Creating .dotter/local.toml (packages: common + linux)"
+  printf 'packages = [ "common", "linux" ]\n' > "$LOCAL_TOML"
+fi
+
+# ---------------------------------------------------------------------------
+# 12) Symlinks via dotter
 # ---------------------------------------------------------------------------
 if command -v dotter >/dev/null 2>&1; then
   log "Symlinking dotfiles via dotter"
