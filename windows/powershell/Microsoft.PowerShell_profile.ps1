@@ -11,25 +11,60 @@ Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow     -Function HistorySearchForward
 Set-PSReadLineKeyHandler -Key RightArrow    -Function ForwardChar  # accept inline ghost text
 
-# PSFzf — Ctrl+D file search, Ctrl+R history search
+# PSFzf — Ctrl+D file search, Ctrl+R history search.
+# Eager: PSFzf registers PSReadLine chord handlers at import time, so it has
+# to be loaded before the first keypress. Lazy-loading would miss the chord.
 if (Get-Module -ListAvailable -Name PSFzf) {
     Import-Module PSFzf
     Set-PsFzfOption -PSReadLineChordProvider 'Ctrl+d' -PSReadLineChordReverseHistory 'Ctrl+r'
 }
 
-# Terminal-Icons — file/folder glyphs in ls output
+# ---------------------------------------------------------------------------
+# Lazy module loading — defer non-critical modules until first use.
+# Each tab in a wezterm session-restore otherwise serializes on profile
+# load; deferring Terminal-Icons / z / git-aliases shaves several hundred
+# ms per tab.
+# ---------------------------------------------------------------------------
+
+# Terminal-Icons — load on first ls/dir. Once the module is imported,
+# Get-ChildItem output is decorated automatically.
 if (Get-Module -ListAvailable -Name Terminal-Icons) {
-    Import-Module Terminal-Icons
+    function ls {
+        if (-not (Get-Module Terminal-Icons)) {
+            Import-Module Terminal-Icons -ErrorAction SilentlyContinue
+        }
+        Get-ChildItem @args
+    }
 }
 
-# z — frecency-based directory jumper
+# z — load on first `z` invocation. Stub removes itself, imports the real
+# module, then re-dispatches; subsequent calls hit the module's z directly.
 if (Get-Module -ListAvailable -Name z) {
-    Import-Module z
+    function z {
+        Remove-Item function:z -ErrorAction SilentlyContinue
+        Import-Module z -ErrorAction SilentlyContinue
+        z @args
+    }
 }
 
-# git-aliases — short git command aliases (g, gs, gc, ...)
+# git-aliases — module exports >100 aliases (g, ga, gaa, gb, gc, gco, gd,
+# gp, gs, gst, ...). Stubbing each one is unmaintainable, so use the
+# CommandNotFoundAction hook: when an unknown command starting with g[a-z]
+# is invoked, import the module and let the resolver retry.
 if (Get-Module -ListAvailable -Name git-aliases) {
-    Import-Module git-aliases -DisableNameChecking
+    $script:_git_aliases_loaded = $false
+    $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
+        param([string]$cmdName, [System.Management.Automation.CommandLookupEventArgs]$eventArgs)
+        if (-not $script:_git_aliases_loaded -and $cmdName -match '^g[a-z]') {
+            Import-Module git-aliases -DisableNameChecking -ErrorAction SilentlyContinue
+            $script:_git_aliases_loaded = $true
+            $resolved = Get-Command $cmdName -ErrorAction SilentlyContinue
+            if ($resolved) {
+                $eventArgs.Command = $resolved
+                $eventArgs.StopSearch = $true
+            }
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
