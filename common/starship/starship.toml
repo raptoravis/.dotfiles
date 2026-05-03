@@ -53,6 +53,14 @@ style = "bold blue"
 
 [python]
 symbol = " "
+# Prefer the project venv (uv/poetry/etc.) over the system python on PATH,
+# so the prompt reflects the version actually used by `uv run python`.
+python_binary = [
+    ".venv/Scripts/python.exe",  # Windows venv
+    ".venv/bin/python",          # Unix venv
+    "python",
+    "python3",
+]
 
 [rust]
 symbol = "󱘗 "
