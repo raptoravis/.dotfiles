@@ -20,13 +20,13 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/RTK.md" = "~/.claude/RTK.md"
 "common/claude/skills/handoff-refresh" = "~/.claude/skills/handoff-refresh"
+"common/nushell" = "~/.config/nushell"
+"common/wezterm/constants.lua" = "~/.config/wezterm/constants.lua"
+"common/wezterm/functions.lua" = "~/.config/wezterm/functions.lua"
+"common/wezterm/keybinds.lua" = "~/.config/wezterm/keybinds.lua"
+"common/wezterm/wezterm.lua" = { target = "~/.config/wezterm/wezterm.lua", type = "template" }
 
 [windows.files]
-"windows/nushell" = "~/.config/nushell"
-"windows/wezterm/constants.lua" = "~/.config/wezterm/constants.lua"
-"windows/wezterm/functions.lua" = "~/.config/wezterm/functions.lua"
-"windows/wezterm/keybinds.lua" = "~/.config/wezterm/keybinds.lua"
-"windows/wezterm/wezterm.lua" = { target = "~/.config/wezterm/wezterm.lua", type = "template" }
 "windows/wsl/.wslconfig" = "~/.wslconfig"
 
 [mac.files]

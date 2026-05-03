@@ -28,16 +28,12 @@ local function write_window_state(cols, rows)
 end
 
 -- Launch
+local os_name = F.detect_os()
 config.default_prog = F.get_default_program()
-config.default_cwd = 'D:\\dev'
+config.default_cwd = F.get_default_cwd()
 config.automatically_reload_config = true
 
-config.launch_menu = {
-    { label = 'PowerShell 7',       args = { 'pwsh.exe', '-NoLogo' } },
-    { label = 'WSL (zsh)',          args = { 'wsl.exe', '--cd', '~' } },
-    { label = 'Windows PowerShell', args = { 'powershell.exe' } },
-    { label = 'Command Prompt',     args = { 'cmd.exe' } },
-}
+config.launch_menu = F.get_launch_menu()
 
 -- Colors
 config.color_scheme = '{{theme_wezterm}}'
@@ -68,10 +64,14 @@ config.max_fps = 144
 config.adjust_window_size_when_changing_font_size = false
 config.text_background_opacity = 1.0
 config.window_background_opacity = 1.0
-config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
 config.window_close_confirmation = 'NeverPrompt'
-config.integrated_title_button_alignment = 'Right'
-config.integrated_title_buttons = { 'Hide', 'Maximize', 'Close' }
+if os_name == 'windows' then
+    config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
+    config.integrated_title_button_alignment = 'Right'
+    config.integrated_title_buttons = { 'Hide', 'Maximize', 'Close' }
+else
+    config.window_decorations = 'TITLE|RESIZE'
+end
 config.window_padding = {
     left = 0,
     right = 0,

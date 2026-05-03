@@ -7,8 +7,8 @@ function F.is_vim(pane)
 end
 
 function F.detect_os()
-    local os_name = package.config:sub(1, 1)
-    if os_name == '\\' then
+    local sep = package.config:sub(1, 1)
+    if sep == '\\' then
         return 'windows'
     elseif wezterm.target_triple:find('darwin') then
         return 'macos'
@@ -17,27 +17,53 @@ function F.detect_os()
 end
 
 function F.get_os_font_size()
-    local os = F.detect_os()
-    if os == 'windows' then
+    local os_name = F.detect_os()
+    if os_name == 'windows' then
         return 12.0
-    elseif os == 'macos' then
+    elseif os_name == 'macos' then
         return 16.0
     end
     return 12.0
 end
 
 function F.get_default_program()
-    local os = F.detect_os()
-    if os == 'windows' then
+    local os_name = F.detect_os()
+    if os_name == 'windows' then
         return { 'pwsh.exe', '-NoLogo' }
     end
     return { 'zsh' }
+end
+
+function F.get_default_cwd()
+    if F.detect_os() == 'windows' then
+        return 'D:\\dev'
+    end
+    return os.getenv('HOME') or '~'
+end
+
+function F.get_launch_menu()
+    local os_name = F.detect_os()
+    if os_name == 'windows' then
+        return {
+            { label = 'PowerShell 7',       args = { 'pwsh.exe', '-NoLogo' } },
+            { label = 'WSL (zsh)',          args = { 'wsl.exe', '--cd', '~' } },
+            { label = 'Windows PowerShell', args = { 'powershell.exe' } },
+            { label = 'Command Prompt',     args = { 'cmd.exe' } },
+        }
+    end
+    return {
+        { label = 'zsh',  args = { 'zsh', '-l' } },
+        { label = 'bash', args = { 'bash', '-l' } },
+    }
 end
 
 function F.get_pane_type(pane)
     local proc = (pane.foreground_process_name or ''):lower()
     if proc:match('pwsh') or proc:match('powershell') or proc:match('cmd') then
         return 'windows'
+    end
+    if F.detect_os() == 'macos' then
+        return 'macos'
     end
     return 'wsl'
 end
@@ -73,7 +99,14 @@ function F.get_tab_title(tab, tabs)
     local colors = wezterm.GLOBAL.color_table
     local tab_number = tostring(tab.tab_index + 1)
     local pane_type = F.get_pane_type(tab.active_pane)
-    local env_icon = pane_type == 'wsl' and nerdfonts.dev_linux or nerdfonts.md_microsoft_windows
+    local env_icon
+    if pane_type == 'macos' then
+        env_icon = nerdfonts.dev_apple
+    elseif pane_type == 'wsl' then
+        env_icon = nerdfonts.dev_linux
+    else
+        env_icon = nerdfonts.md_microsoft_windows
+    end
 
     local cwd = F.get_cwd_label(tab.active_pane)
     local label = ' ' .. env_icon .. ' ' .. tab_number

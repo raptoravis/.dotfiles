@@ -20,16 +20,16 @@ Windows:  native apps (WezTerm, AHK)       --> WSL2 --> unix backend (zsh, neovi
 
 | Directory  | Purpose | Used by | Dotter package |
 |------------|---------|---------|----------------|
-| `common/`  | Base layer -- shell, editors, dev tools, linters | All platforms | `common` |
+| `common/`  | Base layer -- shell, editors, dev tools, linters, cross-platform terminals (wezterm, nushell) | All platforms | `common` |
 | `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | macOS only | `mac` |
-| `windows/` | Windows-only GUI apps (wezterm, ahk) | Windows host only | `windows` |
+| `windows/` | Windows-only host integration (ahk, wsl) | Windows host only | `windows` |
 
 ### Platform layers
 
 | Layer | macOS | Windows |
 |-------|-------|---------|
-| GUI apps | Ghostty, AeroSpace, borders | WezTerm, AHK |
-| Terminal | Ghostty (native) | WezTerm -> WSL2 |
+| GUI apps | Ghostty, AeroSpace, borders | AHK |
+| Terminal | Ghostty (native), WezTerm (optional) | WezTerm -> WSL2 |
 | Shell | zsh (oh-my-zsh) | zsh via WSL2 (oh-my-zsh) |
 | Dev tools | neovim, tmux, fzf, eza, bat, rg | same, via WSL2 |
 | Package mgr | Homebrew | Scoop (Windows host) + apt (WSL2) |
@@ -59,9 +59,11 @@ Platform-specific behavior gated by `(( IS_MAC ))` / `(( IS_WSL ))`:
 │   ├── fastfetch/      # System info tool
 │   ├── linters/        # ruff.toml, stylua.toml
 │   ├── mise/           # Runtime version manager
+│   ├── nushell/        # Nushell config (cross-platform)
 │   ├── nvim/           # Neovim configuration (lazy.nvim)
 │   ├── starship/       # Shell prompt
 │   ├── tmux/           # Terminal multiplexer
+│   ├── wezterm/        # WezTerm config (cross-platform, OS branched in functions.lua)
 │   └── zsh/            # Zsh config (active shell on both platforms)
 │       ├── .zshrc      # Main config (sources platform.zsh first)
 │       ├── .zshenv     # Environment vars
@@ -72,10 +74,9 @@ Platform-specific behavior gated by `(( IS_MAC ))` / `(( IS_WSL ))`:
 │   ├── aerospace/      # AeroSpace tiling window manager
 │   ├── borders/        # Window border visual effects
 │   └── ghostty/        # Terminal emulator
-├── windows/            # Windows-native GUI apps (host side only)
+├── windows/            # Windows-native host integration (host side only)
 │   ├── ahk/            # AutoHotkey scripts
-│   ├── nushell/        # Nushell config
-│   └── wezterm/        # Terminal emulator
+│   └── wsl/            # WSL config (.wslconfig, .hushlogin)
 ├── .dotter/            # Dotter configuration
 │   ├── global.toml     # Symlink mappings: [common], [mac], [windows], [linux]
 │   ├── mitch-pc.toml   # Windows machine (packages: common + windows)
@@ -112,7 +113,7 @@ Dotter selects config based on hostname -> machine toml -> packages list -> glob
 | `common` | `common/*` | All platforms |
 | `mac` | `common/bottom` (macOS path) + `macos/*` | macOS |
 | `linux` | `common/bottom` (linux path) | WSL2 |
-| `windows` | `windows/*` | Windows host |
+| `windows` | `windows/wsl/.wslconfig` | Windows host |
 
 ## Setup Workflow
 
@@ -192,13 +193,13 @@ update                  # zsh function (brew/apt + rustup + cargo + mise)
 
 1. **Unix-first**: write shell configs for unix. Use `(( IS_MAC ))` / `(( IS_WSL ))` guards for platform-specific behavior
 2. **Use dotter-aware paths**: changes must align with `.dotter/global.toml` mappings
-3. **Three directories**: `common/` for the base layer, `macos/` for mac GUI apps, `windows/` for Windows GUI apps
+3. **Three directories**: `common/` for the cross-platform base layer (incl. wezterm, nushell), `macos/` for mac-only GUI apps, `windows/` for Windows-only host integration
 4. **Test symlinks**: suggest `dotter -v` after config changes
 5. **Platform branching in Makefile**: use `mac_alias`, `windows_alias`, `linux_alias`
 
 ### Adding a new tool config
 
-1. Create directory under `common/`, `macos/`, or `windows/` as appropriate
+1. Create directory under `common/` (cross-platform), `macos/` (mac-only), or `windows/` (Windows-only) as appropriate
 2. Add entry to `.dotter/global.toml` under the correct `[*.files]` section
 3. Add installation to `Makefile.toml` under relevant `install-*-tools` task (with platform aliases if needed)
 4. Run `cargo make dotfiles` to symlink
