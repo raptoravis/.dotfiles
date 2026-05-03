@@ -40,6 +40,7 @@ alias lt2='eza --icons --tree --level=2 --group-directories-first -h --long --no
 alias lt3='eza --icons --tree --level=3 --group-directories-first -h --long --no-permissions --no-user --no-time'
 alias lta='eza --icons --tree --group-directories-first -h --long --no-permissions --no-user --no-time'
 alias ltcopy='eza --tree | _clip'
+alias llt='eza -l --sort=modified -ah --group-directories-first --icons'
 
 # git
 alias gitfzf='~/.config/bash/git_fzf_checkout.sh'
