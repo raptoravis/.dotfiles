@@ -3,6 +3,37 @@ local action = wezterm.action
 
 local K = {}
 
+-- Close every tab whose index is greater than the active tab.
+-- Iterates from the rightmost tab leftward so indices stay valid as we close.
+local function close_tabs_to_right(window, _)
+    local mux_win = window:mux_window()
+    local tabs = mux_win:tabs()
+    local active_idx
+    for i, t in ipairs(tabs) do
+        if t:tab_id() == window:active_tab():tab_id() then
+            active_idx = i
+            break
+        end
+    end
+    if not active_idx then return end
+    for i = #tabs, active_idx + 1, -1 do
+        tabs[i]:activate()
+        window:perform_action(action.CloseCurrentTab({ confirm = false }), window:active_pane())
+    end
+end
+
+local function close_other_tabs(window, _)
+    local mux_win = window:mux_window()
+    local tabs = mux_win:tabs()
+    local keep_id = window:active_tab():tab_id()
+    for i = #tabs, 1, -1 do
+        if tabs[i]:tab_id() ~= keep_id then
+            tabs[i]:activate()
+            window:perform_action(action.CloseCurrentTab({ confirm = false }), window:active_pane())
+        end
+    end
+end
+
 function K.keybinds()
     return {
         -- Clipboard
@@ -36,6 +67,10 @@ function K.keybinds()
         { key = '0', mods = 'ALT', action = action.EmitEvent('opacity-reset') },
         { key = '-', mods = 'ALT', action = action.EmitEvent('opacity-decrease') },
         { key = '_', mods = 'ALT|SHIFT', action = action.EmitEvent('opacity-increase') },
+
+        -- Tabs
+        { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
+        { key = 'w', mods = 'CTRL|ALT|SHIFT', action = wezterm.action_callback(close_other_tabs) },
 
         -- Signals
         { key = 'Backspace', mods = 'CTRL', action = action.SendString('\x03') },

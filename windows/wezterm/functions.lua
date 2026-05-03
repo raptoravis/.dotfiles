@@ -42,24 +42,56 @@ function F.get_pane_type(pane)
     return 'wsl'
 end
 
+-- Extract the basename of a pane's current_working_dir.
+-- Handles both modern wezterm (Url userdata with .file_path) and older
+-- string-form 'file://host/path'. Returns '' if cwd is unavailable.
+function F.get_cwd_label(pane)
+    local cwd_uri = pane.current_working_dir
+    if not cwd_uri then return '' end
+
+    local path
+    if type(cwd_uri) == 'userdata' then
+        path = cwd_uri.file_path
+    else
+        path = tostring(cwd_uri):gsub('^file://[^/]*', '')
+    end
+    if not path or path == '' then return '' end
+
+    -- Normalize: strip leading slash before drive letter (Windows: /D:/...),
+    -- replace ~ for HOME, then take the last path segment.
+    path = path:gsub('^/([A-Za-z]:)', '%1')
+    path = path:gsub('[/\\]+$', '')
+
+    local home = os.getenv('USERPROFILE') or os.getenv('HOME')
+    if home and path == home then return '~' end
+
+    local basename = path:match('([^/\\]+)$')
+    return basename or path
+end
+
 function F.get_tab_title(tab, tabs)
     local colors = wezterm.GLOBAL.color_table
     local tab_number = tostring(tab.tab_index + 1)
     local pane_type = F.get_pane_type(tab.active_pane)
     local env_icon = pane_type == 'wsl' and nerdfonts.dev_linux or nerdfonts.md_microsoft_windows
 
+    local cwd = F.get_cwd_label(tab.active_pane)
+    local label = ' ' .. env_icon .. ' ' .. tab_number
+    if cwd ~= '' then label = label .. '  ' .. cwd end
+    label = label .. ' '
+
     if tab.is_active then
         return {
             { Background = { Color = colors.ansi[1] } },
             { Foreground = { Color = colors.ansi[2] } },
             { Attribute = { Intensity = 'Bold' } },
-            { Text = ' ' .. env_icon .. ' ' .. tab_number .. ' ' },
+            { Text = label },
         }
     else
         return {
             { Background = { Color = colors.ansi[1] } },
             { Foreground = { Color = colors.foreground } },
-            { Text = ' ' .. env_icon .. ' ' .. tab_number .. ' ' },
+            { Text = label },
         }
     end
 end

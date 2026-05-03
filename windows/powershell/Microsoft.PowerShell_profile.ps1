@@ -4,7 +4,7 @@
 
 # PSReadLine — predictive intellisense
 Import-Module PSReadLine
-Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView
+Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle InlineView
 
 # PowerType — context-aware completions
 if (Get-Module -ListAvailable -Name PowerType) {
