@@ -51,8 +51,13 @@ end
 local function collect_state(window)
     local mux_win = window:mux_window()
     if not mux_win then return nil end
-    local data = { name = window:active_workspace(), tabs = {} }
-    for _, tab in ipairs(mux_win:tabs()) do
+    local active_tab = window:active_tab()
+    local active_tab_id = active_tab and active_tab:tab_id() or nil
+    local data = { name = window:active_workspace(), tabs = {}, active_tab_index = 1 }
+    for i, tab in ipairs(mux_win:tabs()) do
+        if active_tab_id and tab:tab_id() == active_tab_id then
+            data.active_tab_index = i
+        end
         local tab_data = { tab_id = tostring(tab:tab_id()), panes = {} }
         for _, info in ipairs(tab:panes_with_info()) do
             table.insert(tab_data.panes, {
@@ -156,6 +161,18 @@ local function silent_restore_state(window)
             if pcwd then opts.cwd = pcwd end
             pcall(function() new_tab:active_pane():split(opts) end)
         end
+    end
+
+    -- Re-activate the originally-active tab. spawn_tab leaves mux active on
+    -- the last spawned tab, while the GUI may still show tab 1 — that
+    -- mux/GUI mismatch is what caused keystrokes on macOS to ring the bell
+    -- without producing input. Explicitly activating sync's both sides.
+    local target = data.active_tab_index or 1
+    local tabs_now = mux_win:tabs()
+    if tabs_now[target] then
+        pcall(function() tabs_now[target]:activate() end)
+    elseif tabs_now[1] then
+        pcall(function() tabs_now[1]:activate() end)
     end
     return true
 end
@@ -275,7 +292,11 @@ if os_name == 'windows' then
     config.integrated_title_button_alignment = 'Right'
     config.integrated_title_buttons = { 'Hide', 'Maximize', 'Close' }
 else
-    config.window_decorations = 'TITLE|RESIZE'
+    -- macOS/Linux: RESIZE-only drops the title bar (and on macOS, the
+    -- traffic-light buttons) — matching the Windows look where the tab
+    -- bar is the topmost row. Use Cmd+M / Cmd+Ctrl+F / Cmd+Q for
+    -- minimize / fullscreen / quit on macOS.
+    config.window_decorations = 'RESIZE'
 end
 config.window_padding = {
     left = 0,
