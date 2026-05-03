@@ -128,7 +128,8 @@
     "rust-analyzer-lsp@claude-plugins-official": true,
     "claude-hud@claude-hud": true,
     "handoff@handoff-marketplace": true,
-    "andrej-karpathy-skills@karpathy-skills": true
+    "andrej-karpathy-skills@karpathy-skills": true,
+    "zero-review@atum-marketplace": true
   },
   "extraKnownMarketplaces": {
     "claude-context-mode": {
@@ -153,6 +154,12 @@
       "source": {
         "source": "github",
         "repo": "forrestchang/andrej-karpathy-skills"
+      }
+    },
+    "atum-marketplace": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/A7um/zero-review.git"
       }
     }
   },

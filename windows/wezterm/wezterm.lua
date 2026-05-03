@@ -31,6 +31,13 @@ end
 config.default_prog = F.get_default_program()
 config.default_cwd = 'D:\\dev'
 config.automatically_reload_config = true
+
+-- Mux domain so `wezterm cli spawn` always lands a tab in the running GUI
+-- instead of starting a second mux server / second window.
+config.unix_domains = {
+    { name = 'default' },
+}
+config.default_gui_startup_args = { 'connect', 'default' }
 config.launch_menu = {
     { label = 'PowerShell 7',       args = { 'pwsh.exe', '-NoLogo' } },
     { label = 'WSL (zsh)',          args = { 'wsl.exe', '--cd', '~' } },
