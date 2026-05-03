@@ -1,7 +1,17 @@
 local wezterm = require('wezterm')
 local K = require('keybinds')
 local F = require('functions')
+local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 local config = wezterm.config_builder()
+
+-- Session persistence (resurrect.wezterm)
+resurrect.state_manager.change_state_save_dir(F.get_resurrect_state_dir())
+resurrect.state_manager.periodic_save({
+    interval_seconds = 300,
+    save_workspaces = true,
+    save_windows = true,
+    save_tabs = true,
+})
 
 -- ---------------------------------------------------------------------------
 -- Window size persistence
@@ -104,9 +114,11 @@ config.use_fancy_tab_bar = true
 -- Keys
 config.enable_kitty_keyboard = false
 config.disable_default_key_bindings = false
-config.keys = K.keybinds()
+config.keys = K.keybinds(resurrect)
 
 -- Events
+wezterm.on('gui-startup', resurrect.state_manager.resurrect_on_gui_startup)
+
 wezterm.on('window-config-reloaded', function(window, _)
     F.reset_opacity(window, config)
 end)

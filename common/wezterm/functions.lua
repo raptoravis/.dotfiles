@@ -41,6 +41,13 @@ function F.get_default_cwd()
     return os.getenv('HOME') or '~'
 end
 
+-- Resurrect state lives outside ~/.config/wezterm because that path is a
+-- symlink into the dotfiles repo. We don't want session blobs in git.
+function F.get_resurrect_state_dir()
+    local home = os.getenv('HOME') or os.getenv('USERPROFILE') or ''
+    return home .. '/.local/share/wezterm/resurrect'
+end
+
 function F.get_launch_menu()
     local os_name = F.detect_os()
     if os_name == 'windows' then
