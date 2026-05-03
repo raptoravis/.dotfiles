@@ -22,13 +22,13 @@ Windows:  native apps (WezTerm, AHK)       --> WSL2 --> unix backend (zsh, neovi
 |------------|---------|---------|----------------|
 | `common/`  | Base layer -- shell, editors, dev tools, linters | All platforms | `common` |
 | `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | macOS only | `mac` |
-| `windows/` | Windows-only GUI apps (wezterm, ahk, komorebi) | Windows host only | `windows` |
+| `windows/` | Windows-only GUI apps (wezterm, ahk) | Windows host only | `windows` |
 
 ### Platform layers
 
 | Layer | macOS | Windows |
 |-------|-------|---------|
-| GUI apps | Ghostty, AeroSpace, borders | WezTerm, AHK, (komorebi undecided) |
+| GUI apps | Ghostty, AeroSpace, borders | WezTerm, AHK |
 | Terminal | Ghostty (native) | WezTerm -> WSL2 |
 | Shell | zsh (oh-my-zsh) | zsh via WSL2 (oh-my-zsh) |
 | Dev tools | neovim, tmux, fzf, eza, bat, rg | same, via WSL2 |
@@ -74,10 +74,8 @@ Platform-specific behavior gated by `(( IS_MAC ))` / `(( IS_WSL ))`:
 │   └── ghostty/        # Terminal emulator
 ├── windows/            # Windows-native GUI apps (host side only)
 │   ├── ahk/            # AutoHotkey scripts
-│   ├── komorebi/       # Tiling window manager (undecided)
 │   ├── nushell/        # Nushell config
-│   ├── wezterm/        # Terminal emulator
-│   └── whkdrc/         # Hotkey daemon config
+│   └── wezterm/        # Terminal emulator
 ├── .dotter/            # Dotter configuration
 │   ├── global.toml     # Symlink mappings: [common], [mac], [windows], [linux]
 │   ├── mitch-pc.toml   # Windows machine (packages: common + windows)

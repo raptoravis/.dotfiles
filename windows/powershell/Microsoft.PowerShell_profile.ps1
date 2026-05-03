@@ -2,9 +2,14 @@
 # Loaded by $PROFILE (wired by install-windows.ps1).
 # Runtime configuration for PowerShell modules installed via PSGallery.
 
-# PSReadLine — predictive intellisense
+# PSReadLine — predictive intellisense + history dropdown + tab menu
 Import-Module PSReadLine
-Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle InlineView
+Set-PSReadLineOption -PredictionSource HistoryAndPlugin -PredictionViewStyle ListView
+Set-PSReadLineOption -EditMode Windows -HistorySearchCursorMovesToEnd
+Set-PSReadLineKeyHandler -Key Tab           -Function MenuComplete
+Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key DownArrow     -Function HistorySearchForward
+Set-PSReadLineKeyHandler -Key RightArrow    -Function ForwardChar  # accept inline ghost text
 
 # PowerType — context-aware completions
 if (Get-Module -ListAvailable -Name PowerType) {
