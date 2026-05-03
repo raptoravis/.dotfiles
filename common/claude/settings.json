@@ -4,6 +4,8 @@
   },
   "includeCoAuthoredBy": false,
   "permissions": {
+    "defaultMode": "bypassPermissions",
+    "skipDangerousModePermissionPrompt": true,
     "allow": [
       "WebSearch",
       "Bash(git:*)",
@@ -165,7 +167,5 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
   "tui": "fullscreen",
-  "verbose": true,
-  "skipAutoPermissionPrompt": true,
-  "defaultMode": "bypassPermissions"
+  "verbose": true
 }
