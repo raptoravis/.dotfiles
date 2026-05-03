@@ -4,8 +4,6 @@
   },
   "includeCoAuthoredBy": false,
   "permissions": {
-    "defaultMode": "bypassPermissions",
-    "skipDangerousModePermissionPrompt": true,
     "allow": [
       "WebSearch",
       "Bash(git:*)",
@@ -48,7 +46,9 @@
       "Bash(wrangler deploy *)",
       "Bash(terraform apply *)",
       "Bash(kubectl delete *)"
-    ]
+    ],
+    "defaultMode": "bypassPermissions",
+    "skipDangerousModePermissionPrompt": true
   },
   "model": "opus",
   "hooks": {
@@ -122,7 +122,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "powershell -Command \"& {$claudeDir=if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }; $p=(Get-ChildItem (Join-Path $claudeDir 'plugins\\cache\\claude-hud\\claude-hud') -Directory | Where-Object { $_.Name -match '^\\d+(\\.\\d+)+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).FullName; & 'C:\\Program Files\\nodejs\\node.exe' (Join-Path $p 'dist\\index.js')}\""
+    "command": "powershell -NoProfile -Command \"& {$claudeDir=if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }; $p=(Get-ChildItem (Join-Path $claudeDir 'plugins\\cache\\claude-hud\\claude-hud') -Directory | Where-Object { $_.Name -match '^\\d+(\\.\\d+)+$' } | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1).FullName; & 'C:\\Program Files\\nodejs\\node.exe' (Join-Path $p 'dist\\index.js')}\""
   },
   "enabledPlugins": {
     "context-mode@claude-context-mode": true,
@@ -166,6 +166,7 @@
   },
   "alwaysThinkingEnabled": true,
   "effortLevel": "xhigh",
-  "tui": "fullscreen",
-  "verbose": true
+  "tui": "default",
+  "verbose": true,
+  "skipDangerousModePermissionPrompt": true
 }

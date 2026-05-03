@@ -45,9 +45,12 @@ renamed = "»${count}"
 deleted = "✘${count}"
 
 # Your custom Databricks module
+# Unix-only: relies on POSIX `test` and $VAR expansion which don't exist in
+# Windows native PowerShell (causes a timeout warning on every prompt).
 [custom.databricks]
 command = "echo $DATABRICKS_ENV"
 when = "test -n \"$DATABRICKS_ENV\""
+os = "unix"
 format = "[◆ DB:$output]($style) "
 style = "bold blue"
 
