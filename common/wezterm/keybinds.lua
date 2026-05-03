@@ -48,12 +48,18 @@ function K.keybinds()
         end) },
         { key = 'v', mods = 'CTRL', action = action.PasteFrom('Clipboard') },
 
+        -- Session save / restore (wezterm-session-manager).
+        -- load_session is omitted: load_state is unimplemented in the plugin
+        -- (TODO in upstream); auto-restore happens on launch instead.
+        { key = 's', mods = 'ALT', action = action.EmitEvent('save_session') },
+        { key = 'r', mods = 'ALT', action = action.EmitEvent('restore_session') },
+
         -- Window
         { key = 'Enter', mods = 'ALT',       action = action.ShowLauncherArgs({ flags = 'LAUNCH_MENU_ITEMS' }) },
         { key = 'Enter', mods = 'CMD|SHIFT', action = action.ToggleFullScreen },
         { key = 'p', mods = 'ALT', action = action.ActivateCommandPalette },
         { key = 'p', mods = 'CTRL|SHIFT', action = action.ActivateCommandPalette },
-        { key = 'q', mods = 'ALT', action = action.QuitApplication },
+        { key = 'q', mods = 'ALT', action = action.EmitEvent('save_and_quit') },
 
         -- Search
         { key = '/', mods = 'ALT', action = action.Search({ CaseInSensitiveString = '' }) },

@@ -401,6 +401,48 @@ if (Test-Cmd dotter) {
     Write-Warn2 'dotter not on PATH — open a new shell so cargo bin is loaded, then re-run.'
 }
 
+# ---------------------------------------------------------------------------
+# 11) WezTerm plugins (cloned manually, not via wezterm.plugin.require)
+#     wezterm-session-manager: save/load/restore tabs and panes.
+#     Bound to Alt+s / Alt+r in common/wezterm/keybinds.lua.
+#
+#     The plugin hardcodes its state file path to ~/.config/wezterm/...,
+#     which is inside wezterm.config_dir. Writing there triggers
+#     automatically_reload_config, which re-runs wezterm.lua mid-session and
+#     breaks restore. Patch the path to ~/.local/share/wezterm/sessions/.
+# ---------------------------------------------------------------------------
+$WeztermDir = Join-Path $env:USERPROFILE '.config\wezterm'
+if (Test-Path $WeztermDir) {
+    $SmDir  = Join-Path $WeztermDir 'wezterm-session-manager'
+    $SmFile = Join-Path $SmDir 'session-manager.lua'
+    if (Test-Path (Join-Path $SmDir '.git')) {
+        Write-Step 'wezterm-session-manager already cloned'
+    } else {
+        Write-Step 'Cloning wezterm-session-manager into ~/.config/wezterm/'
+        git clone --depth 1 https://github.com/danielcopper/wezterm-session-manager.git $SmDir
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  clone failed (network / proxy?)' }
+    }
+    if (Test-Path $SmFile) {
+        $oldPath = '/.config/wezterm/wezterm-session-manager/wezterm_state_'
+        $newPath = '/.local/share/wezterm/sessions/wezterm_state_'
+        $content = Get-Content -Raw $SmFile
+        if ($content -match [regex]::Escape($oldPath)) {
+            Write-Step 'Patching wezterm-session-manager state path -> ~/.local/share/wezterm/sessions/'
+            ($content -replace [regex]::Escape($oldPath), $newPath) |
+                Set-Content -Path $SmFile -Encoding UTF8 -NoNewline
+        } else {
+            Write-Host '  session-manager.lua already patched'
+        }
+    }
+    $SessionsDir = Join-Path $env:USERPROFILE '.local\share\wezterm\sessions'
+    if (-not (Test-Path $SessionsDir)) {
+        New-Item -ItemType Directory -Path $SessionsDir -Force | Out-Null
+        Write-Host "  created $SessionsDir"
+    }
+} else {
+    Write-Warn2 "$WeztermDir not found — run dotter first, then re-run to clone wezterm plugins"
+}
+
 Write-Step 'Done. Open a new terminal to pick up the environment.'
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray
