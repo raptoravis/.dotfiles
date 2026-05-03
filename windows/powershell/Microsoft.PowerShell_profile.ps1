@@ -213,6 +213,14 @@ function Set-Title() {
 $Script:_origPrompt = (Get-Command prompt -ErrorAction SilentlyContinue).ScriptBlock
 function prompt {
     Set-Title
+    # Sync the .NET process cwd with the PSDrive location. Set-Location only
+    # updates Get-Location; child processes (starship) inherit the unchanged
+    # .NET cwd, which breaks starship's relative python_binary lookup against
+    # .venv/Scripts/python.exe (the prompt would show the system python).
+    $loc = $executionContext.SessionState.Path.CurrentLocation
+    if ($loc.Provider.Name -eq 'FileSystem') {
+        [System.IO.Directory]::SetCurrentDirectory($loc.ProviderPath)
+    }
     if ($Script:_origPrompt) {
         & $Script:_origPrompt
     } else {
