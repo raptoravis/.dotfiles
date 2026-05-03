@@ -39,6 +39,20 @@ APT_PKGS=(
 sudo -E apt-get install -y -qq "${APT_PKGS[@]}"
 (( IS_WSL )) && sudo -E apt-get install -y -qq wslu 2>/dev/null || true
 
+# WezTerm — only on bare Linux (WSL uses the Windows host's wezterm).
+# Default Debian/Ubuntu repos lag behind upstream by years; use wez's
+# fury.io apt repo for current builds.
+if (( ! IS_WSL )) && ! command -v wezterm >/dev/null 2>&1; then
+  log "Installing WezTerm via official apt repo"
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://apt.fury.io/wez/gpg.key \
+    | sudo gpg --yes --dearmor -o /etc/apt/keyrings/wezterm-fury.gpg
+  echo 'deb [signed-by=/etc/apt/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *' \
+    | sudo tee /etc/apt/sources.list.d/wezterm.list >/dev/null
+  sudo -E apt-get update -qq
+  sudo -E apt-get install -y -qq wezterm || warn "  wezterm install failed"
+fi
+
 # Debian ships fd as `fdfind` and bat as `batcat` — provide expected names.
 mkdir -p "$HOME/.local/bin"
 [[ -x "$(command -v fdfind)" && ! -e "$HOME/.local/bin/fd" ]]   && ln -s "$(command -v fdfind)" "$HOME/.local/bin/fd"
