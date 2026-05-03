@@ -10,7 +10,12 @@
 
 [CmdletBinding()]
 param(
-    [string]$DotfilesDir = $PSScriptRoot
+    [string]$DotfilesDir = $PSScriptRoot,
+    # HTTP proxy applied as user-level HTTPS_PROXY/HTTP_PROXY/ALL_PROXY and to
+    # `git config --global`. Mirrors $env:PROXY_URL in the pwsh profile so
+    # tools launched outside pwsh (wezterm plugin clones, vscode, etc.) reach
+    # the network through the same proxy. Pass '' to skip.
+    [string]$ProxyUrl = 'http://127.0.0.1:7890'
 )
 
 if (-not $DotfilesDir) {
@@ -274,6 +279,23 @@ function Set-UserEnvVarIfChanged($name, $value) {
 }
 Set-UserEnvVarIfChanged 'XDG_CONFIG_HOME'  "$env:USERPROFILE\.config"
 Set-UserEnvVarIfChanged 'YAZI_CONFIG_HOME' "$env:USERPROFILE\.config\yazi"
+
+# Proxy — applied at the user scope so non-pwsh processes (wezterm plugin
+# clones, vscode, etc.) also route through it. The pwsh profile sets the
+# same value at session scope via proxy_on; setting it at user scope makes
+# it visible before the profile runs.
+if ($ProxyUrl) {
+    Set-UserEnvVarIfChanged 'HTTPS_PROXY' $ProxyUrl
+    Set-UserEnvVarIfChanged 'HTTP_PROXY'  $ProxyUrl
+    Set-UserEnvVarIfChanged 'ALL_PROXY'   $ProxyUrl
+    if ((git config --global --get http.proxy 2>$null) -ne $ProxyUrl) {
+        git config --global http.proxy  $ProxyUrl
+        git config --global https.proxy $ProxyUrl
+        Write-Host "  set git http.proxy/https.proxy = $ProxyUrl"
+    } else {
+        Write-Host '  git http.proxy already set'
+    }
+}
 
 # Add ~/.cargo/bin to the user PATH so cargo-installed tools (dotter, eza, btm…) are found
 # in new shells without requiring a rustup-managed PATH update.
