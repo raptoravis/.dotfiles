@@ -1,24 +1,19 @@
 local wezterm = require('wezterm')
 local K = require('keybinds')
 local F = require('functions')
-local resurrect = wezterm.plugin.require('https://github.com/MLFlexer/resurrect.wezterm')
 local config = wezterm.config_builder()
-
--- Session persistence (resurrect.wezterm)
-resurrect.state_manager.change_state_save_dir(F.get_resurrect_state_dir())
-resurrect.state_manager.periodic_save({
-    interval_seconds = 300,
-    save_workspaces = true,
-    save_windows = true,
-    save_tabs = true,
-})
 
 -- ---------------------------------------------------------------------------
 -- Window size persistence
 -- Default 140x40 if no saved state. Rewritten on every resize so the next
 -- launch reopens at the same dimensions.
+--
+-- Stored under ~/.local/share/wezterm/ (data dir), not wezterm.config_dir,
+-- because automatically_reload_config watches the config dir — writing the
+-- state file there would trigger a config reload on every resize.
 -- ---------------------------------------------------------------------------
-local state_path = wezterm.config_dir .. '/window-state.json'
+local state_path = (os.getenv('USERPROFILE') or os.getenv('HOME') or '')
+    .. '/.local/share/wezterm/window-state.json'
 
 local function read_window_state()
     local f = io.open(state_path, 'r')
@@ -114,11 +109,9 @@ config.use_fancy_tab_bar = true
 -- Keys
 config.enable_kitty_keyboard = false
 config.disable_default_key_bindings = false
-config.keys = K.keybinds(resurrect)
+config.keys = K.keybinds()
 
 -- Events
-wezterm.on('gui-startup', resurrect.state_manager.resurrect_on_gui_startup)
-
 wezterm.on('window-config-reloaded', function(window, _)
     F.reset_opacity(window, config)
 end)
