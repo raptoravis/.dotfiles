@@ -330,6 +330,20 @@ if (Test-Path $CargoBin) {
     Write-Warn2 '~/.cargo/bin not found — Rust may not be installed yet; re-run after rustup'
 }
 
+# Add ~/AppData/Roaming/npm to the user PATH so global npm CLIs (hostc, codex, gemini, …)
+# are findable. The official Node MSI used to set this; scoop's nodejs-lts does not.
+$NpmGlobal = Join-Path $env:APPDATA 'npm'
+$userPath  = [Environment]::GetEnvironmentVariable('PATH', 'User')
+$entries   = if ($userPath) { $userPath -split ';' } else { @() }
+$already   = $entries | Where-Object { $_ -and ($_.TrimEnd('\') -ieq $NpmGlobal.TrimEnd('\')) }
+if ($already) {
+    Write-Host '  ~/AppData/Roaming/npm already on user PATH'
+} else {
+    $newPath = if ($userPath) { "$userPath;$NpmGlobal" } else { $NpmGlobal }
+    [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+    Write-Host "  added to user PATH: $NpmGlobal"
+}
+
 # Add dotfiles windows/bin to the user PATH (idempotent, case-insensitive match).
 $BinDir = Join-Path $DotfilesDir 'windows\bin'
 if (Test-Path $BinDir) {
