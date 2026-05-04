@@ -286,7 +286,7 @@ config.max_fps = 144
 config.adjust_window_size_when_changing_font_size = false
 config.text_background_opacity = 1.0
 config.window_background_opacity = 1.0
-config.window_close_confirmation = 'NeverPrompt'
+config.window_close_confirmation = 'AlwaysPrompt'
 if os_name == 'windows' then
     config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
     config.integrated_title_button_alignment = 'Right'
