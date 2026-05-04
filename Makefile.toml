@@ -25,12 +25,25 @@ extend = "Makefile.utils.toml"
 [tasks.init]
 description = "Set up the development environment"
 dependencies = [
-    "install-rust",       # Install Rust and its components
-    "install-tools",      # Install platform-specific tools
-    "install-coreutils",  # Install platform-specific coreutils
-    "install-rust-tools", # Install additional Rust tools
-    "install-mise",       # Install mise runtime manager
-    "dotfiles",           # Symlink dotfiles
+    "install-rust",            # Install Rust and its components
+    "install-tools",           # Install platform-specific tools (incl. graphifyy via uv-tools.txt)
+    "install-coreutils",       # Install platform-specific coreutils
+    "install-rust-tools",      # Install additional Rust tools
+    "install-mise",            # Install mise runtime manager
+    "dotfiles",                # Symlink dotfiles (must run before install-graphify-skill)
+    "install-graphify-skill",  # Copy graphify SKILL.md to ~/.claude/skills/graphify/
+]
+
+# Graphify Skill Installation (Claude Code)
+# Runs after `dotfiles` so ~/.claude/CLAUDE.md is already a symlink to common/claude/CLAUDE.md.
+# `graphify install --platform claude` will:
+#   - copy SKILL.md to ~/.claude/skills/graphify/SKILL.md
+#   - detect "graphify" already in CLAUDE.md (from our managed source) and skip the append (no pollution)
+[tasks.install-graphify-skill]
+description = "Install graphify SKILL.md into ~/.claude/skills/graphify/"
+script = [
+    "echo --- Installing graphify skill for Claude Code ---",
+    "graphify install --platform claude",
 ]
 
 [tasks.install-rust]
@@ -210,10 +223,11 @@ script = [
 [tasks.update]
 description = "Update all tools, dependencies, and configurations"
 dependencies = [
-    "update-rust",           # Update Rust toolchain and components
-    "update-platform-tools", # Update platform-specific tools
-    "update-mise",           # Update mise configurations
-    "dotfiles",              # Take the chance to validate the dotfiles
+    "update-rust",            # Update Rust toolchain and components
+    "update-platform-tools",  # Update platform-specific tools (incl. uv tool upgrade --all)
+    "update-mise",            # Update mise configurations
+    "dotfiles",               # Take the chance to validate the dotfiles
+    "install-graphify-skill", # Refresh graphify SKILL.md (in case graphifyy was upgraded)
 ]
 
 # Rust Toolchain Update
