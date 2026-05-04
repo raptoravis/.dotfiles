@@ -22,4 +22,7 @@ if ($cols -le 0) {
 }
 if ($cols -gt 0) { $env:COLUMNS = $cols }
 
-& 'C:\Program Files\nodejs\node.exe' (Join-Path $latest.FullName 'dist\index.js')
+$node = (Get-Command node -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if (-not $node) { exit 0 }
+
+& $node (Join-Path $latest.FullName 'dist\index.js')
