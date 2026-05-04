@@ -102,17 +102,40 @@ fi
 rustup component add clippy rustfmt 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 5) Cargo tools (cargo install is a no-op if already at latest)
+# 5) Cargo tools — skip if the produced binary is already on PATH.
+#    `cargo install` re-checks crates.io even when up-to-date, which adds
+#    noticeable latency on re-runs; a `command -v` check is instant.
+#    Some crates produce a binary with a different name (bottom -> btm,
+#    cargo-update -> cargo-install-update), so use crate:binary pairs.
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
-CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat mise)
-for tool in "${CARGO_TOOLS[@]}"; do
-  cargo install "$tool" 2>&1 | tail -n1 || warn "  failed: $tool"
+CARGO_TOOLS=(
+  "dotter:dotter"
+  "cargo-update:cargo-install-update"
+  "vivid:vivid"
+  "eza:eza"
+  "bottom:btm"
+  "bat:bat"
+  "mise:mise"
+)
+for entry in "${CARGO_TOOLS[@]}"; do
+  crate="${entry%%:*}"
+  bin="${entry##*:}"
+  if command -v "$bin" >/dev/null 2>&1; then
+    log "  $crate already installed ($bin on PATH)"
+    continue
+  fi
+  cargo install "$crate" 2>&1 | tail -n1 || warn "  failed: $crate"
 done
+
 log "Installing coreutils"
 # Recent uutils/coreutils dropped the platform-named features (`macos`,
 # `windows`, `unix`) — features are now per-utility. Use defaults.
-cargo install coreutils 2>&1 | tail -n1 || warn "  failed: coreutils"
+if command -v coreutils >/dev/null 2>&1; then
+  log "  coreutils already installed"
+else
+  cargo install coreutils 2>&1 | tail -n1 || warn "  failed: coreutils"
+fi
 
 # ---------------------------------------------------------------------------
 # 6) Oh My Zsh (unattended) + plugins
