@@ -69,14 +69,20 @@ done
 # mise (runtime version manager)
 eval "$(mise activate zsh)"
 
-# tmux auto-start (interactive shell, not nested, not in editor terminals)
+# tmux auto-start (interactive shell, not nested, not in editor terminals).
+# Skipped inside WezTerm on every platform: WezTerm has its own tabs/panes,
+# a shared `main` session would make every WezTerm tab attach to the same
+# shell, and tmux doesn't forward clipboard image bytes (breaks Claude Code
+# image paste). tmux still auto-starts under Moshi / plain SSH / other
+# terminals. Set FORCE_TMUX=1 to opt back in inside WezTerm.
 if (( $+commands[tmux] )) \
    && [[ -o interactive ]] \
    && [[ -z "$TMUX" ]] \
    && [[ -z "$VSCODE_INJECTION" ]] \
    && [[ -z "$INSIDE_EMACS" ]] \
    && [[ "$TERM_PROGRAM" != "vscode" ]] \
-   && [[ -z "$NO_TMUX" ]]; then
+   && [[ -z "$NO_TMUX" ]] \
+   && { [[ -z "$WEZTERM_PANE" && "$TERM_PROGRAM" != "WezTerm" ]] || [[ -n "$FORCE_TMUX" ]]; }; then
   # Attach to "main" if exists, else create. No `exec` — exit returns to shell.
   tmux attach -t main 2>/dev/null || tmux new -s main
 fi
