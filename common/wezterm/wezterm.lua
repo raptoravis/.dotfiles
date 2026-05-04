@@ -287,6 +287,10 @@ config.adjust_window_size_when_changing_font_size = false
 config.text_background_opacity = 1.0
 config.window_background_opacity = 1.0
 config.window_close_confirmation = 'AlwaysPrompt'
+-- AlwaysPrompt skips the prompt when the only running process is in this list
+-- (default includes pwsh, zsh, bash, tmux, ...). Empty it so closing the window
+-- always confirms, even with just a shell running.
+config.skip_close_confirmation_for_processes_named = {}
 if os_name == 'windows' then
     config.window_decorations = 'INTEGRATED_BUTTONS|RESIZE'
     config.integrated_title_button_alignment = 'Right'
