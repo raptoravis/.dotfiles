@@ -199,6 +199,17 @@ if [[ ! -f "$MACHINE_TOML" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 9b) ZDOTDIR bootstrap so zsh finds its config under ~/.config/zsh.
+#     Without this, macOS zsh reads ~/.zshrc (often empty on a fresh install)
+#     and the dotter-symlinked common/zsh/.zshrc is never sourced — leaving
+#     /opt/homebrew/bin and ~/.local/bin off PATH (brew/claude not found).
+# ---------------------------------------------------------------------------
+if [[ ! -f "$HOME/.zshenv" ]] || ! grep -q 'ZDOTDIR' "$HOME/.zshenv" 2>/dev/null; then
+  log "Writing ZDOTDIR bootstrap to ~/.zshenv"
+  printf 'export ZDOTDIR=$HOME/.config/zsh\n' >> "$HOME/.zshenv"
+fi
+
+# ---------------------------------------------------------------------------
 # 10) Symlinks via dotter
 # ---------------------------------------------------------------------------
 if command -v dotter >/dev/null 2>&1; then
