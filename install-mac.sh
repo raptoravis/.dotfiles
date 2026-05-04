@@ -191,10 +191,10 @@ if ! command -v rtk >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh \
     || warn "  rtk install script failed"
 fi
-if command -v rtk >/dev/null 2>&1; then
-  log "Wiring rtk into Claude Code (rtk init -g)"
-  rtk init -g 2>/dev/null || warn "  rtk init -g failed"
-fi
+# Note: do not run `rtk init -g` here. The hook, RTK.md, and @RTK.md reference
+# are all baked into common/claude/{settings.json,RTK.md,CLAUDE.md} and wired
+# by dotter (step 10). Running `rtk init -g` would create real files that block
+# dotter's symlinks.
 
 if command -v graphify >/dev/null 2>&1; then
   log "Registering graphify skill with Claude Code"

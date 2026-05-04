@@ -255,11 +255,10 @@ if (-not (Test-Cmd rtk)) {
     cargo install --git https://github.com/rtk-ai/rtk
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk install failed' }
 }
-if (Test-Cmd rtk) {
-    Write-Step 'Wiring rtk into Claude Code (rtk init -g)'
-    rtk init -g
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  rtk init -g failed' }
-}
+# Note: do not run `rtk init -g` here. The hook, RTK.md, and @RTK.md reference
+# are all baked into common/claude/{settings.json,RTK.md,CLAUDE.md} and wired
+# by dotter (step 10). Running `rtk init -g` would create real files that block
+# dotter's symlinks.
 
 if (Test-Cmd graphify) {
     Write-Step 'Registering graphify skill with Claude Code'
