@@ -65,7 +65,7 @@ $Tools = @(
     'fzf', 'ripgrep', 'bat',
     'FiraCode-NF'
 )
-$Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
+$Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
 $Deps      = @('autohotkey', 'gcc', 'cmake', 'fastfetch', 'firacode')
 
 function Install-ScoopPackages($label, $pkgs) {
@@ -259,6 +259,19 @@ if (-not (Test-Cmd rtk)) {
 # are all baked into common/claude/{settings.json,RTK.md,CLAUDE.md} and wired
 # by dotter (step 10). Running `rtk init -g` would create real files that block
 # dotter's symlinks.
+
+# ---------------------------------------------------------------------------
+# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# ---------------------------------------------------------------------------
+if (Test-Cmd npm) {
+    if (-not (Test-Cmd hostc)) {
+        Write-Step 'Installing hostc (edge tunnel CLI) via npm'
+        npm install -g hostc
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  hostc install failed' }
+    }
+} else {
+    Write-Warn2 'npm not on PATH -- skipping hostc install (open a new shell after scoop installs nodejs-lts, then re-run)'
+}
 
 if (Test-Cmd graphify) {
     Write-Step 'Registering graphify skill with Claude Code'

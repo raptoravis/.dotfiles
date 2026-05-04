@@ -35,6 +35,7 @@ APT_PKGS=(
   zsh fzf ripgrep fd-find bat neovim cmake curl git
   build-essential pkg-config libssl-dev fastfetch tmux mosh
   unzip ca-certificates gnupg
+  nodejs npm
 )
 sudo -E apt-get install -y -qq "${APT_PKGS[@]}"
 (( IS_WSL )) && sudo -E apt-get install -y -qq wslu 2>/dev/null || true
@@ -173,6 +174,18 @@ fi
 if command -v graphify >/dev/null 2>&1; then
   log "Registering graphify skill with Claude Code"
   graphify claude install 2>/dev/null || warn "  graphify claude install failed"
+fi
+
+# ---------------------------------------------------------------------------
+# 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# ---------------------------------------------------------------------------
+if command -v npm >/dev/null 2>&1; then
+  if ! command -v hostc >/dev/null 2>&1; then
+    log "Installing hostc (edge tunnel CLI) via npm"
+    npm install -g hostc 2>/dev/null || warn "  hostc install failed"
+  fi
+else
+  warn "npm not on PATH -- skipping hostc install (apt nodejs may be too old; need Node 18+)"
 fi
 
 # ---------------------------------------------------------------------------
