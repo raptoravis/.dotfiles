@@ -71,7 +71,18 @@ end
 -- Extract the basename of a pane's current_working_dir.
 -- Handles both modern wezterm (Url userdata with .file_path) and older
 -- string-form 'file://host/path'. Returns '' if cwd is unavailable.
+--
+-- When the pane is running tmux, prefer pane.title: tmux captures OSC 7
+-- from the inner shell instead of forwarding it, so current_working_dir
+-- reports tmux's own cwd. Our tmux.conf set-titles-string is the basename
+-- of pane_current_path, which surfaces here as pane.title.
 function F.get_cwd_label(pane)
+    local fg = (pane.foreground_process_name or ''):lower()
+    if fg:find('tmux') then
+        local title = pane.title
+        if title and title ~= '' then return title end
+    end
+
     local cwd_uri = pane.current_working_dir
     if not cwd_uri then return '' end
 

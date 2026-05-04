@@ -38,6 +38,7 @@ fi
 
 # Oh My Zsh
 plugins=(
+  git
   fzf-tab
   zsh-autosuggestions
   zsh-syntax-highlighting
