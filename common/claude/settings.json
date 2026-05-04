@@ -131,7 +131,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "powershell -NoProfile -File $HOME/.claude/statusline.ps1"
+    "command": "node \"$HOME/.claude/statusline.mjs\""
   },
   "enabledPlugins": {
     "context-mode@claude-context-mode": true,
