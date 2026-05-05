@@ -158,7 +158,8 @@
     "handoff@handoff-marketplace": true,
     "andrej-karpathy-skills@karpathy-skills": true,
     "zero-review@atum-marketplace": true,
-    "pyright-lsp@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true,
+    "understand-anything@understand-anything": true
   },
   "extraKnownMarketplaces": {
     "claude-context-mode": {
@@ -189,6 +190,12 @@
       "source": {
         "source": "git",
         "url": "https://github.com/A7um/zero-review.git"
+      }
+    },
+    "understand-anything": {
+      "source": {
+        "source": "github",
+        "repo": "Lum1104/Understand-Anything"
       }
     }
   },
