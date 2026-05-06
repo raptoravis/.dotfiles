@@ -260,6 +260,20 @@ cargo make --print-only <task-name>  # Debug task resolution
 - **AeroSpace**: <https://github.com/nikitabobko/AeroSpace>
 - **Mise**: <https://github.com/jdx/mise>
 
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default 5-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
+
 ---
 
 **Last Updated**: 2026-03-01
