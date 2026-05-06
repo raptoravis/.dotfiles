@@ -214,6 +214,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7d) pnpm via corepack (ships with Node >= 16.10)
+# ---------------------------------------------------------------------------
+if command -v corepack >/dev/null 2>&1; then
+  log "Enabling pnpm via corepack"
+  corepack enable 2>/dev/null || warn "  corepack enable failed"
+  corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
+else
+  warn "corepack not on PATH -- skipping pnpm activation (ensure node was installed by brew bundle)"
+fi
+
+# ---------------------------------------------------------------------------
 # 8) mise — install runtimes declared in mise config (if any)
 # ---------------------------------------------------------------------------
 if command -v mise >/dev/null 2>&1; then

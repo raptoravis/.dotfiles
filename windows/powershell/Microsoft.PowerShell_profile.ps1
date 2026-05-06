@@ -52,12 +52,12 @@ if (Get-Module -ListAvailable -Name z) {
 # CommandNotFoundAction hook: when an unknown command starting with g[a-z]
 # is invoked, import the module and let the resolver retry.
 if (Get-Module -ListAvailable -Name git-aliases) {
-    $script:_git_aliases_loaded = $false
+    $global:_git_aliases_loaded = $false
     $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
         param([string]$cmdName, [System.Management.Automation.CommandLookupEventArgs]$eventArgs)
-        if (-not $script:_git_aliases_loaded -and $cmdName -match '^g[a-z]') {
+        if (-not $global:_git_aliases_loaded -and $cmdName -match '^g[a-z]') {
             Import-Module git-aliases -DisableNameChecking -ErrorAction SilentlyContinue
-            $script:_git_aliases_loaded = $true
+            $global:_git_aliases_loaded = $true
             $resolved = Get-Command $cmdName -ErrorAction SilentlyContinue
             if ($resolved) {
                 $eventArgs.Command = $resolved

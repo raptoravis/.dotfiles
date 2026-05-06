@@ -273,6 +273,19 @@ if (Test-Cmd npm) {
     Write-Warn2 'npm not on PATH -- skipping hostc install (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
 
+# ---------------------------------------------------------------------------
+# 7d) pnpm via corepack (ships with Node >= 16.10)
+# ---------------------------------------------------------------------------
+if (Test-Cmd corepack) {
+    Write-Step 'Enabling pnpm via corepack'
+    corepack enable
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  corepack enable failed' }
+    corepack prepare pnpm@latest --activate
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  corepack prepare pnpm failed' }
+} else {
+    Write-Warn2 'corepack not on PATH -- skipping pnpm activation (open a new shell after scoop installs nodejs-lts, then re-run)'
+}
+
 if (Test-Cmd graphify) {
     Write-Step 'Registering graphify skill with Claude Code'
     graphify claude install

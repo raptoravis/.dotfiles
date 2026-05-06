@@ -189,6 +189,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8d) pnpm via corepack (ships with Node >= 16.10)
+# ---------------------------------------------------------------------------
+if command -v corepack >/dev/null 2>&1; then
+  log "Enabling pnpm via corepack"
+  corepack enable 2>/dev/null || warn "  corepack enable failed"
+  corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
+else
+  warn "corepack not on PATH -- skipping pnpm activation (apt nodejs may be too old; need Node >= 16.10)"
+fi
+
+# ---------------------------------------------------------------------------
 # 9) WSL-only: deploy /etc/wsl.conf and (optionally) set hostname
 # ---------------------------------------------------------------------------
 if (( IS_WSL )); then
