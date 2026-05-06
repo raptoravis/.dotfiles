@@ -157,7 +157,7 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8b) Claude Code companion CLIs (rtk hook, graphify skill)
+# 8b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
@@ -170,11 +170,6 @@ fi
 # are all baked into common/claude/{settings.json,RTK.md,CLAUDE.md} and wired
 # by dotter (step 12). Running `rtk init -g` would create real files that block
 # dotter's symlinks.
-
-if command -v graphify >/dev/null 2>&1; then
-  log "Registering graphify skill with Claude Code"
-  graphify claude install 2>/dev/null || warn "  graphify claude install failed"
-fi
 
 # ---------------------------------------------------------------------------
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)

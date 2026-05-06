@@ -246,7 +246,7 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
 }
 
 # ---------------------------------------------------------------------------
-# 7b) Claude Code companion CLIs (rtk hook, graphify skill)
+# 7b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
@@ -284,12 +284,6 @@ if (Test-Cmd corepack) {
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  corepack prepare pnpm failed' }
 } else {
     Write-Warn2 'corepack not on PATH -- skipping pnpm activation (open a new shell after scoop installs nodejs-lts, then re-run)'
-}
-
-if (Test-Cmd graphify) {
-    Write-Step 'Registering graphify skill with Claude Code'
-    graphify claude install
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  graphify claude install failed' }
 }
 
 # ---------------------------------------------------------------------------
