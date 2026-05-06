@@ -8,6 +8,8 @@ add_newline = false
 
 # Format - customize order of modules (left side)
 format = """
+$time\
+$cmd_duration\
 $username\
 $hostname\
 $directory\
@@ -20,6 +22,18 @@ $docker_context\
 $custom\
 $line_break\
 $character"""
+
+[time]
+disabled = false
+time_format = "%H:%M:%S"
+format = "[\\[$time\\]]($style) "
+style = "bold dimmed white"
+
+[cmd_duration]
+min_time = 0
+show_milliseconds = true
+format = "[took $duration]($style) "
+style = "bold yellow"
 
 [character]
 success_symbol = "[➜](bold green)"
