@@ -68,3 +68,4 @@ target/
 windows/bin/**/TrafficHistory.json
 windows/bin/LiteMonitor_v1.2.4-win-x64/settings.json
 graphify-out/
+.wolf/

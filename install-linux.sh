@@ -172,15 +172,19 @@ fi
 # dotter's symlinks.
 
 # ---------------------------------------------------------------------------
-# 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
     npm install -g hostc 2>/dev/null || warn "  hostc install failed"
   fi
+  if ! command -v openwolf >/dev/null 2>&1; then
+    log "Installing openwolf via npm"
+    npm install -g openwolf 2>/dev/null || warn "  openwolf install failed"
+  fi
 else
-  warn "npm not on PATH -- skipping hostc install (apt nodejs may be too old; need Node 18+)"
+  warn "npm not on PATH -- skipping hostc/openwolf install (apt nodejs may be too old; need Node 18+)"
 fi
 
 # ---------------------------------------------------------------------------

@@ -261,7 +261,7 @@ if (-not (Test-Cmd rtk)) {
 # dotter's symlinks.
 
 # ---------------------------------------------------------------------------
-# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
 # ---------------------------------------------------------------------------
 if (Test-Cmd npm) {
     if (-not (Test-Cmd hostc)) {
@@ -269,8 +269,13 @@ if (Test-Cmd npm) {
         npm install -g hostc
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  hostc install failed' }
     }
+    if (-not (Test-Cmd openwolf)) {
+        Write-Step 'Installing openwolf via npm'
+        npm install -g openwolf
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  openwolf install failed' }
+    }
 } else {
-    Write-Warn2 'npm not on PATH -- skipping hostc install (open a new shell after scoop installs nodejs-lts, then re-run)'
+    Write-Warn2 'npm not on PATH -- skipping hostc/openwolf install (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
 
 # ---------------------------------------------------------------------------
