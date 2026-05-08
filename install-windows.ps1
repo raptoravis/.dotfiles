@@ -255,6 +255,78 @@ if (Test-Cmd graphify) {
 }
 
 # ---------------------------------------------------------------------------
+# 7b-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
+#     Mirrors the Claude Code marketplace plugins that are platform-neutral:
+#       handoff, andrej-karpathy-skills, zero-review, understand-anything
+#     Claude-Code-specific bits (slash /commands, hooks/hooks.json) only run
+#     inside Claude Code and are not ported here.
+# ---------------------------------------------------------------------------
+if (Test-Cmd git) {
+    $AgentSkills = Join-Path $env:USERPROFILE '.agents\skills'
+    $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $PluginCache | Out-Null
+
+    function CloneOrPull($url, $dir) {
+        if (Test-Path (Join-Path $dir '.git')) {
+            Push-Location $dir
+            git pull --quiet --ff-only 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
+            Pop-Location
+        } else {
+            git clone --depth=1 --quiet $url $dir
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clone failed: $url" }
+        }
+    }
+
+    function LinkSkillsFrom($repo) {
+        # Symlink every directory containing a SKILL.md into ~/.agents/skills/<name>.
+        # Requires Developer Mode (enabled earlier in this script) for non-admin symlinks.
+        Get-ChildItem -Path $repo -Recurse -Depth 4 -Filter SKILL.md -ErrorAction SilentlyContinue | ForEach-Object {
+            $src = $_.Directory.FullName
+            $name = $_.Directory.Name
+            $dest = Join-Path $AgentSkills $name
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    # 1. handoff
+    Write-Step 'Installing handoff skill (cross-CLI)'
+    CloneOrPull 'https://github.com/willseltzer/claude-handoff' (Join-Path $PluginCache 'claude-handoff')
+    LinkSkillsFrom (Join-Path $PluginCache 'claude-handoff')
+
+    # 2. andrej-karpathy-skills (single CLAUDE.md — wrap into SKILL.md if no SKILL.md exists)
+    Write-Step 'Installing andrej-karpathy-skills (cross-CLI)'
+    CloneOrPull 'https://github.com/forrestchang/andrej-karpathy-skills' (Join-Path $PluginCache 'karpathy-skills')
+    LinkSkillsFrom (Join-Path $PluginCache 'karpathy-skills')
+    $karpClaude = Join-Path $PluginCache 'karpathy-skills\CLAUDE.md'
+    $karpDest   = Join-Path $AgentSkills 'karpathy-guidelines\SKILL.md'
+    if ((Test-Path $karpClaude) -and -not (Test-Path $karpDest)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $karpDest) | Out-Null
+        $front = "---`nname: karpathy-guidelines`ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes`n---`n`n"
+        $front + (Get-Content $karpClaude -Raw) | Set-Content -Path $karpDest -Encoding utf8
+    }
+
+    # 3. zero-review (multi-skill — auto-discover SKILL.md-bearing dirs)
+    Write-Step 'Installing zero-review (cross-CLI; hooks/* still Claude-Code-only)'
+    CloneOrPull 'https://github.com/A7um/zero-review' (Join-Path $PluginCache 'zero-review')
+    LinkSkillsFrom (Join-Path $PluginCache 'zero-review')
+
+    # 4. understand-anything (upstream multi-target installer; bash required)
+    if (Test-Cmd bash) {
+        Write-Step 'Installing understand-anything for codex + opencode'
+        foreach ($tgt in @('codex', 'opencode')) {
+            bash -c "curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh | bash -s $tgt" 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  understand-anything install failed for $tgt" }
+        }
+    } else {
+        Write-Warn2 '  bash not on PATH -- skip understand-anything (run install-linux.sh inside WSL to set it up there)'
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping cross-CLI agent-skill setup'
+}
+
+# ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
@@ -494,6 +566,19 @@ Write-Host ' Then in your AI coding CLI (any of these works):'
 Write-Host '   claude     # Claude Code     -> /graphify .'
 Write-Host '   codex      # OpenAI Codex    -> /graphify .'
 Write-Host '   opencode   # OpenCode        -> /graphify .'
+Write-Host '============================================================' -ForegroundColor Cyan
+Write-Host ''
+Write-Host '============================================================' -ForegroundColor Cyan
+Write-Host ' openwolf: per-project setup' -ForegroundColor Cyan
+Write-Host '============================================================' -ForegroundColor Cyan
+Write-Host ' For each project where you want OpenWolf context management:'
+Write-Host ''
+Write-Host '   cd <your-project>'
+Write-Host '   openwolf init             # creates .wolf/ in the project'
+Write-Host '   openwolf status           # check daemon health'
+Write-Host '   openwolf dashboard        # open browser dashboard'
+Write-Host ''
+Write-Host ' Then your AI coding CLI will read .wolf/OPENWOLF.md each session.'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray

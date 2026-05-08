@@ -190,6 +190,66 @@ if command -v graphify >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
+# 7a-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
+#     Mirrors the Claude Code marketplace plugins that are platform-neutral:
+#       handoff, andrej-karpathy-skills, zero-review, understand-anything
+#     Claude-Code-specific bits (slash /commands, hooks/hooks.json) are not
+#     ported — they only run inside Claude Code.
+# ---------------------------------------------------------------------------
+if command -v git >/dev/null 2>&1; then
+  AGENT_SKILLS="$HOME/.agents/skills"
+  PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
+  mkdir -p "$AGENT_SKILLS" "$PLUGIN_CACHE"
+
+  clone_or_pull() {
+    local url="$1" dir="$2"
+    if [[ -d "$dir/.git" ]]; then
+      git -C "$dir" pull --quiet --ff-only 2>/dev/null || warn "  pull failed: $dir"
+    else
+      git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
+    fi
+  }
+
+  link_skills_from() {
+    local repo="$1"
+    find "$repo" -maxdepth 4 -name SKILL.md 2>/dev/null | while read -r f; do
+      local src; src="$(dirname "$f")"
+      local name; name="$(basename "$src")"
+      ln -sfn "$src" "$AGENT_SKILLS/$name"
+    done
+  }
+
+  log "Installing handoff skill (cross-CLI)"
+  clone_or_pull https://github.com/willseltzer/claude-handoff "$PLUGIN_CACHE/claude-handoff"
+  link_skills_from "$PLUGIN_CACHE/claude-handoff"
+
+  log "Installing andrej-karpathy-skills (cross-CLI)"
+  clone_or_pull https://github.com/forrestchang/andrej-karpathy-skills "$PLUGIN_CACHE/karpathy-skills"
+  link_skills_from "$PLUGIN_CACHE/karpathy-skills"
+  if [[ -f "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md" && ! -e "$AGENT_SKILLS/karpathy-guidelines/SKILL.md" ]]; then
+    mkdir -p "$AGENT_SKILLS/karpathy-guidelines"
+    {
+      printf -- '---\nname: karpathy-guidelines\ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes\n---\n\n'
+      cat "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md"
+    } > "$AGENT_SKILLS/karpathy-guidelines/SKILL.md"
+  fi
+
+  log "Installing zero-review (cross-CLI; hooks/* still Claude-Code-only)"
+  clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
+  link_skills_from "$PLUGIN_CACHE/zero-review"
+
+  log "Installing understand-anything for codex + opencode"
+  if command -v curl >/dev/null 2>&1; then
+    for tgt in codex opencode; do
+      curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh \
+        | bash -s "$tgt" 2>/dev/null || warn "  understand-anything install failed for $tgt"
+    done
+  fi
+else
+  warn "git not on PATH -- skipping cross-CLI agent-skill setup"
+fi
+
+# ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
@@ -314,4 +374,17 @@ echo " Then in your AI coding CLI (any of these works):"
 echo "   claude     # Claude Code     -> /graphify ."
 echo "   codex      # OpenAI Codex    -> /graphify ."
 echo "   opencode   # OpenCode        -> /graphify ."
+echo "============================================================"
+echo
+echo "============================================================"
+echo " openwolf: per-project setup"
+echo "============================================================"
+echo " For each project where you want OpenWolf context management:"
+echo
+echo "   cd <your-project>"
+echo "   openwolf init             # creates .wolf/ in the project"
+echo "   openwolf status           # check daemon health"
+echo "   openwolf dashboard        # open browser dashboard"
+echo
+echo " Then your AI coding CLI will read .wolf/OPENWOLF.md each session."
 echo "============================================================"

@@ -50,7 +50,6 @@
     "defaultMode": "bypassPermissions",
     "skipDangerousModePermissionPrompt": true
   },
-  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -134,8 +133,6 @@
     "command": "node \"$HOME/.claude/statusline.mjs\""
   },
   "enabledPlugins": {
-    "context-mode@claude-context-mode": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
     "claude-hud@claude-hud": true,
     "handoff@handoff-marketplace": true,
     "andrej-karpathy-skills@karpathy-skills": true,
@@ -144,12 +141,6 @@
     "understand-anything@understand-anything": true
   },
   "extraKnownMarketplaces": {
-    "claude-context-mode": {
-      "source": {
-        "source": "github",
-        "repo": "mksglu/claude-context-mode"
-      }
-    },
     "claude-hud": {
       "source": {
         "source": "github",
