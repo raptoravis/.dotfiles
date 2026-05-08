@@ -204,8 +204,33 @@ end)
 -- the automatically_reload_config / GLOBAL-reset issue we hit before. Restore
 -- is deferred ~0.5s so the GUI window is realized.
 wezterm.on('gui-startup', function(cmd)
-    wezterm.mux.spawn_window(cmd or {})
+    -- gui-startup bypasses initial_cols/initial_rows. Pass width/height
+    -- (in cells) directly to spawn_window so the very first frame uses
+    -- the saved dimensions — avoids a flash + later set_inner_size race.
+    local spawn_args = cmd and {
+        args = cmd.args, cwd = cmd.cwd, domain = cmd.domain,
+    } or {}
+    if saved_state.cols and saved_state.rows
+        and saved_state.cols > 0 and saved_state.rows > 0 then
+        spawn_args.width = saved_state.cols
+        spawn_args.height = saved_state.rows
+    end
+    local _, _, gui_initial = wezterm.mux.spawn_window(spawn_args)
     wezterm.GLOBAL.session_save_blocked = true
+    -- Pixel-precise correction: cell-based sizing rounds to the nearest cell,
+    -- so apply the exact saved pixel size once the GUI window exists.
+    wezterm.time.call_after(0.1, function()
+        local gui = gui_initial
+        if not gui then
+            for _, mux_win in ipairs(wezterm.mux.all_windows()) do
+                gui = mux_win:gui_window(); if gui then break end
+            end
+        end
+        if gui and saved_state.pw and saved_state.ph
+            and saved_state.pw > 0 and saved_state.ph > 0 then
+            pcall(function() gui:set_inner_size(saved_state.pw, saved_state.ph) end)
+        end
+    end)
     wezterm.time.call_after(0.5, function()
         for _, mux_win in ipairs(wezterm.mux.all_windows()) do
             local gui = mux_win:gui_window()
@@ -234,18 +259,21 @@ local state_path = (os.getenv('USERPROFILE') or os.getenv('HOME') or '')
 
 local function read_window_state()
     local f = io.open(state_path, 'r')
-    if not f then return nil, nil end
+    if not f then return nil end
     local content = f:read('*a')
     f:close()
-    local cols = tonumber(content:match('"cols"%s*:%s*(%d+)'))
-    local rows = tonumber(content:match('"rows"%s*:%s*(%d+)'))
-    return cols, rows
+    return {
+        cols = tonumber(content:match('"cols"%s*:%s*(%d+)')),
+        rows = tonumber(content:match('"rows"%s*:%s*(%d+)')),
+        pw = tonumber(content:match('"pw"%s*:%s*(%d+)')),
+        ph = tonumber(content:match('"ph"%s*:%s*(%d+)')),
+    }
 end
 
-local function write_window_state(cols, rows)
+local function write_window_state(cols, rows, pw, ph)
     local f = io.open(state_path, 'w')
     if not f then return end
-    f:write(string.format('{"cols":%d,"rows":%d}\n', cols, rows))
+    f:write(string.format('{"cols":%d,"rows":%d,"pw":%d,"ph":%d}\n', cols, rows, pw or 0, ph or 0))
     f:close()
 end
 
@@ -310,9 +338,12 @@ config.window_padding = {
 }
 
 -- Initial window size — restore last saved dimensions or fall back to default.
-local saved_cols, saved_rows = read_window_state()
-config.initial_cols = saved_cols or 140
-config.initial_rows = saved_rows or 40
+-- Note: when a `gui-startup` handler is registered, wezterm bypasses
+-- initial_cols/initial_rows, so we ALSO call gui:set_inner_size below using
+-- saved pixel dimensions to actually enforce the size on launch.
+local saved_state = read_window_state() or {}
+config.initial_cols = saved_state.cols or 140
+config.initial_rows = saved_state.rows or 40
 
 -- Font
 config.font = wezterm.font_with_fallback({ 'FiraCode Nerd Font', 'FiraCode NF', 'JetBrains Mono' })
@@ -360,10 +391,11 @@ end)
 -- Persist window size on resize so the next launch reopens at the same size.
 -- Skipped while in fullscreen so F11 toggles don't clobber the saved dims.
 wezterm.on('window-resized', function(window, pane)
-    if window:get_dimensions().is_full_screen then return end
+    local wd = window:get_dimensions()
+    if wd.is_full_screen then return end
     local dims = pane:get_dimensions()
     if dims and dims.cols and dims.viewport_rows then
-        write_window_state(dims.cols, dims.viewport_rows)
+        write_window_state(dims.cols, dims.viewport_rows, wd.pixel_width, wd.pixel_height)
     end
 end)
 
