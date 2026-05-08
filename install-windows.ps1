@@ -312,6 +312,57 @@ if (Test-Cmd git) {
     CloneOrPull 'https://github.com/A7um/zero-review' (Join-Path $PluginCache 'zero-review')
     LinkSkillsFrom (Join-Path $PluginCache 'zero-review')
 
+    # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
+    Write-Step 'Installing excalidraw-diagram skill for claude / codex / opencode'
+    $excaliRepo = Join-Path $PluginCache 'excalidraw-diagram-skill'
+    CloneOrPull 'https://github.com/coleam00/excalidraw-diagram-skill' $excaliRepo
+    if (Test-Path (Join-Path $excaliRepo 'SKILL.md')) {
+        $excaliAgentDest  = Join-Path $AgentSkills 'excalidraw-diagram'
+        $claudeSkillsRoot = Join-Path $env:USERPROFILE '.claude\skills'
+        New-Item -ItemType Directory -Force -Path $claudeSkillsRoot | Out-Null
+        $excaliClaudeDest = Join-Path $claudeSkillsRoot 'excalidraw-diagram'
+        foreach ($dest in @($excaliAgentDest, $excaliClaudeDest)) {
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType SymbolicLink -Path $dest -Target $excaliRepo -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        # Pre-install renderer deps (uv + playwright chromium) so the skill works on first run
+        $excaliRefs = Join-Path $excaliRepo 'references'
+        if ((Test-Cmd uv) -and (Test-Path (Join-Path $excaliRefs 'pyproject.toml'))) {
+            Write-Step '  excalidraw-diagram: uv sync + playwright chromium (one-time)'
+            Push-Location $excaliRefs
+            uv sync --quiet 2>$null
+            $syncExit = $LASTEXITCODE
+            if ($syncExit -eq 0) {
+                uv run --quiet playwright install chromium 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $excaliRefs)" }
+            } else {
+                Write-Warn2 "  excalidraw-diagram: uv sync failed (run uv sync in $excaliRefs)"
+            }
+            Pop-Location
+        } else {
+            Write-Warn2 '  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred'
+        }
+    } else {
+        Write-Warn2 '  excalidraw-diagram-skill: SKILL.md missing after clone'
+    }
+
+    # 3b. html-ppt-skill (single SKILL.md at repo root, no build step)
+    Write-Step 'Installing html-ppt skill for claude / codex / opencode'
+    $htmlPptRepo = Join-Path $PluginCache 'html-ppt-skill'
+    CloneOrPull 'https://github.com/lewislulu/html-ppt-skill' $htmlPptRepo
+    if (Test-Path (Join-Path $htmlPptRepo 'SKILL.md')) {
+        $htmlPptAgentDest  = Join-Path $AgentSkills 'html-ppt'
+        $claudeSkillsRoot  = Join-Path $env:USERPROFILE '.claude\skills'
+        New-Item -ItemType Directory -Force -Path $claudeSkillsRoot | Out-Null
+        $htmlPptClaudeDest = Join-Path $claudeSkillsRoot 'html-ppt'
+        foreach ($dest in @($htmlPptAgentDest, $htmlPptClaudeDest)) {
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType SymbolicLink -Path $dest -Target $htmlPptRepo -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    } else {
+        Write-Warn2 '  html-ppt-skill: SKILL.md missing after clone'
+    }
+
     # 4. understand-anything (upstream multi-target installer; bash required)
     if (Test-Cmd bash) {
         Write-Step 'Installing understand-anything for codex + opencode'

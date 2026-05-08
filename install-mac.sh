@@ -238,6 +238,35 @@ if command -v git >/dev/null 2>&1; then
   clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
   link_skills_from "$PLUGIN_CACHE/zero-review"
 
+  log "Installing excalidraw-diagram skill for claude / codex / opencode"
+  clone_or_pull https://github.com/coleam00/excalidraw-diagram-skill "$PLUGIN_CACHE/excalidraw-diagram-skill"
+  if [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/SKILL.md" ]]; then
+    ln -sfn "$PLUGIN_CACHE/excalidraw-diagram-skill" "$AGENT_SKILLS/excalidraw-diagram"
+    mkdir -p "$HOME/.claude/skills"
+    ln -sfn "$PLUGIN_CACHE/excalidraw-diagram-skill" "$HOME/.claude/skills/excalidraw-diagram"
+    if command -v uv >/dev/null 2>&1 && [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/references/pyproject.toml" ]]; then
+      log "  excalidraw-diagram: uv sync + playwright chromium (one-time)"
+      ( cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" \
+        && uv sync --quiet 2>/dev/null \
+        && uv run --quiet playwright install chromium 2>/dev/null ) \
+        || warn "  excalidraw-diagram: renderer deps install failed (run uv sync + uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+    else
+      warn "  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred"
+    fi
+  else
+    warn "  excalidraw-diagram-skill: SKILL.md missing after clone"
+  fi
+
+  log "Installing html-ppt skill for claude / codex / opencode"
+  clone_or_pull https://github.com/lewislulu/html-ppt-skill "$PLUGIN_CACHE/html-ppt-skill"
+  if [[ -f "$PLUGIN_CACHE/html-ppt-skill/SKILL.md" ]]; then
+    ln -sfn "$PLUGIN_CACHE/html-ppt-skill" "$AGENT_SKILLS/html-ppt"
+    mkdir -p "$HOME/.claude/skills"
+    ln -sfn "$PLUGIN_CACHE/html-ppt-skill" "$HOME/.claude/skills/html-ppt"
+  else
+    warn "  html-ppt-skill: SKILL.md missing after clone"
+  fi
+
   log "Installing understand-anything for codex + opencode"
   if command -v curl >/dev/null 2>&1; then
     for tgt in codex opencode; do
