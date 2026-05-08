@@ -254,22 +254,30 @@ wezterm.on('gui-startup', function(cmd)
         spawn_args.width = saved_state.cols
         spawn_args.height = saved_state.rows
     end
-    local _, _, gui_initial = wezterm.mux.spawn_window(spawn_args)
+    local _, _, mux_initial = wezterm.mux.spawn_window(spawn_args)
     wezterm.GLOBAL.session_save_blocked = true
     -- Pixel-precise correction: cell-based sizing rounds to the nearest cell,
     -- so apply the exact saved pixel size once the GUI window exists.
-    wezterm.time.call_after(0.1, function()
-        local gui = gui_initial
+    -- spawn_window returns a MuxWindow; we need its GuiWindow for set_inner_size.
+    local function apply_pixel_size(attempt)
+        local gui = mux_initial and mux_initial:gui_window() or nil
         if not gui then
             for _, mux_win in ipairs(wezterm.mux.all_windows()) do
                 gui = mux_win:gui_window(); if gui then break end
             end
         end
-        if gui and saved_state.pw and saved_state.ph
+        if not gui then
+            if attempt < 10 then
+                wezterm.time.call_after(0.1, function() apply_pixel_size(attempt + 1) end)
+            end
+            return
+        end
+        if saved_state.pw and saved_state.ph
             and saved_state.pw > 0 and saved_state.ph > 0 then
             pcall(function() gui:set_inner_size(saved_state.pw, saved_state.ph) end)
         end
-    end)
+    end
+    wezterm.time.call_after(0.1, function() apply_pixel_size(1) end)
     wezterm.time.call_after(0.5, function()
         for _, mux_win in ipairs(wezterm.mux.all_windows()) do
             local gui = mux_win:gui_window()
