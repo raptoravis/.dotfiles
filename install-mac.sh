@@ -182,8 +182,11 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
 fi
 
 if command -v graphify >/dev/null 2>&1; then
-  log "Registering graphify Claude skill"
-  graphify install >/dev/null 2>&1 || warn "  graphify install failed (re-run after opening a new shell)"
+  for platform in claude codex opencode; do
+    log "Registering graphify skill for $platform"
+    graphify install --platform "$platform" >/dev/null 2>&1 \
+      || warn "  graphify install --platform $platform failed"
+  done
 fi
 
 # ---------------------------------------------------------------------------
@@ -213,8 +216,21 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing openwolf via npm"
     npm install -g openwolf 2>/dev/null || warn "  openwolf install failed"
   fi
+  # AI coding CLIs (Claude Code / Codex / OpenCode)
+  if ! command -v claude >/dev/null 2>&1; then
+    log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
+    npm install -g @anthropic-ai/claude-code 2>/dev/null || warn "  claude-code install failed"
+  fi
+  if ! command -v codex >/dev/null 2>&1; then
+    log "Installing Codex CLI (@openai/codex)"
+    npm install -g @openai/codex 2>/dev/null || warn "  codex install failed"
+  fi
+  if ! command -v opencode >/dev/null 2>&1; then
+    log "Installing OpenCode CLI (opencode-ai)"
+    npm install -g opencode-ai 2>/dev/null || warn "  opencode install failed"
+  fi
 else
-  warn "npm not on PATH -- skipping hostc/openwolf install (ensure node was installed by brew bundle)"
+  warn "npm not on PATH -- skipping npm-based CLI installs (ensure node was installed by brew bundle)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -294,5 +310,8 @@ echo "   cd <your-project>"
 echo "   graphify hook install     # auto-rebuild on commit/checkout"
 echo "   graphify update .         # initial AST build (no API cost)"
 echo
-echo " Then in Claude Code:  /graphify ."
+echo " Then in your AI coding CLI (any of these works):"
+echo "   claude     # Claude Code     -> /graphify ."
+echo "   codex      # OpenAI Codex    -> /graphify ."
+echo "   opencode   # OpenCode        -> /graphify ."
 echo "============================================================"

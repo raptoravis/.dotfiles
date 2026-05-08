@@ -31,15 +31,27 @@ dependencies = [
     "install-rust-tools",      # Install additional Rust tools
     "install-mise",            # Install mise runtime manager
     "dotfiles",                # Symlink dotfiles
-    "install-graphify-skill",  # Register graphify Claude skill (user-global)
+    "install-ai-clis",         # Claude Code / Codex / OpenCode CLIs (npm)
+    "install-graphify-skill",  # Register graphify skill into each CLI (user-global)
     "post-install-hint",       # Print per-project graphify usage hint
 ]
 
-[tasks.install-graphify-skill]
-description = "Register graphify skill into Claude Code (user-global, one-time)"
+[tasks.install-ai-clis]
+description = "Install Claude Code / Codex / OpenCode CLIs via npm"
 script = [
-    "echo --- Registering graphify Claude skill ---",
-    "graphify install || echo 'graphify not on PATH yet — open a new shell and run: graphify install'",
+    "echo --- Installing AI coding CLIs ---",
+    "npm install -g @anthropic-ai/claude-code || echo '  claude-code install failed (need npm on PATH)'",
+    "npm install -g @openai/codex             || echo '  codex install failed'",
+    "npm install -g opencode-ai               || echo '  opencode install failed'",
+]
+
+[tasks.install-graphify-skill]
+description = "Register graphify skill into Claude Code / Codex / OpenCode (user-global, one-time)"
+script = [
+    "echo --- Registering graphify skill for claude / codex / opencode ---",
+    "graphify install --platform claude   || echo '  skip claude (graphify not on PATH yet)'",
+    "graphify install --platform codex    || echo '  skip codex'",
+    "graphify install --platform opencode || echo '  skip opencode'",
 ]
 
 [tasks.post-install-hint]
@@ -55,7 +67,10 @@ script = [
     "echo '   graphify hook install     # auto-rebuild on commit/checkout'",
     "echo '   graphify update .         # initial AST build (no API cost)'",
     "echo ''",
-    "echo ' Then in Claude Code:  /graphify .'",
+    "echo ' Then in your AI coding CLI (any of these works):'",
+    "echo '   claude     # Claude Code     -> /graphify .'",
+    "echo '   codex      # OpenAI Codex    -> /graphify .'",
+    "echo '   opencode   # OpenCode        -> /graphify .'",
     "echo '============================================================'",
 ]
 

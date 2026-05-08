@@ -245,11 +245,13 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
-# Register graphify Claude skill (one-time, user-global). Skipped if graphify isn't on PATH yet.
+# Register graphify skill for every supported coding CLI present on this machine.
 if (Test-Cmd graphify) {
-    Write-Step 'Registering graphify Claude skill'
-    graphify install 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  graphify install failed (re-run after opening a new shell)' }
+    foreach ($platform in @('claude', 'codex', 'opencode')) {
+        Write-Step "Registering graphify skill for $platform"
+        graphify install --platform $platform 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  graphify install --platform $platform failed" }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -281,8 +283,25 @@ if (Test-Cmd npm) {
         npm install -g openwolf
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  openwolf install failed' }
     }
+
+    # AI coding CLIs (Claude Code / Codex / OpenCode)
+    if (-not (Test-Cmd claude)) {
+        Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
+        npm install -g '@anthropic-ai/claude-code'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude-code install failed' }
+    }
+    if (-not (Test-Cmd codex)) {
+        Write-Step 'Installing Codex CLI (@openai/codex)'
+        npm install -g '@openai/codex'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex install failed' }
+    }
+    if (-not (Test-Cmd opencode)) {
+        Write-Step 'Installing OpenCode CLI (opencode-ai)'
+        npm install -g 'opencode-ai'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode install failed' }
+    }
 } else {
-    Write-Warn2 'npm not on PATH -- skipping hostc/openwolf install (open a new shell after scoop installs nodejs-lts, then re-run)'
+    Write-Warn2 'npm not on PATH -- skipping npm-based CLI installs (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
 
 # ---------------------------------------------------------------------------
@@ -471,7 +490,10 @@ Write-Host '   cd <your-project>'
 Write-Host '   graphify hook install     # auto-rebuild on commit/checkout'
 Write-Host '   graphify update .         # initial AST build (no API cost)'
 Write-Host ''
-Write-Host ' Then in Claude Code:  /graphify .'
+Write-Host ' Then in your AI coding CLI (any of these works):'
+Write-Host '   claude     # Claude Code     -> /graphify .'
+Write-Host '   codex      # OpenAI Codex    -> /graphify .'
+Write-Host '   opencode   # OpenCode        -> /graphify .'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray
