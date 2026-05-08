@@ -200,6 +200,45 @@ wezterm.on('save_and_quit', function(window, _)
     window:perform_action(wezterm.action.QuitApplication, window:active_pane())
 end)
 
+-- ---------------------------------------------------------------------------
+-- Window size persistence
+-- Default 140x40 if no saved state. Rewritten on every resize so the next
+-- launch reopens at the same dimensions.
+--
+-- Stored under ~/.local/share/wezterm/ (data dir), not wezterm.config_dir,
+-- because automatically_reload_config watches the config dir — writing the
+-- state file there would trigger a config reload on every resize.
+--
+-- NOTE: this block must come BEFORE the gui-startup handler. The handler
+-- closure captures `saved_state` lexically; if the local is declared later,
+-- the closure resolves it to a nil global and `saved_state.cols` aborts the
+-- whole handler — which also kills session restore.
+-- ---------------------------------------------------------------------------
+local state_path = (os.getenv('USERPROFILE') or os.getenv('HOME') or '')
+    .. '/.local/share/wezterm/window-state.json'
+
+local function read_window_state()
+    local f = io.open(state_path, 'r')
+    if not f then return nil end
+    local content = f:read('*a')
+    f:close()
+    return {
+        cols = tonumber(content:match('"cols"%s*:%s*(%d+)')),
+        rows = tonumber(content:match('"rows"%s*:%s*(%d+)')),
+        pw = tonumber(content:match('"pw"%s*:%s*(%d+)')),
+        ph = tonumber(content:match('"ph"%s*:%s*(%d+)')),
+    }
+end
+
+local function write_window_state(cols, rows, pw, ph)
+    local f = io.open(state_path, 'w')
+    if not f then return end
+    f:write(string.format('{"cols":%d,"rows":%d,"pw":%d,"ph":%d}\n', cols, rows, pw or 0, ph or 0))
+    f:close()
+end
+
+local saved_state = read_window_state() or {}
+
 -- Auto-restore via gui-startup: fires once per wezterm-gui process, immune to
 -- the automatically_reload_config / GLOBAL-reset issue we hit before. Restore
 -- is deferred ~0.5s so the GUI window is realized.
@@ -244,38 +283,6 @@ wezterm.on('gui-startup', function(cmd)
         wezterm.GLOBAL.session_save_blocked = false
     end)
 end)
-
--- ---------------------------------------------------------------------------
--- Window size persistence
--- Default 140x40 if no saved state. Rewritten on every resize so the next
--- launch reopens at the same dimensions.
---
--- Stored under ~/.local/share/wezterm/ (data dir), not wezterm.config_dir,
--- because automatically_reload_config watches the config dir — writing the
--- state file there would trigger a config reload on every resize.
--- ---------------------------------------------------------------------------
-local state_path = (os.getenv('USERPROFILE') or os.getenv('HOME') or '')
-    .. '/.local/share/wezterm/window-state.json'
-
-local function read_window_state()
-    local f = io.open(state_path, 'r')
-    if not f then return nil end
-    local content = f:read('*a')
-    f:close()
-    return {
-        cols = tonumber(content:match('"cols"%s*:%s*(%d+)')),
-        rows = tonumber(content:match('"rows"%s*:%s*(%d+)')),
-        pw = tonumber(content:match('"pw"%s*:%s*(%d+)')),
-        ph = tonumber(content:match('"ph"%s*:%s*(%d+)')),
-    }
-end
-
-local function write_window_state(cols, rows, pw, ph)
-    local f = io.open(state_path, 'w')
-    if not f then return end
-    f:write(string.format('{"cols":%d,"rows":%d,"pw":%d,"ph":%d}\n', cols, rows, pw or 0, ph or 0))
-    f:close()
-end
 
 -- Launch
 local os_name = F.detect_os()
@@ -341,7 +348,7 @@ config.window_padding = {
 -- Note: when a `gui-startup` handler is registered, wezterm bypasses
 -- initial_cols/initial_rows, so we ALSO call gui:set_inner_size below using
 -- saved pixel dimensions to actually enforce the size on launch.
-local saved_state = read_window_state() or {}
+-- (saved_state is populated above, before the gui-startup handler.)
 config.initial_cols = saved_state.cols or 140
 config.initial_rows = saved_state.rows or 40
 
