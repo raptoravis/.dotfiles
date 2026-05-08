@@ -31,6 +31,32 @@ dependencies = [
     "install-rust-tools",      # Install additional Rust tools
     "install-mise",            # Install mise runtime manager
     "dotfiles",                # Symlink dotfiles
+    "install-graphify-skill",  # Register graphify Claude skill (user-global)
+    "post-install-hint",       # Print per-project graphify usage hint
+]
+
+[tasks.install-graphify-skill]
+description = "Register graphify skill into Claude Code (user-global, one-time)"
+script = [
+    "echo --- Registering graphify Claude skill ---",
+    "graphify install || echo 'graphify not on PATH yet — open a new shell and run: graphify install'",
+]
+
+[tasks.post-install-hint]
+description = "Print per-project graphify activation reminder"
+script = [
+    "echo ''",
+    "echo '============================================================'",
+    "echo ' graphify: per-project setup'",
+    "echo '============================================================'",
+    "echo ' For each project where you want a knowledge graph, run:'",
+    "echo ''",
+    "echo '   cd <your-project>'",
+    "echo '   graphify hook install     # auto-rebuild on commit/checkout'",
+    "echo '   graphify update .         # initial AST build (no API cost)'",
+    "echo ''",
+    "echo ' Then in Claude Code:  /graphify .'",
+    "echo '============================================================'",
 ]
 
 [tasks.install-rust]

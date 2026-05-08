@@ -156,6 +156,11 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
+if command -v graphify >/dev/null 2>&1; then
+  log "Registering graphify Claude skill"
+  graphify install >/dev/null 2>&1 || warn "  graphify install failed (re-run after opening a new shell)"
+fi
+
 # ---------------------------------------------------------------------------
 # 8b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
@@ -270,3 +275,15 @@ if [[ "${SHELL:-}" != "$ZSH_BIN" ]]; then
 fi
 
 log "Done. Open a new terminal (or 'wsl --shutdown' on WSL) to pick up the environment."
+echo
+echo "============================================================"
+echo " graphify: per-project setup"
+echo "============================================================"
+echo " For each project where you want a knowledge graph, run:"
+echo
+echo "   cd <your-project>"
+echo "   graphify hook install     # auto-rebuild on commit/checkout"
+echo "   graphify update .         # initial AST build (no API cost)"
+echo
+echo " Then in Claude Code:  /graphify ."
+echo "============================================================"

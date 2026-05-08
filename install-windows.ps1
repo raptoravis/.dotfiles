@@ -245,6 +245,13 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
+# Register graphify Claude skill (one-time, user-global). Skipped if graphify isn't on PATH yet.
+if (Test-Cmd graphify) {
+    Write-Step 'Registering graphify Claude skill'
+    graphify install 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  graphify install failed (re-run after opening a new shell)' }
+}
+
 # ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
@@ -454,5 +461,17 @@ if (-not (Test-Path $SessionsDir)) {
 }
 
 Write-Step 'Done. Open a new terminal to pick up the environment.'
+Write-Host ''
+Write-Host '============================================================' -ForegroundColor Cyan
+Write-Host ' graphify: per-project setup' -ForegroundColor Cyan
+Write-Host '============================================================' -ForegroundColor Cyan
+Write-Host ' For each project where you want a knowledge graph, run:'
+Write-Host ''
+Write-Host '   cd <your-project>'
+Write-Host '   graphify hook install     # auto-rebuild on commit/checkout'
+Write-Host '   graphify update .         # initial AST build (no API cost)'
+Write-Host ''
+Write-Host ' Then in Claude Code:  /graphify .'
+Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray
