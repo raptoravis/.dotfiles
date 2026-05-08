@@ -44,6 +44,7 @@ alias llt='eza -l --sort=modified -ah --group-directories-first --icons'
 
 # git
 alias gitfzf='~/.config/bash/git_fzf_checkout.sh'
+alias gac='git commit -am'
 
 # because microsoft is dumb
 alias az='PYTHONWARNINGS="ignore::UserWarning" az'

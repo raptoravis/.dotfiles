@@ -38,6 +38,7 @@ brew "lua"
 brew "go"
 brew "python"
 brew "node"
+brew "corepack"
 
 # Fonts
 cask "font-fira-code-nerd-font"

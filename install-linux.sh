@@ -188,14 +188,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8d) pnpm via corepack (ships with Node >= 16.10)
+# 8d) pnpm via corepack
+#     apt 的 nodejs 包不一定带 corepack（取决于发行版）。优先尝试独立的
+#     corepack apt 包（Ubuntu 24.04+ / Debian 12+），失败回退到 npm -g。
 # ---------------------------------------------------------------------------
+if ! command -v corepack >/dev/null 2>&1; then
+  log "corepack not on PATH -- installing"
+  sudo -E apt-get install -y -qq corepack 2>/dev/null \
+    || (command -v npm >/dev/null 2>&1 && sudo npm install -g corepack 2>/dev/null) \
+    || warn "  corepack install failed (apt + npm both unable)"
+fi
 if command -v corepack >/dev/null 2>&1; then
   log "Enabling pnpm via corepack"
   corepack enable 2>/dev/null || warn "  corepack enable failed"
   corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
 else
-  warn "corepack not on PATH -- skipping pnpm activation (apt nodejs may be too old; need Node >= 16.10)"
+  warn "corepack still not on PATH -- skipping pnpm activation"
 fi
 
 # ---------------------------------------------------------------------------
