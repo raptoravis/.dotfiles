@@ -1,287 +1,172 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # OpenWolf
 
 @.wolf/OPENWOLF.md
 
 This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
 
+# Dotfiles — AI Assistant Guide
 
-# CLAUDE.md - AI Assistant Guide
-
-This document helps AI assistants (like Claude) understand and work effectively with this dotfiles repository.
+A cross-platform dotfiles repo managed by [dotter](https://github.com/SuperCuber/dotter) (symlinks), [cargo-make](https://github.com/sagiegurari/cargo-make) (tasks), and [mise](https://github.com/jdx/mise) (runtimes). Forked from msetsma; current working tree at `D:\dev\.dotfiles` on Windows (also accessed from WSL via `/mnt/d/dev/.dotfiles`).
 
 ## Architecture
 
-This repo is **unix-first**. The core dev environment (zsh, neovim, CLI tools) targets unix, and Windows gets there via WSL2. Both platforms converge on the same `common/` configs.
+Unix-first. The core dev environment (zsh, neovim, CLI tools) targets unix; Windows reaches it via WSL2. Both platforms converge on the same `common/` configs.
 
 ```
 macOS:    native apps (Ghostty, AeroSpace) --> unix backend (zsh, neovim, tmux)
 Windows:  native apps (WezTerm, AHK)       --> WSL2 --> unix backend (zsh, neovim, tmux)
 ```
 
-**Owner**: msetsma
-**Primary Platform**: macOS
-**Secondary Platform**: Windows (native GUI + WSL2 for dev)
-**Management Tools**: dotter, cargo-make, mise
-
 ### Directory model
 
-| Directory  | Purpose | Used by | Dotter package |
-|------------|---------|---------|----------------|
-| `common/`  | Base layer -- shell, editors, dev tools, linters, cross-platform terminals (wezterm, nushell) | All platforms | `common` |
-| `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | macOS only | `mac` |
-| `windows/` | Windows-only host integration (ahk, wsl) | Windows host only | `windows` |
-
-### Platform layers
-
-| Layer | macOS | Windows |
-|-------|-------|---------|
-| GUI apps | Ghostty, AeroSpace, borders | AHK |
-| Terminal | Ghostty (native), WezTerm (optional) | WezTerm -> WSL2 |
-| Shell | zsh (oh-my-zsh) | zsh via WSL2 (oh-my-zsh) |
-| Dev tools | neovim, tmux, fzf, eza, bat, rg | same, via WSL2 |
-| Package mgr | Homebrew | Scoop (Windows host) + apt (WSL2) |
+| Directory  | Purpose | Dotter package |
+|------------|---------|----------------|
+| `common/`  | Cross-platform base layer — shell, editors, dev tools, linters, wezterm, nushell | `common` |
+| `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | `mac` |
+| `windows/` | Windows-only host integration (ahk, wsl, powershell) | `windows` |
 
 ### Platform detection
 
-`common/zsh/platform.zsh` sets `PLATFORM` and boolean flags used throughout shell configs:
+`common/zsh/platform.zsh` sets `PLATFORM` and boolean flags (`IS_MAC`, `IS_WSL`, `IS_LINUX`) used by every shell config. Gates behavior with `(( IS_MAC ))` / `(( IS_WSL ))`. Key abstractions:
 
-- `IS_MAC` (1/0) -- macOS (Darwin)
-- `IS_WSL` (1/0) -- WSL2 (detects via `/proc/version`)
-- `IS_LINUX` (1/0) -- generic Linux
-
-Platform-specific behavior gated by `(( IS_MAC ))` / `(( IS_WSL ))`:
-- **Clipboard**: `pbcopy` (mac), `clip.exe` (WSL2), `xclip` (linux) -- abstracted as `_clip` function
-- **URL open**: `open` (mac), `wslview` (WSL2), `xdg-open` (linux) -- aliased as `open`
+- **Clipboard**: `_clip` function (wraps `pbcopy` / `clip.exe` / `xclip`)
+- **URL/file open**: `open` alias (wraps `open` / `wslview` / `xdg-open`)
 - **Credentials**: macOS Keychain `security` CLI vs `~/.config/databricks/.env-{env}` files
 - **PATH**: `/opt/homebrew/bin` (mac) vs standard linux paths + optional linuxbrew
 
-## Repository Structure
+### Dotter package selection
 
-``` text
-.dotfiles/
-├── common/             # Base layer (all platforms)
-│   ├── bash/           # Bash config
-│   ├── bottom/         # System monitor config
-│   ├── cargo/          # Rust/Cargo configuration
-│   ├── fastfetch/      # System info tool
-│   ├── linters/        # ruff.toml, stylua.toml
-│   ├── mise/           # Runtime version manager
-│   ├── nushell/        # Nushell config (cross-platform)
-│   ├── nvim/           # Neovim configuration (lazy.nvim)
-│   ├── starship/       # Shell prompt
-│   ├── tmux/           # Terminal multiplexer
-│   ├── wezterm/        # WezTerm config (cross-platform, OS branched in functions.lua)
-│   └── zsh/            # Zsh config (active shell on both platforms)
-│       ├── .zshrc      # Main config (sources platform.zsh first)
-│       ├── .zshenv     # Environment vars
-│       ├── platform.zsh # Platform detection (IS_MAC, IS_WSL, IS_LINUX)
-│       ├── aliases.zsh  # Aliases with platform abstractions (_clip, open)
-│       └── functions/   # Autoloaded functions
-├── macos/              # macOS-only GUI apps
-│   ├── aerospace/      # AeroSpace tiling window manager
-│   ├── borders/        # Window border visual effects
-│   └── ghostty/        # Terminal emulator
-├── windows/            # Windows-native host integration (host side only)
-│   ├── ahk/            # AutoHotkey scripts
-│   └── wsl/            # WSL config (.wslconfig, .hushlogin)
-├── .dotter/            # Dotter configuration
-│   ├── global.toml     # Symlink mappings: [common], [mac], [windows], [linux]
-│   ├── mitch-pc.toml   # Windows machine (packages: common + windows)
-│   ├── APF1YN4YGV37.toml # macOS machine (packages: common + mac)
-│   └── mitch-wsl.toml  # WSL2 machine (packages: common + linux)
-├── Brewfile            # Homebrew packages (macOS)
-├── Makefile.toml       # Cargo-make setup/install tasks
-├── Makefile.utils.toml # Cargo-make utility tasks
-├── .gitattributes      # Line ending enforcement (LF for shell, CRLF for Windows scripts)
-└── README.md           # User-facing documentation
-```
-
-## Key Files
-
-### Management & Configuration
-
-- **[.dotter/global.toml](.dotter/global.toml)**: Symlink mappings. Sections: `[common.files]`, `[mac.files]`, `[windows.files]`, `[linux.files]`
-- **[Makefile.toml](Makefile.toml)**: Setup/install tasks. Platform branching via `mac_alias`, `windows_alias`, `linux_alias`
-- **[Makefile.utils.toml](Makefile.utils.toml)**: Daily utility tasks (pkg management, backup, doctor)
-
-### Shell Configuration
-
-- **[common/zsh/platform.zsh](common/zsh/platform.zsh)**: Platform detection -- sourced first by .zshrc
-- **[common/zsh/.zshrc](common/zsh/.zshrc)**: Main zsh config (platform-gated PATH, brew, fzf, oh-my-zsh)
-- **[common/zsh/aliases.zsh](common/zsh/aliases.zsh)**: Aliases with `_clip` clipboard abstraction and `open` alias
-- **[common/zsh/functions/](common/zsh/functions/)**: Autoloaded functions (update, cmds, _use_databricks, etc.)
-
-### Dotter Platform Mapping
-
-Dotter selects config based on hostname -> machine toml -> packages list -> global.toml sections:
+Dotter picks packages by reading `.dotter/<hostname>.toml` first; if absent it falls back to `.dotter/local.toml` (gitignored, machine-local — auto-created by the install scripts). Each toml contains a `packages = [...]` array referenced against the `[<package>.files]` sections in `.dotter/global.toml`.
 
 | Package | Symlinks from | Used on |
 |---------|---------------|---------|
 | `common` | `common/*` | All platforms |
-| `mac` | `common/bottom` (macOS path) + `macos/*` | macOS |
-| `linux` | `common/bottom` (linux path) | WSL2 |
-| `windows` | `windows/wsl/.wslconfig` | Windows host |
+| `mac`    | `common/bottom` (mac path) + `macos/*` | macOS |
+| `linux`  | `common/bottom` (linux path) | Linux/WSL2 |
+| `windows`| `windows/*` (wsl, ahk, powershell) | Windows host |
 
-## Setup Workflow
+## Setup & common commands
 
-### macOS
+### Bootstrap (preferred — does more than `cargo make init`)
 
-```bash
-cargo make init  # Installs brew packages, oh-my-zsh, rust tools, symlinks
-```
-
-### Windows (two-step)
+The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of truth for first-time setup. They install OS packages, Rust/Cargo tools, npm CLIs, agent skills, the rtk hook, and finally run `dotter -v`.
 
 ```bash
-# 1. Windows host -- Scoop packages, native app configs
-cargo make init
+# macOS
+./install-mac.sh
 
-# 2. Inside WSL2 -- apt packages, zsh, oh-my-zsh, symlinks common/ configs
-cargo make init
+# Linux / WSL2 (run inside WSL on Windows)
+./install-linux.sh
+
+# Windows host (PowerShell — Scoop + native GUI configs)
+powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
-The repo is at `C:\Users\2015m\.dotfiles` and accessed from WSL2 via `/mnt/c/Users/2015m/.dotfiles`.
+`cargo make init` is the older path — it still works for the package-install steps but does not handle agent skills, rtk, or npm CLIs.
 
-### Updates
+### Daily
 
 ```bash
-cargo make update       # Update all tools
-cargo make check-outdated # Check without applying
-update                  # zsh function (brew/apt + rustup + cargo + mise)
+cargo make update         # brew/apt + rustup + cargo + mise
+cargo make check-outdated # dry-run
+update                    # zsh function — same as above
+
+dotter -v                 # re-apply symlinks after editing global.toml or adding files
+rld                       # reload zsh (custom function)
 ```
 
-## Development Environment
+### Sanity checks before commit
 
-### Languages (via Mise)
+There are no test suites. The repo has linter configs but no aggregate `lint` task — run the relevant tool for the files you touched:
 
-- Python: latest
-- Go: latest
-- Lua: 5.1 (for Neovim)
+```bash
+shellcheck install-linux.sh install-mac.sh             # bash scripts
+ruff check . && ruff format --check .                  # python (config: common/linters/ruff.toml)
+stylua --check common/nvim/                            # lua (config: common/linters/stylua.toml)
+```
 
-### Neovim
+## Cross-CLI agent skills (non-obvious — read before adding skills)
 
-- Plugin manager: lazy.nvim
-- Structure: `nvim/lua/{core,plugins}/`
-- Plugins: blink-cmp, telescope, neo-tree, gitsigns, treesitter, LSP, snacks
+`install-{mac,linux,windows}` install a curated set of portable skills (handoff, karpathy, excalidraw-diagram, html-ppt, frontend-design, understand-anything) and link each into **all four** CLI roots:
 
-### Tools & Utilities
+- `~/.agents/skills/`
+- `~/.claude/skills/`
+- `~/.codex/skills/` (honors `$CODEX_HOME`)
+- `~/.config/opencode/skills/`
 
-**File ops**: eza, bat, yazi, fzf, ripgrep, fd
-**Git**: lazygit, fzf git checkout function
-**System**: bottom, fastfetch
-**Python**: ruff (linting/formatting)
-**Terminal**: tmux (multiplexer), mosh (mobile-friendly SSH)
+The three install scripts must stay symmetric. To add a new skill, edit all three scripts:
 
-## User Preferences & Patterns
+1. `clone_or_pull` / `CloneOrPull` the upstream repo into `$PLUGIN_CACHE` (`~/.cache/dotfiles/agent-plugins`).
+2. `link_skill` / `LinkSkillToRoots` to fan it out to all four roots in one call.
+3. If the skill ships slash-command markdown that Codex can use as `/foo`, copy it into `~/.codex/prompts/` in the "Codex prompts" block.
 
-### Naming Conventions
+Claude-Code-only marketplace plugins (those that need `hooks/hooks.json`, `commands/`, etc.) are not portable — they live in `common/claude/settings.json` instead and are wired by dotter.
 
-- Functions: lowercase with underscores (`git_fzf_checkout`)
-- Aliases: lowercase abbreviations (`gfc`, `lt`, `db`)
-- Scripts: snake_case.sh
+## Key files
 
-### Style Preferences
+| File | Role |
+|---|---|
+| `.dotter/global.toml` | Symlink mappings, sectioned by package (`[common.files]`, `[mac.files]`, ...) |
+| `.dotter/local.toml` | Machine-local `packages = [...]` selection (gitignored) |
+| `Makefile.toml` | Cargo-make setup/install tasks (legacy bootstrap path) |
+| `Makefile.utils.toml` | Daily utility tasks (pkg mgmt, backup, doctor) |
+| `install-{mac,linux,windows}.{sh,ps1}` | Authoritative bootstrap — keep cross-CLI skill blocks symmetric |
+| `common/zsh/platform.zsh` | Platform detection — sourced first by `.zshrc` |
+| `common/zsh/.zshrc` | Main zsh config (platform-gated PATH, brew, fzf, oh-my-zsh) |
+| `common/zsh/aliases.zsh` | Aliases with `_clip` / `open` abstractions |
+| `common/zsh/functions/` | Autoloaded zsh functions |
+| `Brewfile` | Homebrew packages (macOS) |
+| `uv-tools.txt` | uv-managed Python tools (consumed by all three install scripts) |
 
-- **Unix-first**: write for unix, adapt for Windows via WSL2
-- **Shell**: prefers functions over complex aliases
-- **Tools**: performance-focused (Rust tools preferred)
-- **Comments**: functional, not verbose
-- **Files**: many small files > few large files
+## Conventions
 
-### Work Context
+- **Unix-first**: write shell for unix; gate platform-specific code with `(( IS_MAC ))` / `(( IS_WSL ))`.
+- **Use abstractions, not raw commands**: `_clip` (not `pbcopy`), `open` alias (not the `open` binary).
+- **Many small files > few large files** — especially for zsh functions (one function per file under `functions/`).
+- **Naming**: functions `lower_snake_case` (`git_fzf_checkout`); aliases lowercase abbreviations (`gfc`, `lt`, `db`); scripts `snake_case.sh`.
+- **Comments**: functional, not verbose.
+- **Performance-focused tooling**: prefer Rust replacements (eza, bat, ripgrep, fd, bottom).
 
-- **Cloud**: Azure (az CLI, Azure Functions)
-- **Data**: Databricks (`db-prod`, `db-qa`, `db-dev`)
-- **Languages**: Python (ruff), Go, Lua
+## Adding a new tool config
 
-## AI Assistant Guidelines
+1. Create directory under `common/`, `macos/`, or `windows/` as appropriate.
+2. Add entry to `.dotter/global.toml` under the matching `[<package>.files]` section.
+3. Add installation to `Makefile.toml` AND the three `install-*` scripts (with platform aliases as needed).
+4. Run `dotter -v` to apply.
 
-### When Making Changes
+## Modifying zsh config
 
-1. **Unix-first**: write shell configs for unix. Use `(( IS_MAC ))` / `(( IS_WSL ))` guards for platform-specific behavior
-2. **Use dotter-aware paths**: changes must align with `.dotter/global.toml` mappings
-3. **Three directories**: `common/` for the cross-platform base layer (incl. wezterm, nushell), `macos/` for mac-only GUI apps, `windows/` for Windows-only host integration
-4. **Test symlinks**: suggest `dotter -v` after config changes
-5. **Platform branching in Makefile**: use `mac_alias`, `windows_alias`, `linux_alias`
+Edit `common/zsh/{.zshrc,aliases.zsh,platform.zsh,functions/}`. Files symlink to `~/.config/zsh/` (ZDOTDIR is set in `~/.zshenv` by the install scripts). Reload with `rld`.
 
-### Adding a new tool config
+## Don't assume
 
-1. Create directory under `common/` (cross-platform), `macos/` (mac-only), or `windows/` (Windows-only) as appropriate
-2. Add entry to `.dotter/global.toml` under the correct `[*.files]` section
-3. Add installation to `Makefile.toml` under relevant `install-*-tools` task (with platform aliases if needed)
-4. Run `cargo make dotfiles` to symlink
-
-### Modifying zsh config
-
-- Edit source: `common/zsh/{.zshrc,aliases.zsh,platform.zsh,functions/}`
-- Use `(( IS_MAC ))` / `(( IS_WSL ))` for platform-specific code
-- Use `_clip` function (not `pbcopy` directly) for clipboard operations
-- Use `open` alias (not `open` command directly) for URL/file opening
-- Symlinked to: `~/.config/zsh/`
-- Test with: `rld` (reload shell)
-
-### Don't Assume
-
-- Which platform user is currently on (check context or ask)
-- That all tools are installed (user may be mid-setup)
-- That `pbcopy`, `open`, or `security` are available (use platform abstractions)
-- Windows configs are outdated (they're maintained for the host GUI layer)
+- Which platform the user is currently on (check `IS_MAC`/`IS_WSL` or ask).
+- That all tools are installed (user may be mid-setup).
+- That `pbcopy`, `open`, or `security` are available — use the abstractions.
+- That a hostname-named `.dotter/*.toml` exists — `local.toml` is the documented fallback.
 
 ## Troubleshooting
 
-### Symlinks Not Working
-
 ```bash
+# Symlinks not applying
 cd ~/.dotfiles && dotter -v
-```
 
-Check `.dotter/global.toml` for correct paths and ensure hostname matches a `.dotter/<hostname>.toml` file.
-
-### Tools Not Found After Install
-
-PATH includes (platform-dependent):
-- `/opt/homebrew/bin` (macOS Homebrew)
-- `/home/linuxbrew/.linuxbrew/bin` (Linuxbrew, if installed)
-- `~/.cargo/bin` (Rust tools)
-- `~/.local/bin` (Local installs)
-
-### WSL2 Line Endings
-
-`.gitattributes` enforces LF for shell files. If scripts break with `\r` errors, run:
-
-```bash
+# WSL2 line-ending breakage (\r in shell scripts)
 git add --renormalize .
+
+# Cargo-make platform detection
+rustc -Vv | grep host
+cargo make --print-only <task-name>
 ```
 
-### Cargo-Make Platform Detection
+PATH includes (platform-dependent): `/opt/homebrew/bin` (mac), `/home/linuxbrew/.linuxbrew/bin`, `~/.cargo/bin`, `~/.local/bin`.
 
-```bash
-rustc -Vv | grep host    # Shows detected platform
-cargo make --print-only <task-name>  # Debug task resolution
-```
+## Agent skills (repo-internal)
 
-## External Resources
-
-- **Dotter**: <https://github.com/SuperCuber/dotter>
-- **Cargo-Make**: <https://github.com/sagiegurari/cargo-make>
-- **AeroSpace**: <https://github.com/nikitabobko/AeroSpace>
-- **Mise**: <https://github.com/jdx/mise>
-
-## Agent skills
-
-### Issue tracker
-
-Issues live as markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default 5-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout — `CONTEXT.md` and `docs/adr/` at the repo root (created lazily by `/grill-with-docs`). See `docs/agents/domain.md`.
-
----
-
-**Last Updated**: 2026-03-01
-**For**: AI assistants working with msetsma's dotfiles
+- **Issue tracker**: markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+- **Triage labels**: 5-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+- **Domain docs**: `CONTEXT.md` and `docs/adr/` at the repo root, created lazily by `/grill-with-docs`. See `docs/agents/domain.md`.
