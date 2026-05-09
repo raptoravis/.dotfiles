@@ -422,12 +422,12 @@ if (Test-Cmd git) {
     #    activation: `npx ruflo@latest init` and
     #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
 
-    # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
-    #    and link any SKILL.md it ships under plugins/*/skills/.
-    Write-Step 'Installing claude-sdlc (cross-CLI scan for SKILL.md)'
-    $sdlcRepo = Join-Path $PluginCache 'claude-sdlc'
-    CloneOrPull 'https://github.com/danielscholl/claude-sdlc' $sdlcRepo
-    LinkSkillsFrom $sdlcRepo
+    # 8. A7um/zero-review — code review plugin. Same pattern: clone and link
+    #    any SKILL.md it ships.
+    Write-Step 'Installing zero-review (cross-CLI scan for SKILL.md)'
+    $zeroReviewRepo = Join-Path $PluginCache 'zero-review'
+    CloneOrPull 'https://github.com/A7um/zero-review' $zeroReviewRepo
+    LinkSkillsFrom $zeroReviewRepo
 
     # 9. Codex slash-prompts ported from Claude Code commands/
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as

@@ -327,11 +327,11 @@ if command -v git >/dev/null 2>&1; then
   #    activation: `npx ruflo@latest init` and
   #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
 
-  # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
-  #    and link any SKILL.md it ships under plugins/*/skills/.
-  log "Installing claude-sdlc (cross-CLI scan for SKILL.md)"
-  clone_or_pull https://github.com/danielscholl/claude-sdlc "$PLUGIN_CACHE/claude-sdlc"
-  link_skills_from "$PLUGIN_CACHE/claude-sdlc"
+  # 8. A7um/zero-review — code review plugin. Same pattern: clone and link any
+  #    SKILL.md it ships.
+  log "Installing zero-review (cross-CLI scan for SKILL.md)"
+  clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
+  link_skills_from "$PLUGIN_CACHE/zero-review"
 
   # 9. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
