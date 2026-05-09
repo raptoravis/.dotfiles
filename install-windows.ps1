@@ -255,7 +255,8 @@ if (Test-Cmd graphify) {
 }
 
 # ---------------------------------------------------------------------------
-# 7b-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
+# 7b-bis) Cross-CLI agent skills
+#     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
 #       handoff, andrej-karpathy-skills, understand-anything
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) only run
@@ -263,8 +264,12 @@ if (Test-Cmd graphify) {
 # ---------------------------------------------------------------------------
 if (Test-Cmd git) {
     $AgentSkills = Join-Path $env:USERPROFILE '.agents\skills'
+    $ClaudeSkills = Join-Path $env:USERPROFILE '.claude\skills'
+    $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    $CodexSkills = Join-Path $CodexHome 'skills'
+    $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
     $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $PluginCache | Out-Null
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $PluginCache | Out-Null
 
     function CloneOrPull($url, $dir) {
         if (Test-Path (Join-Path $dir '.git')) {
@@ -278,15 +283,21 @@ if (Test-Cmd git) {
         }
     }
 
+    function LinkSkillToRoots($src, $name) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
+            $dest = Join-Path $root $name
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
     function LinkSkillsFrom($repo) {
-        # Symlink every directory containing a SKILL.md into ~/.agents/skills/<name>.
+        # Symlink every directory containing a SKILL.md into every CLI skill root.
         # Requires Developer Mode (enabled earlier in this script) for non-admin symlinks.
         Get-ChildItem -Path $repo -Recurse -Depth 4 -Filter SKILL.md -ErrorAction SilentlyContinue | ForEach-Object {
             $src = $_.Directory.FullName
             $name = $_.Directory.Name
-            $dest = Join-Path $AgentSkills $name
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
+            LinkSkillToRoots $src $name
         }
     }
 
@@ -300,11 +311,16 @@ if (Test-Cmd git) {
     CloneOrPull 'https://github.com/forrestchang/andrej-karpathy-skills' (Join-Path $PluginCache 'karpathy-skills')
     LinkSkillsFrom (Join-Path $PluginCache 'karpathy-skills')
     $karpClaude = Join-Path $PluginCache 'karpathy-skills\CLAUDE.md'
-    $karpDest   = Join-Path $AgentSkills 'karpathy-guidelines\SKILL.md'
-    if ((Test-Path $karpClaude) -and -not (Test-Path $karpDest)) {
-        New-Item -ItemType Directory -Force -Path (Split-Path $karpDest) | Out-Null
+    $karpUpstreamSkill = Join-Path $PluginCache 'karpathy-skills\skills\karpathy-guidelines\SKILL.md'
+    $karpDestDir = Join-Path $PluginCache 'karpathy-guidelines-skill'
+    $karpDest   = Join-Path $karpDestDir 'SKILL.md'
+    if ((-not (Test-Path $karpUpstreamSkill)) -and (Test-Path $karpClaude) -and -not (Test-Path $karpDest)) {
+        New-Item -ItemType Directory -Force -Path $karpDestDir | Out-Null
         $front = "---`nname: karpathy-guidelines`ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes`n---`n`n"
         $front + (Get-Content $karpClaude -Raw) | Set-Content -Path $karpDest -Encoding utf8
+    }
+    if ((-not (Test-Path $karpUpstreamSkill)) -and (Test-Path $karpDest)) {
+        LinkSkillToRoots $karpDestDir 'karpathy-guidelines'
     }
 
     # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
@@ -312,14 +328,7 @@ if (Test-Cmd git) {
     $excaliRepo = Join-Path $PluginCache 'excalidraw-diagram-skill'
     CloneOrPull 'https://github.com/coleam00/excalidraw-diagram-skill' $excaliRepo
     if (Test-Path (Join-Path $excaliRepo 'SKILL.md')) {
-        $excaliAgentDest  = Join-Path $AgentSkills 'excalidraw-diagram'
-        $claudeSkillsRoot = Join-Path $env:USERPROFILE '.claude\skills'
-        New-Item -ItemType Directory -Force -Path $claudeSkillsRoot | Out-Null
-        $excaliClaudeDest = Join-Path $claudeSkillsRoot 'excalidraw-diagram'
-        foreach ($dest in @($excaliAgentDest, $excaliClaudeDest)) {
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            New-Item -ItemType SymbolicLink -Path $dest -Target $excaliRepo -Force -ErrorAction SilentlyContinue | Out-Null
-        }
+        LinkSkillToRoots $excaliRepo 'excalidraw-diagram'
         # Pre-install renderer deps (uv + playwright chromium) so the skill works on first run
         $excaliRefs = Join-Path $excaliRepo 'references'
         if ((Test-Cmd uv) -and (Test-Path (Join-Path $excaliRefs 'pyproject.toml'))) {
@@ -346,14 +355,7 @@ if (Test-Cmd git) {
     $htmlPptRepo = Join-Path $PluginCache 'html-ppt-skill'
     CloneOrPull 'https://github.com/lewislulu/html-ppt-skill' $htmlPptRepo
     if (Test-Path (Join-Path $htmlPptRepo 'SKILL.md')) {
-        $htmlPptAgentDest  = Join-Path $AgentSkills 'html-ppt'
-        $claudeSkillsRoot  = Join-Path $env:USERPROFILE '.claude\skills'
-        New-Item -ItemType Directory -Force -Path $claudeSkillsRoot | Out-Null
-        $htmlPptClaudeDest = Join-Path $claudeSkillsRoot 'html-ppt'
-        foreach ($dest in @($htmlPptAgentDest, $htmlPptClaudeDest)) {
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            New-Item -ItemType SymbolicLink -Path $dest -Target $htmlPptRepo -Force -ErrorAction SilentlyContinue | Out-Null
-        }
+        LinkSkillToRoots $htmlPptRepo 'html-ppt'
     } else {
         Write-Warn2 '  html-ppt-skill: SKILL.md missing after clone'
     }
@@ -366,19 +368,20 @@ if (Test-Cmd git) {
     #    and errors with "cannot overwrite directory". Force native symlink
     #    mode and clean stale real-dir residue before invoking upstream.
     if (Test-Cmd bash) {
-        Write-Step 'Installing understand-anything for codex + opencode'
-        $agentsSkills = Join-Path $env:USERPROFILE '.agents\skills'
-        if (Test-Path $agentsSkills) {
-            Get-ChildItem $agentsSkills -Directory -Filter 'understand*' -ErrorAction SilentlyContinue | ForEach-Object {
-                if (-not $_.LinkType) {
-                    Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Step 'Installing understand-anything for claude / codex / opencode'
+        foreach ($skillsRoot in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
+            if (Test-Path $skillsRoot) {
+                Get-ChildItem $skillsRoot -Directory -Filter 'understand*' -ErrorAction SilentlyContinue | ForEach-Object {
+                    if (-not $_.LinkType) {
+                        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                    }
                 }
             }
         }
         $prevMsys = $env:MSYS
         $env:MSYS = 'winsymlinks:nativestrict'
         try {
-            foreach ($tgt in @('codex', 'opencode')) {
+            foreach ($tgt in @('claude', 'codex', 'opencode')) {
                 bash -c "curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh | bash -s $tgt"
                 if ($LASTEXITCODE -ne 0) { Write-Warn2 "  understand-anything install failed for $tgt (need Developer Mode or admin shell for native symlinks)" }
             }
@@ -398,9 +401,7 @@ if (Test-Cmd git) {
     $cpoPlugins = Join-Path $cpoRepo 'plugins'
     $fdSrc = Join-Path $cpoPlugins 'frontend-design\skills\frontend-design'
     if (Test-Path (Join-Path $fdSrc 'SKILL.md')) {
-        $fdDest = Join-Path $AgentSkills 'frontend-design'
-        if (Test-Path $fdDest) { Remove-Item $fdDest -Recurse -Force -ErrorAction SilentlyContinue }
-        New-Item -ItemType SymbolicLink -Path $fdDest -Target $fdSrc -Force -ErrorAction SilentlyContinue | Out-Null
+        LinkSkillToRoots $fdSrc 'frontend-design'
     } else {
         Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
     }
@@ -409,7 +410,7 @@ if (Test-Cmd git) {
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as
     #    /handoff-create, /commit etc. inside Codex.
     Write-Step 'Installing Codex prompts (handoff / commit-commands)'
-    $CodexPrompts = Join-Path $env:USERPROFILE '.codex\prompts'
+    $CodexPrompts = Join-Path $CodexHome 'prompts'
     New-Item -ItemType Directory -Force -Path $CodexPrompts | Out-Null
     function CopyPrompt($src, $name) {
         if (Test-Path $src) { Copy-Item -Force $src (Join-Path $CodexPrompts $name) }
@@ -426,9 +427,9 @@ if (Test-Cmd git) {
 
 # ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
-#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills,
-#     understand-anything, codex-plugin-cc) are
-#     declared in common/claude/settings.json and load at Claude Code startup.
+#     Claude-specific marketplace plugins are declared in
+#     common/claude/settings.json. Portable skills are installed above for all
+#     supported coding CLIs.
 # ---------------------------------------------------------------------------
 if (-not (Test-Cmd rtk)) {
     Write-Step 'Installing rtk (LLM output compressor + Claude Code hook)'

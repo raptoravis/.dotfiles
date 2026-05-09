@@ -165,7 +165,8 @@ if command -v graphify >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8a-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
+# 8a-bis) Cross-CLI agent skills
+#     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
 #       handoff, andrej-karpathy-skills, understand-anything
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) are not
@@ -173,8 +174,11 @@ fi
 # ---------------------------------------------------------------------------
 if command -v git >/dev/null 2>&1; then
   AGENT_SKILLS="$HOME/.agents/skills"
+  CLAUDE_SKILLS="$HOME/.claude/skills"
+  CODEX_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills"
+  OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
-  mkdir -p "$AGENT_SKILLS" "$PLUGIN_CACHE"
+  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$PLUGIN_CACHE"
 
   clone_or_pull() {
     local url="$1" dir="$2"
@@ -185,13 +189,20 @@ if command -v git >/dev/null 2>&1; then
     fi
   }
 
+  link_skill() {
+    local src="$1" name="$2"
+    ln -sfn "$src" "$AGENT_SKILLS/$name"
+    ln -sfn "$src" "$CLAUDE_SKILLS/$name"
+    ln -sfn "$src" "$CODEX_SKILLS/$name"
+    ln -sfn "$src" "$OPENCODE_SKILLS/$name"
+  }
+
   link_skills_from() {
-    # Symlink every directory containing a SKILL.md into ~/.agents/skills/<name>.
     local repo="$1"
     find "$repo" -maxdepth 4 -name SKILL.md 2>/dev/null | while read -r f; do
       local src; src="$(dirname "$f")"
       local name; name="$(basename "$src")"
-      ln -sfn "$src" "$AGENT_SKILLS/$name"
+      link_skill "$src" "$name"
     done
   }
 
@@ -204,21 +215,24 @@ if command -v git >/dev/null 2>&1; then
   log "Installing andrej-karpathy-skills (cross-CLI)"
   clone_or_pull https://github.com/forrestchang/andrej-karpathy-skills "$PLUGIN_CACHE/karpathy-skills"
   link_skills_from "$PLUGIN_CACHE/karpathy-skills"
-  if [[ -f "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md" && ! -e "$AGENT_SKILLS/karpathy-guidelines/SKILL.md" ]]; then
-    mkdir -p "$AGENT_SKILLS/karpathy-guidelines"
+  KARPATHY_WRAPPER="$PLUGIN_CACHE/karpathy-guidelines-skill"
+  KARPATHY_UPSTREAM_SKILL="$PLUGIN_CACHE/karpathy-skills/skills/karpathy-guidelines/SKILL.md"
+  if [[ ! -f "$KARPATHY_UPSTREAM_SKILL" && -f "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md" && ! -e "$KARPATHY_WRAPPER/SKILL.md" ]]; then
+    mkdir -p "$KARPATHY_WRAPPER"
     {
       printf -- '---\nname: karpathy-guidelines\ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes\n---\n\n'
       cat "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md"
-    } > "$AGENT_SKILLS/karpathy-guidelines/SKILL.md"
+    } > "$KARPATHY_WRAPPER/SKILL.md"
+  fi
+  if [[ ! -f "$KARPATHY_UPSTREAM_SKILL" && -e "$KARPATHY_WRAPPER/SKILL.md" ]]; then
+    link_skill "$KARPATHY_WRAPPER" karpathy-guidelines
   fi
 
   # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
   log "Installing excalidraw-diagram skill for claude / codex / opencode"
   clone_or_pull https://github.com/coleam00/excalidraw-diagram-skill "$PLUGIN_CACHE/excalidraw-diagram-skill"
   if [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/SKILL.md" ]]; then
-    ln -sfn "$PLUGIN_CACHE/excalidraw-diagram-skill" "$AGENT_SKILLS/excalidraw-diagram"
-    mkdir -p "$HOME/.claude/skills"
-    ln -sfn "$PLUGIN_CACHE/excalidraw-diagram-skill" "$HOME/.claude/skills/excalidraw-diagram"
+    link_skill "$PLUGIN_CACHE/excalidraw-diagram-skill" excalidraw-diagram
     # Pre-install renderer deps (uv + playwright chromium) so the skill works on first run
     if command -v uv >/dev/null 2>&1 && [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/references/pyproject.toml" ]]; then
       log "  excalidraw-diagram: uv sync + playwright chromium (one-time)"
@@ -237,24 +251,24 @@ if command -v git >/dev/null 2>&1; then
   log "Installing html-ppt skill for claude / codex / opencode"
   clone_or_pull https://github.com/lewislulu/html-ppt-skill "$PLUGIN_CACHE/html-ppt-skill"
   if [[ -f "$PLUGIN_CACHE/html-ppt-skill/SKILL.md" ]]; then
-    ln -sfn "$PLUGIN_CACHE/html-ppt-skill" "$AGENT_SKILLS/html-ppt"
-    mkdir -p "$HOME/.claude/skills"
-    ln -sfn "$PLUGIN_CACHE/html-ppt-skill" "$HOME/.claude/skills/html-ppt"
+    link_skill "$PLUGIN_CACHE/html-ppt-skill" html-ppt
   else
     warn "  html-ppt-skill: SKILL.md missing after clone"
   fi
 
   # 4. understand-anything (upstream provides a multi-target installer)
-  log "Installing understand-anything for codex + opencode"
+  log "Installing understand-anything for claude / codex / opencode"
   if command -v curl >/dev/null 2>&1; then
-    # Defensive: remove any stale real-dir residue under ~/.agents/skills so
+    # Defensive: remove any stale real-dir residue under skill roots so
     # upstream's `ln -sfn` doesn't fail with "cannot overwrite directory".
-    if [[ -d "$HOME/.agents/skills" ]]; then
-      for d in "$HOME/.agents/skills"/understand*; do
-        [[ -d "$d" && ! -L "$d" ]] && rm -rf "$d"
-      done
-    fi
-    for tgt in codex opencode; do
+    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS"; do
+      if [[ -d "$root" ]]; then
+        for d in "$root"/understand*; do
+          [[ -d "$d" && ! -L "$d" ]] && rm -rf "$d"
+        done
+      fi
+    done
+    for tgt in claude codex opencode; do
       curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh \
         | bash -s "$tgt" || warn "  understand-anything install failed for $tgt"
     done
@@ -267,7 +281,7 @@ if command -v git >/dev/null 2>&1; then
   clone_or_pull https://github.com/anthropics/claude-plugins-official "$PLUGIN_CACHE/claude-plugins-official"
   CPO_PLUGINS="$PLUGIN_CACHE/claude-plugins-official/plugins"
   if [[ -f "$CPO_PLUGINS/frontend-design/skills/frontend-design/SKILL.md" ]]; then
-    ln -sfn "$CPO_PLUGINS/frontend-design/skills/frontend-design" "$AGENT_SKILLS/frontend-design"
+    link_skill "$CPO_PLUGINS/frontend-design/skills/frontend-design" frontend-design
   else
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
@@ -277,7 +291,7 @@ if command -v git >/dev/null 2>&1; then
   #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
   log "Installing Codex prompts (handoff / commit-commands)"
-  CODEX_PROMPTS="$HOME/.codex/prompts"
+  CODEX_PROMPTS="${CODEX_HOME:-$HOME/.codex}/prompts"
   mkdir -p "$CODEX_PROMPTS"
   copy_prompt() { [[ -f "$1" ]] && cp -f "$1" "$CODEX_PROMPTS/$2"; }
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
@@ -292,9 +306,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # 8b) Claude Code companion CLIs (rtk hook)
-#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills,
-#     understand-anything, codex-plugin-cc) are
-#     declared in common/claude/settings.json and load at Claude Code startup.
+#     Claude-specific marketplace plugins are declared in
+#     common/claude/settings.json. Portable skills are installed above for all
+#     supported coding CLIs.
 # ---------------------------------------------------------------------------
 if ! command -v rtk >/dev/null 2>&1; then
   log "Installing rtk (LLM output compressor + Claude Code hook)"

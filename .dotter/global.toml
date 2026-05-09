@@ -19,7 +19,6 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/claude/statusline.mjs" = "~/.claude/statusline.mjs"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/RTK.md" = "~/.claude/RTK.md"
-"common/claude/skills/handoff-refresh" = "~/.claude/skills/handoff-refresh"
 "common/nushell" = "~/.config/nushell"
 "common/wezterm/constants.lua" = "~/.config/wezterm/constants.lua"
 "common/wezterm/functions.lua" = "~/.config/wezterm/functions.lua"
