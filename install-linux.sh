@@ -54,6 +54,20 @@ if (( ! IS_WSL )) && ! command -v wezterm >/dev/null 2>&1; then
   sudo -E apt-get install -y -qq wezterm || warn "  wezterm install failed"
 fi
 
+# GitHub CLI (gh) — Ubuntu/Debian's apt `gh` lags behind upstream by months;
+# use the official cli.github.com keyring repo for current builds.
+if ! command -v gh >/dev/null 2>&1; then
+  log "Installing GitHub CLI via official apt repo"
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | sudo gpg --yes --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+  sudo -E apt-get update -qq
+  sudo -E apt-get install -y -qq gh || warn "  gh install failed"
+fi
+
 # Debian ships fd as `fdfind` and bat as `batcat` — provide expected names.
 mkdir -p "$HOME/.local/bin"
 [[ -x "$(command -v fdfind)" && ! -e "$HOME/.local/bin/fd" ]]   && ln -s "$(command -v fdfind)" "$HOME/.local/bin/fd"
@@ -286,7 +300,20 @@ if command -v git >/dev/null 2>&1; then
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
 
-  # 6. Codex slash-prompts ported from Claude Code commands/
+  # 7. ruvnet/ruflo — multi-agent orchestration framework. Clone + scan for any
+  #    SKILL.md files so codex/opencode can pick them up; the Claude-Code-only
+  #    marketplace path is `/plugin install ruflo-core@ruflo`.
+  log "Installing ruflo (cross-CLI scan for SKILL.md)"
+  clone_or_pull https://github.com/ruvnet/ruflo "$PLUGIN_CACHE/ruflo"
+  link_skills_from "$PLUGIN_CACHE/ruflo"
+
+  # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
+  #    and link any SKILL.md it ships under plugins/*/skills/.
+  log "Installing claude-sdlc (cross-CLI scan for SKILL.md)"
+  clone_or_pull https://github.com/danielscholl/claude-sdlc "$PLUGIN_CACHE/claude-sdlc"
+  link_skills_from "$PLUGIN_CACHE/claude-sdlc"
+
+  # 9. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).

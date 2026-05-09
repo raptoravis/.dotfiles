@@ -25,6 +25,7 @@ brew "yazi"
 
 # Git
 brew "lazygit"
+brew "gh"
 
 # Dev Tools
 brew "fastfetch"

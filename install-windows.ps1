@@ -61,7 +61,7 @@ scoop bucket add versions   2>$null | Out-Null
 # 3) Core tools, languages, dependencies (matches Makefile.toml `windows-tools`)
 # ---------------------------------------------------------------------------
 $Tools = @(
-    'lazygit', 'neovim', 'yazi', 'wezterm-nightly',
+    'lazygit', 'gh', 'neovim', 'yazi', 'wezterm-nightly',
     'fzf', 'ripgrep', 'bat',
     'FiraCode-NF'
 )
@@ -406,7 +406,22 @@ if (Test-Cmd git) {
         Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
     }
 
-    # 6. Codex slash-prompts ported from Claude Code commands/
+    # 7. ruvnet/ruflo — multi-agent orchestration framework. Clone + scan for any
+    #    SKILL.md files so codex/opencode can pick them up; the Claude-Code-only
+    #    marketplace path is `/plugin install ruflo-core@ruflo`.
+    Write-Step 'Installing ruflo (cross-CLI scan for SKILL.md)'
+    $rufloRepo = Join-Path $PluginCache 'ruflo'
+    CloneOrPull 'https://github.com/ruvnet/ruflo' $rufloRepo
+    LinkSkillsFrom $rufloRepo
+
+    # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
+    #    and link any SKILL.md it ships under plugins/*/skills/.
+    Write-Step 'Installing claude-sdlc (cross-CLI scan for SKILL.md)'
+    $sdlcRepo = Join-Path $PluginCache 'claude-sdlc'
+    CloneOrPull 'https://github.com/danielscholl/claude-sdlc' $sdlcRepo
+    LinkSkillsFrom $sdlcRepo
+
+    # 9. Codex slash-prompts ported from Claude Code commands/
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as
     #    /handoff-create, /commit etc. inside Codex.
     Write-Step 'Installing Codex prompts (handoff / commit-commands)'

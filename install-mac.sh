@@ -305,7 +305,20 @@ if command -v git >/dev/null 2>&1; then
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
 
-  # 6. Codex slash-prompts ported from Claude Code commands/
+  # 7. ruvnet/ruflo — multi-agent orchestration framework. Clone + scan for any
+  #    SKILL.md files so codex/opencode can pick them up; the Claude-Code-only
+  #    marketplace path is `/plugin install ruflo-core@ruflo`.
+  log "Installing ruflo (cross-CLI scan for SKILL.md)"
+  clone_or_pull https://github.com/ruvnet/ruflo "$PLUGIN_CACHE/ruflo"
+  link_skills_from "$PLUGIN_CACHE/ruflo"
+
+  # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
+  #    and link any SKILL.md it ships under plugins/*/skills/.
+  log "Installing claude-sdlc (cross-CLI scan for SKILL.md)"
+  clone_or_pull https://github.com/danielscholl/claude-sdlc "$PLUGIN_CACHE/claude-sdlc"
+  link_skills_from "$PLUGIN_CACHE/claude-sdlc"
+
+  # 9. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
