@@ -269,9 +269,16 @@ if command -v git >/dev/null 2>&1; then
 
   log "Installing understand-anything for codex + opencode"
   if command -v curl >/dev/null 2>&1; then
+    # Defensive: remove any stale real-dir residue under ~/.agents/skills so
+    # upstream's `ln -sfn` doesn't fail with "cannot overwrite directory".
+    if [[ -d "$HOME/.agents/skills" ]]; then
+      for d in "$HOME/.agents/skills"/understand*; do
+        [[ -d "$d" && ! -L "$d" ]] && rm -rf "$d"
+      done
+    fi
     for tgt in codex opencode; do
       curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh \
-        | bash -s "$tgt" 2>/dev/null || warn "  understand-anything install failed for $tgt"
+        | bash -s "$tgt" || warn "  understand-anything install failed for $tgt"
     done
   fi
 else
