@@ -393,6 +393,41 @@ if (Test-Cmd git) {
     } else {
         Write-Warn2 '  bash not on PATH -- skip understand-anything (run install-linux.sh inside WSL to set it up there)'
     }
+
+    # 5. anthropics/claude-plugins-official monorepo — pick portable subsets
+    #    (frontend-design skill + commit-commands prompts). Other plugins in
+    #    this monorepo are LSP wrappers / Claude-Code-only and skipped.
+    Write-Step 'Installing frontend-design skill (cross-CLI)'
+    $cpoRepo = Join-Path $PluginCache 'claude-plugins-official'
+    CloneOrPull 'https://github.com/anthropics/claude-plugins-official' $cpoRepo
+    $cpoPlugins = Join-Path $cpoRepo 'plugins'
+    $fdSrc = Join-Path $cpoPlugins 'frontend-design\skills\frontend-design'
+    if (Test-Path (Join-Path $fdSrc 'SKILL.md')) {
+        $fdDest = Join-Path $AgentSkills 'frontend-design'
+        if (Test-Path $fdDest) { Remove-Item $fdDest -Recurse -Force -ErrorAction SilentlyContinue }
+        New-Item -ItemType SymbolicLink -Path $fdDest -Target $fdSrc -Force -ErrorAction SilentlyContinue | Out-Null
+    } else {
+        Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
+    }
+
+    # 6. Codex slash-prompts ported from Claude Code commands/
+    #    Copies select *.md files into ~/.codex/prompts/ so they show up as
+    #    /handoff-create, /zr-dev, /commit etc. inside Codex.
+    Write-Step 'Installing Codex prompts (handoff / zero-review / commit-commands)'
+    $CodexPrompts = Join-Path $env:USERPROFILE '.codex\prompts'
+    New-Item -ItemType Directory -Force -Path $CodexPrompts | Out-Null
+    function CopyPrompt($src, $name) {
+        if (Test-Path $src) { Copy-Item -Force $src (Join-Path $CodexPrompts $name) }
+    }
+    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\create.md') 'handoff-create.md'
+    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\quick.md')  'handoff-quick.md'
+    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\resume.md') 'handoff-resume.md'
+    foreach ($c in @('dev','dev-add','dev-enhance','dev-fix','dev-new','req','test','triage')) {
+        CopyPrompt (Join-Path $PluginCache "zero-review\commands\$c.md") "zr-$c.md"
+    }
+    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit.md')         'commit.md'
+    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit-push-pr.md') 'commit-push-pr.md'
+    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\clean_gone.md')     'clean-gone.md'
 } else {
     Write-Warn2 'git not on PATH -- skipping cross-CLI agent-skill setup'
 }

@@ -264,6 +264,36 @@ if command -v git >/dev/null 2>&1; then
         | bash -s "$tgt" || warn "  understand-anything install failed for $tgt"
     done
   fi
+
+  # 5. anthropics/claude-plugins-official monorepo — pick portable subsets
+  #    (frontend-design skill + commit-commands prompts). Other plugins in this
+  #    monorepo are LSP wrappers / Claude-Code-only and skipped.
+  log "Installing frontend-design skill (cross-CLI)"
+  clone_or_pull https://github.com/anthropics/claude-plugins-official "$PLUGIN_CACHE/claude-plugins-official"
+  CPO_PLUGINS="$PLUGIN_CACHE/claude-plugins-official/plugins"
+  if [[ -f "$CPO_PLUGINS/frontend-design/skills/frontend-design/SKILL.md" ]]; then
+    ln -sfn "$CPO_PLUGINS/frontend-design/skills/frontend-design" "$AGENT_SKILLS/frontend-design"
+  else
+    warn "  frontend-design: SKILL.md not found in upstream"
+  fi
+
+  # 6. Codex slash-prompts ported from Claude Code commands/
+  #    Copies select *.md command files into ~/.codex/prompts/ so they show up
+  #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
+  #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
+  log "Installing Codex prompts (handoff / zero-review / commit-commands)"
+  CODEX_PROMPTS="$HOME/.codex/prompts"
+  mkdir -p "$CODEX_PROMPTS"
+  copy_prompt() { [[ -f "$1" ]] && cp -f "$1" "$CODEX_PROMPTS/$2"; }
+  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
+  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/quick.md"         handoff-quick.md
+  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/resume.md"        handoff-resume.md
+  for c in dev dev-add dev-enhance dev-fix dev-new req test triage; do
+    copy_prompt "$PLUGIN_CACHE/zero-review/commands/$c.md" "zr-$c.md"
+  done
+  copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit.md"         commit.md
+  copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit-push-pr.md" commit-push-pr.md
+  copy_prompt "$CPO_PLUGINS/commit-commands/commands/clean_gone.md"     clean-gone.md
 else
   warn "git not on PATH -- skipping cross-CLI agent-skill setup"
 fi
