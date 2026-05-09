@@ -167,7 +167,7 @@ fi
 # ---------------------------------------------------------------------------
 # 8a-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills, zero-review, understand-anything
+#       handoff, andrej-karpathy-skills, understand-anything
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) are not
 #     ported — they only run inside Claude Code.
 # ---------------------------------------------------------------------------
@@ -211,11 +211,6 @@ if command -v git >/dev/null 2>&1; then
       cat "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md"
     } > "$AGENT_SKILLS/karpathy-guidelines/SKILL.md"
   fi
-
-  # 3. zero-review (multi-skill — auto-discover every SKILL.md-bearing dir)
-  log "Installing zero-review (cross-CLI; hooks/* still Claude-Code-only)"
-  clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
-  link_skills_from "$PLUGIN_CACHE/zero-review"
 
   # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
   log "Installing excalidraw-diagram skill for claude / codex / opencode"
@@ -281,16 +276,13 @@ if command -v git >/dev/null 2>&1; then
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
-  log "Installing Codex prompts (handoff / zero-review / commit-commands)"
+  log "Installing Codex prompts (handoff / commit-commands)"
   CODEX_PROMPTS="$HOME/.codex/prompts"
   mkdir -p "$CODEX_PROMPTS"
   copy_prompt() { [[ -f "$1" ]] && cp -f "$1" "$CODEX_PROMPTS/$2"; }
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/quick.md"         handoff-quick.md
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/resume.md"        handoff-resume.md
-  for c in dev dev-add dev-enhance dev-fix dev-new req test triage; do
-    copy_prompt "$PLUGIN_CACHE/zero-review/commands/$c.md" "zr-$c.md"
-  done
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit.md"         commit.md
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit-push-pr.md" commit-push-pr.md
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/clean_gone.md"     clean-gone.md
@@ -301,7 +293,7 @@ fi
 # ---------------------------------------------------------------------------
 # 8b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills,
-#     zero-review, understand-anything, codex-plugin-cc) are
+#     understand-anything, codex-plugin-cc) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
 if ! command -v rtk >/dev/null 2>&1; then

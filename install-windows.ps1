@@ -257,7 +257,7 @@ if (Test-Cmd graphify) {
 # ---------------------------------------------------------------------------
 # 7b-bis) Cross-CLI agent skills (Codex + OpenCode auto-scan ~/.agents/skills/)
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills, zero-review, understand-anything
+#       handoff, andrej-karpathy-skills, understand-anything
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) only run
 #     inside Claude Code and are not ported here.
 # ---------------------------------------------------------------------------
@@ -306,11 +306,6 @@ if (Test-Cmd git) {
         $front = "---`nname: karpathy-guidelines`ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes`n---`n`n"
         $front + (Get-Content $karpClaude -Raw) | Set-Content -Path $karpDest -Encoding utf8
     }
-
-    # 3. zero-review (multi-skill — auto-discover SKILL.md-bearing dirs)
-    Write-Step 'Installing zero-review (cross-CLI; hooks/* still Claude-Code-only)'
-    CloneOrPull 'https://github.com/A7um/zero-review' (Join-Path $PluginCache 'zero-review')
-    LinkSkillsFrom (Join-Path $PluginCache 'zero-review')
 
     # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
     Write-Step 'Installing excalidraw-diagram skill for claude / codex / opencode'
@@ -412,8 +407,8 @@ if (Test-Cmd git) {
 
     # 6. Codex slash-prompts ported from Claude Code commands/
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as
-    #    /handoff-create, /zr-dev, /commit etc. inside Codex.
-    Write-Step 'Installing Codex prompts (handoff / zero-review / commit-commands)'
+    #    /handoff-create, /commit etc. inside Codex.
+    Write-Step 'Installing Codex prompts (handoff / commit-commands)'
     $CodexPrompts = Join-Path $env:USERPROFILE '.codex\prompts'
     New-Item -ItemType Directory -Force -Path $CodexPrompts | Out-Null
     function CopyPrompt($src, $name) {
@@ -422,9 +417,6 @@ if (Test-Cmd git) {
     CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\create.md') 'handoff-create.md'
     CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\quick.md')  'handoff-quick.md'
     CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\resume.md') 'handoff-resume.md'
-    foreach ($c in @('dev','dev-add','dev-enhance','dev-fix','dev-new','req','test','triage')) {
-        CopyPrompt (Join-Path $PluginCache "zero-review\commands\$c.md") "zr-$c.md"
-    }
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit.md')         'commit.md'
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit-push-pr.md') 'commit-push-pr.md'
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\clean_gone.md')     'clean-gone.md'
@@ -435,7 +427,7 @@ if (Test-Cmd git) {
 # ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
 #     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills,
-#     zero-review, understand-anything, codex-plugin-cc) are
+#     understand-anything, codex-plugin-cc) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
 if (-not (Test-Cmd rtk)) {

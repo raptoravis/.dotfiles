@@ -135,10 +135,6 @@
   "enabledPlugins": {
     "claude-hud@claude-hud": true,
     "handoff@handoff-marketplace": true,
-    "andrej-karpathy-skills@karpathy-skills": true,
-    "zero-review@atum-marketplace": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "understand-anything@understand-anything": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
@@ -153,27 +149,6 @@
       "source": {
         "source": "github",
         "repo": "willseltzer/claude-handoff"
-      },
-      "autoUpdate": true
-    },
-    "karpathy-skills": {
-      "source": {
-        "source": "github",
-        "repo": "forrestchang/andrej-karpathy-skills"
-      },
-      "autoUpdate": true
-    },
-    "atum-marketplace": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/A7um/zero-review.git"
-      },
-      "autoUpdate": true
-    },
-    "understand-anything": {
-      "source": {
-        "source": "github",
-        "repo": "Lum1104/Understand-Anything"
       },
       "autoUpdate": true
     },
