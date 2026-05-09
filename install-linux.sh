@@ -10,6 +10,22 @@
 
 set -uo pipefail
 
+CLEAN=0
+for arg in "$@"; do
+  case "$arg" in
+    --clean) CLEAN=1 ;;
+    -h|--help)
+      cat <<EOF
+Usage: $0 [--clean]
+  --clean  After install, remove agent-skill links / plugin-cache dirs /
+           codex prompts that this script no longer manages.
+EOF
+      exit 0
+      ;;
+    *) echo "unknown arg: $arg" >&2; exit 2 ;;
+  esac
+done
+
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 ZSH_CUSTOM_DIR="${ZSH:-$HOME/.config/zsh/ohmyzsh}"
 IS_WSL=0
@@ -194,6 +210,9 @@ if command -v git >/dev/null 2>&1; then
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
   mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$PLUGIN_CACHE"
 
+  # Track what THIS run installs so --clean can diff against on-disk state.
+  declare -A INSTALLED_SKILLS=() INSTALLED_PLUGINS=() INSTALLED_PROMPTS=()
+
   clone_or_pull() {
     local url="$1" dir="$2"
     if [[ -d "$dir/.git" ]]; then
@@ -201,6 +220,7 @@ if command -v git >/dev/null 2>&1; then
     else
       git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
     fi
+    INSTALLED_PLUGINS["$(basename "$dir")"]=1
   }
 
   link_skill() {
@@ -209,6 +229,7 @@ if command -v git >/dev/null 2>&1; then
     ln -sfn "$src" "$CLAUDE_SKILLS/$name"
     ln -sfn "$src" "$CODEX_SKILLS/$name"
     ln -sfn "$src" "$OPENCODE_SKILLS/$name"
+    INSTALLED_SKILLS["$name"]=1
   }
 
   link_skills_from() {
@@ -300,12 +321,11 @@ if command -v git >/dev/null 2>&1; then
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
 
-  # 7. ruvnet/ruflo — multi-agent orchestration framework. Clone + scan for any
-  #    SKILL.md files so codex/opencode can pick them up; the Claude-Code-only
-  #    marketplace path is `/plugin install ruflo-core@ruflo`.
-  log "Installing ruflo (cross-CLI scan for SKILL.md)"
-  clone_or_pull https://github.com/ruvnet/ruflo "$PLUGIN_CACHE/ruflo"
-  link_skills_from "$PLUGIN_CACHE/ruflo"
+  # 7. (was: ruvnet/ruflo — clone + skill scan)
+  #    ruflo is now installed as an npm CLI in the npm-globals block below to
+  #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
+  #    activation: `npx ruflo@latest init` and
+  #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
 
   # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
   #    and link any SKILL.md it ships under plugins/*/skills/.
@@ -320,13 +340,61 @@ if command -v git >/dev/null 2>&1; then
   log "Installing Codex prompts (handoff / commit-commands)"
   CODEX_PROMPTS="${CODEX_HOME:-$HOME/.codex}/prompts"
   mkdir -p "$CODEX_PROMPTS"
-  copy_prompt() { [[ -f "$1" ]] && cp -f "$1" "$CODEX_PROMPTS/$2"; }
+  copy_prompt() {
+    [[ -f "$1" ]] || return 0
+    cp -f "$1" "$CODEX_PROMPTS/$2"
+    INSTALLED_PROMPTS["$2"]=1
+  }
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/quick.md"         handoff-quick.md
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/resume.md"        handoff-resume.md
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit.md"         commit.md
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit-push-pr.md" commit-push-pr.md
   copy_prompt "$CPO_PLUGINS/commit-commands/commands/clean_gone.md"     clean-gone.md
+
+  # Files this script has historically copied into $CODEX_PROMPTS. Used by
+  # --clean to drop entries that are no longer in INSTALLED_PROMPTS. Add the
+  # filename here whenever you add a copy_prompt line; remove it only after
+  # the script has stopped shipping that prompt for at least one --clean run
+  # on every machine you care about.
+  KNOWN_CODEX_PROMPTS=(handoff-create.md handoff-quick.md handoff-resume.md commit.md commit-push-pr.md clean-gone.md)
+
+  if (( CLEAN )); then
+    log "Clean mode: removing skills / plugins / codex prompts no longer managed by this script"
+
+    # 1) Skill symlinks pointing into $PLUGIN_CACHE that are not in this run's set.
+    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS"; do
+      [[ -d "$root" ]] || continue
+      for entry in "$root"/*; do
+        [[ -L "$entry" ]] || continue
+        target="$(readlink "$entry")"
+        case "$target" in "$PLUGIN_CACHE"/*) ;; *) continue ;; esac
+        name="$(basename "$entry")"
+        if [[ -z "${INSTALLED_SKILLS[$name]:-}" ]]; then
+          log "  rm stale skill link: $entry"
+          rm -f "$entry"
+        fi
+      done
+    done
+
+    # 2) Plugin-cache subdirs that are no longer cloned by this script.
+    for entry in "$PLUGIN_CACHE"/*; do
+      [[ -d "$entry" ]] || continue
+      name="$(basename "$entry")"
+      if [[ -z "${INSTALLED_PLUGINS[$name]:-}" ]]; then
+        log "  rm stale plugin cache: $entry"
+        rm -rf "$entry"
+      fi
+    done
+
+    # 3) Codex prompts in the known-managed set that this run did not ship.
+    for p in "${KNOWN_CODEX_PROMPTS[@]}"; do
+      if [[ -e "$CODEX_PROMPTS/$p" && -z "${INSTALLED_PROMPTS[$p]:-}" ]]; then
+        log "  rm stale codex prompt: $p"
+        rm -f "$CODEX_PROMPTS/$p"
+      fi
+    done
+  fi
 else
   warn "git not on PATH -- skipping cross-CLI agent-skill setup"
 fi
@@ -358,6 +426,10 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v openwolf >/dev/null 2>&1; then
     log "Installing openwolf via npm"
     npm install -g openwolf 2>/dev/null || warn "  openwolf install failed"
+  fi
+  if ! command -v ruflo >/dev/null 2>&1; then
+    log "Installing ruflo (multi-agent orchestrator) via npm"
+    npm install -g ruflo@latest 2>/dev/null || warn "  ruflo install failed"
   fi
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then

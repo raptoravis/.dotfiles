@@ -15,7 +15,10 @@ param(
     # `git config --global`. Mirrors $env:PROXY_URL in the pwsh profile so
     # tools launched outside pwsh (wezterm plugin clones, vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
-    [string]$ProxyUrl = 'http://127.0.0.1:7890'
+    [string]$ProxyUrl = 'http://127.0.0.1:7890',
+    # When set, after install removes agent-skill links / plugin-cache dirs /
+    # codex prompts that this script no longer manages.
+    [switch]$Clean
 )
 
 if (-not $DotfilesDir) {
@@ -271,6 +274,11 @@ if (Test-Cmd git) {
     $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
     New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $PluginCache | Out-Null
 
+    # Track what THIS run installs so -Clean can diff against on-disk state.
+    $InstalledSkills  = @{}
+    $InstalledPlugins = @{}
+    $InstalledPrompts = @{}
+
     function CloneOrPull($url, $dir) {
         if (Test-Path (Join-Path $dir '.git')) {
             Push-Location $dir
@@ -281,6 +289,7 @@ if (Test-Cmd git) {
             git clone --depth=1 --quiet $url $dir
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clone failed: $url" }
         }
+        $script:InstalledPlugins[(Split-Path -Leaf $dir)] = $true
     }
 
     function LinkSkillToRoots($src, $name) {
@@ -289,6 +298,7 @@ if (Test-Cmd git) {
             if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
         }
+        $script:InstalledSkills[$name] = $true
     }
 
     function LinkSkillsFrom($repo) {
@@ -406,13 +416,11 @@ if (Test-Cmd git) {
         Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
     }
 
-    # 7. ruvnet/ruflo — multi-agent orchestration framework. Clone + scan for any
-    #    SKILL.md files so codex/opencode can pick them up; the Claude-Code-only
-    #    marketplace path is `/plugin install ruflo-core@ruflo`.
-    Write-Step 'Installing ruflo (cross-CLI scan for SKILL.md)'
-    $rufloRepo = Join-Path $PluginCache 'ruflo'
-    CloneOrPull 'https://github.com/ruvnet/ruflo' $rufloRepo
-    LinkSkillsFrom $rufloRepo
+    # 7. (was: ruvnet/ruflo — clone + skill scan)
+    #    ruflo is now installed as an npm CLI in the npm-globals block below to
+    #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
+    #    activation: `npx ruflo@latest init` and
+    #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
 
     # 8. danielscholl/claude-sdlc — SDLC plugin marketplace. Same pattern: clone
     #    and link any SKILL.md it ships under plugins/*/skills/.
@@ -428,7 +436,9 @@ if (Test-Cmd git) {
     $CodexPrompts = Join-Path $CodexHome 'prompts'
     New-Item -ItemType Directory -Force -Path $CodexPrompts | Out-Null
     function CopyPrompt($src, $name) {
-        if (Test-Path $src) { Copy-Item -Force $src (Join-Path $CodexPrompts $name) }
+        if (-not (Test-Path $src)) { return }
+        Copy-Item -Force $src (Join-Path $CodexPrompts $name)
+        $script:InstalledPrompts[$name] = $true
     }
     CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\create.md') 'handoff-create.md'
     CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\quick.md')  'handoff-quick.md'
@@ -436,6 +446,50 @@ if (Test-Cmd git) {
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit.md')         'commit.md'
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit-push-pr.md') 'commit-push-pr.md'
     CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\clean_gone.md')     'clean-gone.md'
+
+    # See install-linux.sh for rationale; keep this list symmetric across the
+    # three install scripts.
+    $KnownCodexPrompts = @(
+        'handoff-create.md', 'handoff-quick.md', 'handoff-resume.md',
+        'commit.md', 'commit-push-pr.md', 'clean-gone.md'
+    )
+
+    if ($Clean) {
+        Write-Step 'Clean mode: removing skills / plugins / codex prompts no longer managed by this script'
+
+        # 1) Skill symlinks pointing into $PluginCache that are not in this run's set.
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
+            if (-not (Test-Path $root)) { continue }
+            Get-ChildItem -Force -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
+                if ($_.LinkType -ne 'SymbolicLink' -and $_.LinkType -ne 'Junction') { return }
+                $target = $_.Target
+                if ($target -is [array]) { $target = $target[0] }
+                if (-not $target) { return }
+                if (-not $target.StartsWith($PluginCache, [System.StringComparison]::OrdinalIgnoreCase)) { return }
+                if (-not $InstalledSkills.ContainsKey($_.Name)) {
+                    Write-Step "  rm stale skill link: $($_.FullName)"
+                    Remove-Item -Force -LiteralPath $_.FullName -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        # 2) Plugin-cache subdirs that are no longer cloned by this script.
+        Get-ChildItem -Directory -Force -LiteralPath $PluginCache -ErrorAction SilentlyContinue | ForEach-Object {
+            if (-not $InstalledPlugins.ContainsKey($_.Name)) {
+                Write-Step "  rm stale plugin cache: $($_.FullName)"
+                Remove-Item -Recurse -Force -LiteralPath $_.FullName -ErrorAction SilentlyContinue
+            }
+        }
+
+        # 3) Codex prompts in the known-managed set that this run did not ship.
+        foreach ($p in $KnownCodexPrompts) {
+            $path = Join-Path $CodexPrompts $p
+            if ((Test-Path $path) -and (-not $InstalledPrompts.ContainsKey($p))) {
+                Write-Step "  rm stale codex prompt: $p"
+                Remove-Item -Force -LiteralPath $path -ErrorAction SilentlyContinue
+            }
+        }
+    }
 } else {
     Write-Warn2 'git not on PATH -- skipping cross-CLI agent-skill setup'
 }
@@ -469,6 +523,11 @@ if (Test-Cmd npm) {
         Write-Step 'Installing openwolf via npm'
         npm install -g openwolf
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  openwolf install failed' }
+    }
+    if (-not (Test-Cmd ruflo)) {
+        Write-Step 'Installing ruflo (multi-agent orchestrator) via npm'
+        npm install -g 'ruflo@latest'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  ruflo install failed' }
     }
 
     # AI coding CLIs (Claude Code / Codex / OpenCode)
