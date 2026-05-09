@@ -138,7 +138,8 @@
     "andrej-karpathy-skills@karpathy-skills": true,
     "zero-review@atum-marketplace": true,
     "pyright-lsp@claude-plugins-official": true,
-    "understand-anything@understand-anything": true
+    "understand-anything@understand-anything": true,
+    "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -173,6 +174,13 @@
       "source": {
         "source": "github",
         "repo": "Lum1104/Understand-Anything"
+      },
+      "autoUpdate": true
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
       },
       "autoUpdate": true
     }

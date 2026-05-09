@@ -280,7 +280,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
-#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills) are
+#     Marketplace plugins (claude-hud, handoff, andrej-karpathy-skills,
+#     zero-review, understand-anything, codex-plugin-cc) are
 #     declared in common/claude/settings.json and load at Claude Code startup.
 # ---------------------------------------------------------------------------
 if ! command -v rtk >/dev/null 2>&1; then
