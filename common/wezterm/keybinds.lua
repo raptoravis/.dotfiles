@@ -3,9 +3,20 @@ local action = wezterm.action
 
 local K = {}
 
+local function confirm(window, pane, prompt, on_yes)
+    window:perform_action(action.InputSelector({
+        title = prompt,
+        choices = { { label = 'No' }, { label = 'Yes' } },
+        fuzzy = false,
+        action = wezterm.action_callback(function(inner_window, inner_pane, _, label)
+            if label == 'Yes' then on_yes(inner_window, inner_pane) end
+        end),
+    }), pane)
+end
+
 -- Close every tab whose index is greater than the active tab.
 -- Iterates from the rightmost tab leftward so indices stay valid as we close.
-local function close_tabs_to_right(window, _)
+local function close_tabs_to_right(window, pane)
     local mux_win = window:mux_window()
     local tabs = mux_win:tabs()
     local active_idx
@@ -16,22 +27,32 @@ local function close_tabs_to_right(window, _)
         end
     end
     if not active_idx then return end
-    for i = #tabs, active_idx + 1, -1 do
-        tabs[i]:activate()
-        window:perform_action(action.CloseCurrentTab({ confirm = false }), window:active_pane())
-    end
+    local count = #tabs - active_idx
+    if count <= 0 then return end
+    confirm(window, pane, 'Close ' .. count .. ' tab(s) to the right?', function(w)
+        local ts = w:mux_window():tabs()
+        for i = #ts, active_idx + 1, -1 do
+            ts[i]:activate()
+            w:perform_action(action.CloseCurrentTab({ confirm = false }), w:active_pane())
+        end
+    end)
 end
 
-local function close_other_tabs(window, _)
+local function close_other_tabs(window, pane)
     local mux_win = window:mux_window()
     local tabs = mux_win:tabs()
     local keep_id = window:active_tab():tab_id()
-    for i = #tabs, 1, -1 do
-        if tabs[i]:tab_id() ~= keep_id then
-            tabs[i]:activate()
-            window:perform_action(action.CloseCurrentTab({ confirm = false }), window:active_pane())
+    local count = #tabs - 1
+    if count <= 0 then return end
+    confirm(window, pane, 'Close ' .. count .. ' other tab(s)?', function(w)
+        local ts = w:mux_window():tabs()
+        for i = #ts, 1, -1 do
+            if ts[i]:tab_id() ~= keep_id then
+                ts[i]:activate()
+                w:perform_action(action.CloseCurrentTab({ confirm = false }), w:active_pane())
+            end
         end
-    end
+    end)
 end
 
 function K.keybinds()
@@ -75,7 +96,7 @@ function K.keybinds()
         { key = '_', mods = 'ALT|SHIFT', action = action.EmitEvent('opacity-increase') },
 
         -- Tabs
-        { key = 'w', mods = 'CTRL',           action = action.CloseCurrentTab({ confirm = false }) },
+        { key = 'w', mods = 'CTRL',           action = action.CloseCurrentTab({ confirm = true }) },
         { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
         { key = 'w', mods = 'CTRL|ALT|SHIFT', action = wezterm.action_callback(close_other_tabs) },
 
