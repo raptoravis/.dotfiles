@@ -335,14 +335,6 @@ if command -v git >/dev/null 2>&1; then
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
 
-  # 6. A7um/zero-review — Claude Code plugin shipping skills/auto-{dev,env,req,
-  #    test,triage}. We pick up just the SKILL.md files so the autonomous
-  #    workflow skills work cross-CLI; Claude-Code-only commands/ and roles/
-  #    are intentionally left behind (use /plugin install for those).
-  log "Installing zero-review skills (cross-CLI scan for SKILL.md)"
-  clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
-  link_skills_from "$PLUGIN_CACHE/zero-review"
-
   # 7. (was: ruvnet/ruflo — clone + skill scan)
   #    ruflo is now installed as an npm CLI in the npm-globals block below to
   #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
