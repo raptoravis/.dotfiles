@@ -84,6 +84,20 @@ if ! command -v gh >/dev/null 2>&1; then
   sudo -E apt-get install -y -qq gh || warn "  gh install failed"
 fi
 
+# cloudflared — Cloudflare Tunnel client (内网穿透). Use Cloudflare's apt repo
+# so we get current builds and auto-updates; distro repos don't ship it.
+if ! command -v cloudflared >/dev/null 2>&1; then
+  log "Installing cloudflared via official apt repo"
+  sudo install -d -m 0755 /usr/share/keyrings
+  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+    | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+  CF_CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}")"
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared ${CF_CODENAME} main" \
+    | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
+  sudo -E apt-get update -qq
+  sudo -E apt-get install -y -qq cloudflared || warn "  cloudflared install failed"
+fi
+
 # Debian ships fd as `fdfind` and bat as `batcat` — provide expected names.
 mkdir -p "$HOME/.local/bin"
 [[ -x "$(command -v fdfind)" && ! -e "$HOME/.local/bin/fd" ]]   && ln -s "$(command -v fdfind)" "$HOME/.local/bin/fd"

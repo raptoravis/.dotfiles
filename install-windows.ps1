@@ -66,6 +66,7 @@ scoop bucket add versions   2>$null | Out-Null
 $Tools = @(
     'lazygit', 'gh', 'neovim', 'yazi', 'wezterm-nightly',
     'fzf', 'ripgrep', 'bat',
+    'cloudflared',
     'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')

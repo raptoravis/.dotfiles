@@ -27,6 +27,9 @@ brew "yazi"
 brew "lazygit"
 brew "gh"
 
+# Networking / Tunnels
+brew "cloudflared"
+
 # Dev Tools
 brew "fastfetch"
 brew "cmake"
