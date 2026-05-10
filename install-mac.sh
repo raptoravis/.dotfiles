@@ -331,13 +331,7 @@ if command -v git >/dev/null 2>&1; then
   #    activation: `npx ruflo@latest init` and
   #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
 
-  # 8. A7um/zero-review — code review plugin. Same pattern: clone and link any
-  #    SKILL.md it ships.
-  log "Installing zero-review (cross-CLI scan for SKILL.md)"
-  clone_or_pull https://github.com/A7um/zero-review "$PLUGIN_CACHE/zero-review"
-  link_skills_from "$PLUGIN_CACHE/zero-review"
-
-  # 9. Codex slash-prompts ported from Claude Code commands/
+  # 8. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
