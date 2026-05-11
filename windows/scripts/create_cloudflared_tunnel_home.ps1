@@ -29,10 +29,10 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [string]$TunnelName,
+    [string]$TunnelName = 'home',
 
     [hashtable]$Routes = @{
-        'haishan.ccwu.cc' = 'http://localhost:5173'
+        # 'haishan.ccwu.cc' = 'http://localhost:5173'
         'tunan.ccwu.cc'   = 'http://localhost:9280'
         'tianyun.ccwu.cc' = 'http://localhost:5006'
     },
