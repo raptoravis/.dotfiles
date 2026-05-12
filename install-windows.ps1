@@ -147,6 +147,7 @@ $CargoTools = [ordered]@{
     'psmux'        = 'psmux'
     'pstop'        = 'pstop'
     'psnet'        = 'psnet'
+    'abtop'        = 'abtop'
 }
 foreach ($t in $CargoTools.Keys) {
     if (Test-Cmd $CargoTools[$t]) {

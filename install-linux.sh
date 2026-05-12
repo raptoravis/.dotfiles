@@ -121,7 +121,7 @@ rustup component add clippy rustfmt 2>/dev/null || true
 #    coreutils is provided by the base system on Linux, so we skip it.
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
-CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli)
+CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop)
 for tool in "${CARGO_TOOLS[@]}"; do
   cargo install "$tool" 2>&1 | tail -n1 || warn "  failed: $tool"
 done

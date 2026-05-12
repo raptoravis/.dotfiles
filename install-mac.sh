@@ -133,6 +133,7 @@ CARGO_TOOLS=(
   "bottom:btm"
   "bat:bat"
   "mise:mise"
+  "abtop:abtop"
 )
 for entry in "${CARGO_TOOLS[@]}"; do
   crate="${entry%%:*}"
