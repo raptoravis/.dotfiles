@@ -38,6 +38,12 @@ local function close_tabs_to_right(window, pane)
     end)
 end
 
+local function close_current_tab(window, pane)
+    confirm(window, pane, 'Close this tab?', function(w)
+        w:perform_action(action.CloseCurrentTab({ confirm = false }), w:active_pane())
+    end)
+end
+
 local function close_other_tabs(window, pane)
     local mux_win = window:mux_window()
     local tabs = mux_win:tabs()
@@ -96,7 +102,7 @@ function K.keybinds()
         { key = '_', mods = 'ALT|SHIFT', action = action.EmitEvent('opacity-increase') },
 
         -- Tabs
-        { key = 'w', mods = 'CTRL',           action = action.CloseCurrentTab({ confirm = true }) },
+        { key = 'w', mods = 'CTRL',           action = wezterm.action_callback(close_current_tab) },
         { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
         { key = 'w', mods = 'CTRL|ALT|SHIFT', action = wezterm.action_callback(close_other_tabs) },
 
