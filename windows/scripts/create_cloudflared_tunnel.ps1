@@ -79,7 +79,7 @@ $presets = @{
     com  = @{
         TunnelName = 'com'
         Routes     = @{
-            'haishan.ccwu.cc' = 'http://localhost:5173'
+            'haishan.ccwu.cc' = 'http://localhost:8765'
             'peifeng.ccwu.cc' = 'http://localhost:9280'
             'yunxing.ccwu.cc' = 'http://localhost:3000'
         }
