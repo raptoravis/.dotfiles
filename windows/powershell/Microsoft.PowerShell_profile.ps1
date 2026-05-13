@@ -19,7 +19,8 @@ if (Get-Module -ListAvailable -Name PSFzf) {
     Set-PsFzfOption `
         -PSReadLineChordProvider 'Ctrl+t' `
         -PSReadLineChordReverseHistory 'Ctrl+r' `
-        -PSReadLineChordSetLocation 'Alt+c'
+        -PSReadLineChordSetLocation 'Alt+c' `
+        -TabExpansion
     # Prefer fd over the default file walker when available.
     if (Get-Command fd -ErrorAction SilentlyContinue) {
         $env:FZF_DEFAULT_COMMAND = 'fd --type f --hidden --follow --exclude .git'
