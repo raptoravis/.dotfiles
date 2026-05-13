@@ -11,12 +11,21 @@ Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward
 Set-PSReadLineKeyHandler -Key DownArrow     -Function HistorySearchForward
 Set-PSReadLineKeyHandler -Key RightArrow    -Function ForwardChar  # accept inline ghost text
 
-# PSFzf — Ctrl+D file search, Ctrl+R history search.
+# PSFzf — Ctrl+T file search, Ctrl+R history search, Alt+C cd.
 # Eager: PSFzf registers PSReadLine chord handlers at import time, so it has
 # to be loaded before the first keypress. Lazy-loading would miss the chord.
 if (Get-Module -ListAvailable -Name PSFzf) {
     Import-Module PSFzf
-    Set-PsFzfOption -PSReadLineChordProvider 'Ctrl+d' -PSReadLineChordReverseHistory 'Ctrl+r'
+    Set-PsFzfOption `
+        -PSReadLineChordProvider 'Ctrl+t' `
+        -PSReadLineChordReverseHistory 'Ctrl+r' `
+        -PSReadLineChordSetLocation 'Alt+c'
+    # Prefer fd over the default file walker when available.
+    if (Get-Command fd -ErrorAction SilentlyContinue) {
+        $env:FZF_DEFAULT_COMMAND = 'fd --type f --hidden --follow --exclude .git'
+        $env:FZF_CTRL_T_COMMAND  = $env:FZF_DEFAULT_COMMAND
+        $env:FZF_ALT_C_COMMAND   = 'fd --type d --hidden --follow --exclude .git'
+    }
 }
 
 # ---------------------------------------------------------------------------
