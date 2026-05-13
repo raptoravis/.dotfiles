@@ -77,6 +77,7 @@ Set-Alias ll ls
 Set-Alias grep findstr
 #Set-Alias python3 python
 Set-Alias -Name e -Value explorer.exe
+Set-Alias -Name lg -Value lazygit
 #Set-Alias -Name llt -Value dir -File | sort LastWriteTime -Descending
 #Set-Alias -Name llt -Value dir -File | sort LastWriteTime -Ascending
 
