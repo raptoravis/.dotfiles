@@ -1,0 +1,7 @@
+#!/usr/bin/env zsh
+# yazi wrapper — cd to the directory selected on exit
+local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+command yazi "$@" --cwd-file="$tmp"
+IFS= read -r -d '' cwd < "$tmp"
+[ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
+command rm -f -- "$tmp"

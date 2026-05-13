@@ -89,6 +89,17 @@ function llt {
 Set-Alias -Name editor -Value nvim
 Set-Alias -Name edit -Value editor
 
+# yazi wrapper — cd to the directory selected on exit
+function y {
+    $tmp = (New-TemporaryFile).FullName
+    yazi.exe @args --cwd-file="$tmp"
+    $cwd = Get-Content -Path $tmp -Encoding UTF8
+    if ($cwd -and $cwd -ne $PWD.Path -and (Test-Path -LiteralPath $cwd -PathType Container)) {
+        Set-Location -LiteralPath (Resolve-Path -LiteralPath $cwd).Path
+    }
+    Remove-Item -Path $tmp
+}
+
 function profile_alias { editor $PROFILE }
 Set-Alias -Name profile -Value profile_alias
 
