@@ -133,6 +133,8 @@ CARGO_TOOLS=(
   "bottom:btm"
   "bat:bat"
   "mise:mise"
+  "yazi-fm:yazi"
+  "yazi-cli:ya"
   "abtop:abtop"
 )
 for entry in "${CARGO_TOOLS[@]}"; do
