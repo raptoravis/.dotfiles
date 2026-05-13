@@ -81,6 +81,17 @@ Set-Alias -Name lg -Value lazygit
 #Set-Alias -Name llt -Value dir -File | sort LastWriteTime -Descending
 #Set-Alias -Name llt -Value dir -File | sort LastWriteTime -Ascending
 
+function touch {
+    param([Parameter(Mandatory, ValueFromRemainingArguments)] [string[]]$Paths)
+    foreach ($p in $Paths) {
+        if (Test-Path -LiteralPath $p) {
+            (Get-Item -LiteralPath $p).LastWriteTime = Get-Date
+        } else {
+            New-Item -ItemType File -Path $p | Out-Null
+        }
+    }
+}
+
 function llt {
     #Get-ChildItem -File | Sort-Object LastWriteTime -Descending
     Get-ChildItem | Sort-Object LastWriteTime
