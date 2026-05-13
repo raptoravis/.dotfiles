@@ -102,8 +102,9 @@ function K.keybinds()
         { key = '_', mods = 'ALT|SHIFT', action = action.EmitEvent('opacity-increase') },
 
         -- Tabs
-        { key = 'w', mods = 'CTRL',           action = wezterm.action_callback(close_current_tab) },
-        { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
+        -- { key = 'w', mods = 'CTRL',           action = wezterm.action_callback(close_current_tab) },
+        -- { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
+        { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_current_tab) },
         { key = 'w', mods = 'CTRL|ALT|SHIFT', action = wezterm.action_callback(close_other_tabs) },
 
         -- Yazi (new tab)
