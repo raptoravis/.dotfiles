@@ -106,6 +106,9 @@ function K.keybinds()
         { key = 'w', mods = 'CTRL|SHIFT',     action = wezterm.action_callback(close_tabs_to_right) },
         { key = 'w', mods = 'CTRL|ALT|SHIFT', action = wezterm.action_callback(close_other_tabs) },
 
+        -- Yazi (new tab)
+        { key = 'y', mods = 'ALT', action = action.SpawnCommandInNewTab({ args = { 'yazi' } }) },
+
         -- Signals
         { key = 'Backspace', mods = 'CTRL', action = action.SendString('\x03') },
     }
