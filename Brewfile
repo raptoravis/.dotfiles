@@ -31,6 +31,7 @@ brew "gh"
 brew "cloudflared"
 
 # Dev Tools
+brew "witr"
 brew "fastfetch"
 brew "cmake"
 brew "openssl"

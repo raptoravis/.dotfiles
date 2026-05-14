@@ -98,6 +98,16 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   sudo -E apt-get install -y -qq cloudflared || warn "  cloudflared install failed"
 fi
 
+# witr — "why is this running?" CLI. Not packaged in apt; use upstream
+# install.sh with INSTALL_PREFIX so it lands in ~/.local/bin without sudo.
+if ! command -v witr >/dev/null 2>&1; then
+  log "Installing witr via upstream install.sh"
+  mkdir -p "$HOME/.local/bin" "$HOME/.local/share/man/man1"
+  INSTALL_PREFIX="$HOME/.local" \
+    bash -c "$(curl -fsSL https://raw.githubusercontent.com/pranshuparmar/witr/main/install.sh)" \
+    || warn "  witr install failed"
+fi
+
 # Debian ships fd as `fdfind` and bat as `batcat` — provide expected names.
 mkdir -p "$HOME/.local/bin"
 [[ -x "$(command -v fdfind)" && ! -e "$HOME/.local/bin/fd" ]]   && ln -s "$(command -v fdfind)" "$HOME/.local/bin/fd"

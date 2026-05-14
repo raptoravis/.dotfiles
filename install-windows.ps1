@@ -67,6 +67,7 @@ $Tools = @(
     'lazygit', 'gh', 'neovim', 'yazi', 'wezterm-nightly',
     'fzf', 'ripgrep', 'bat',
     'cloudflared',
+    'witr',
     'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
