@@ -594,6 +594,35 @@ if ($ProxyUrl) {
     }
 }
 
+# Git global config (identity + sane defaults). Idempotent: only writes on change.
+function Set-GitConfigIfChanged {
+    param([string]$Key, [string]$Value)
+    if ((git config --global --get $Key 2>$null) -ne $Value) {
+        git config --global $Key $Value
+        Write-Host "  set git $Key = $Value"
+    }
+}
+Set-GitConfigIfChanged 'user.name'        'raptoravis'
+Set-GitConfigIfChanged 'user.email'       'raptoravis@gmail.com'
+Set-GitConfigIfChanged 'http.version'     'HTTP/1.1'
+Set-GitConfigIfChanged 'http.postBuffer'  '524288000'
+Set-GitConfigIfChanged 'core.longpaths'   'true'
+Set-GitConfigIfChanged 'core.compression' '0'
+Set-GitConfigIfChanged 'core.quotepath'   'false'
+
+# SSH: route github.com over 443 (port 22 is blocked on some networks).
+$SshDir    = Join-Path $env:USERPROFILE '.ssh'
+$SshConfig = Join-Path $SshDir 'config'
+if (-not (Test-Path $SshDir))    { New-Item -ItemType Directory -Path $SshDir    -Force | Out-Null }
+if (-not (Test-Path $SshConfig)) { New-Item -ItemType File      -Path $SshConfig -Force | Out-Null }
+$sshContent = Get-Content -Raw -LiteralPath $SshConfig -ErrorAction SilentlyContinue
+if (-not ($sshContent -match '(?m)^\s*Hostname\s+ssh\.github\.com\b')) {
+    $block = "Host github.com`n  Hostname ssh.github.com`n  Port 443`n  User git`n"
+    if ($sshContent -and -not $sshContent.EndsWith("`n")) { Add-Content -LiteralPath $SshConfig -Value '' }
+    Add-Content -LiteralPath $SshConfig -Value $block -NoNewline
+    Write-Host "  appended github.com:443 block to $SshConfig"
+}
+
 # Add ~/.cargo/bin to the user PATH so cargo-installed tools (dotter, eza, btm…) are found
 # in new shells without requiring a rustup-managed PATH update.
 $CargoBin = Join-Path $env:USERPROFILE '.cargo\bin'

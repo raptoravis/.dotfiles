@@ -486,6 +486,52 @@ if [[ ! -f "$HOME/.zshenv" ]] || ! grep -q 'ZDOTDIR' "$HOME/.zshenv" 2>/dev/null
 fi
 
 # ---------------------------------------------------------------------------
+# 9b) Git global config
+# ---------------------------------------------------------------------------
+if command -v git >/dev/null 2>&1; then
+  set_git() {
+    local key="$1" val="$2"
+    if [ "$(git config --global --get "$key" 2>/dev/null || echo __unset__)" != "$val" ]; then
+      git config --global "$key" "$val"
+      log "set git $key = $val"
+    fi
+  }
+  set_git user.name        raptoravis
+  set_git user.email       raptoravis@gmail.com
+  set_git http.version     HTTP/1.1
+  set_git http.postBuffer  524288000
+  set_git core.compression 0
+  set_git core.quotepath   false
+  # Proxy — only set if 127.0.0.1:7890 is actually reachable
+  if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+    exec 3>&- 3<&- 2>/dev/null || true
+    set_git http.proxy  http://127.0.0.1:7890
+    set_git https.proxy http://127.0.0.1:7890
+  fi
+  unset -f set_git
+fi
+
+# ---------------------------------------------------------------------------
+# 9c) SSH: route github.com over 443 (port 22 is blocked on some networks)
+# ---------------------------------------------------------------------------
+SSH_DIR="$HOME/.ssh"
+SSH_CONFIG="$SSH_DIR/config"
+mkdir -p "$SSH_DIR" && chmod 700 "$SSH_DIR"
+[ -f "$SSH_CONFIG" ] || { : > "$SSH_CONFIG"; chmod 600 "$SSH_CONFIG"; }
+if ! grep -q '^[[:space:]]*Hostname[[:space:]]\+ssh\.github\.com' "$SSH_CONFIG" 2>/dev/null; then
+  # Ensure trailing newline before appending
+  [ -s "$SSH_CONFIG" ] && [ "$(tail -c1 "$SSH_CONFIG")" != "" ] && printf '\n' >> "$SSH_CONFIG"
+  cat >> "$SSH_CONFIG" <<'EOF'
+Host github.com
+  Hostname ssh.github.com
+  Port 443
+  User git
+EOF
+  chmod 600 "$SSH_CONFIG"
+  log "appended github.com:443 block to $SSH_CONFIG"
+fi
+
+# ---------------------------------------------------------------------------
 # 10) Symlinks via dotter
 # ---------------------------------------------------------------------------
 if command -v dotter >/dev/null 2>&1; then
