@@ -32,7 +32,7 @@
   ],
   "execution": {
     "type": "chain",
-    "interval": 60,
+    "interval": 180,
     "steps": [
       {
         "id": "fetch_data",
