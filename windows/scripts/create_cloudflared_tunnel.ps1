@@ -81,7 +81,7 @@ $presets = @{
         Routes     = @{
             'haishan.ccwu.cc' = 'http://localhost:8765'
             'peifeng.ccwu.cc' = 'http://localhost:9280'
-            'yunxing.ccwu.cc' = 'http://localhost:3000'
+            'yunxing.ccwu.cc' = 'http://localhost:6534'
         }
     }
     home = @{
