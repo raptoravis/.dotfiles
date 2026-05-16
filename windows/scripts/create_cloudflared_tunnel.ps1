@@ -82,12 +82,12 @@ $presets = @{
             'haishan.ccwu.cc' = 'http://localhost:8765'
             'peifeng.ccwu.cc' = 'http://localhost:9280'
             'yunxing.ccwu.cc' = 'http://localhost:6534'
+            'tunan.ccwu.cc'   = 'http://localhost:37856'
         }
     }
     home = @{
         TunnelName = 'home'
         Routes     = @{
-            'tunan.ccwu.cc'   = 'http://localhost:9280'
             'tianyun.ccwu.cc' = 'http://localhost:5006'
         }
     }
