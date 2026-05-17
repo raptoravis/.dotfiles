@@ -88,7 +88,7 @@ $presets = @{
         TunnelName = 'home'
         Routes     = @{
             'tunan.ccwu.cc'   = 'http://localhost:9280'
-            'tianyun.ccwu.cc' = 'http://localhost:5006'
+            'tianyun.ccwu.cc' = 'http://localhost:50876'
         }
     }
 }
