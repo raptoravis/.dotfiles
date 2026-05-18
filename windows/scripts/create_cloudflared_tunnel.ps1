@@ -116,6 +116,26 @@ function Test-IsAdmin {
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Probe whether Cloudflare's edge can complete a TLS handshake for $hostname.
+# A separate sub-zone (e.g. tunan.ccwu.cc registered as its own zone) gets its
+# own Universal SSL cert that may not be issued yet; until then CF closes the
+# connection mid-handshake and browsers show ERR_EMPTY_RESPONSE even though DNS
+# and the tunnel are fine. Returns $true on success, $false on handshake failure.
+function Test-EdgeTls([string]$hostname) {
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    try {
+        $tcp.Connect($hostname, 443)
+        $ssl = New-Object System.Net.Security.SslStream($tcp.GetStream(), $false, ({ $true }))
+        $ssl.AuthenticateAsClient($hostname)
+        $ssl.Close()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        $tcp.Close()
+    }
+}
+
 # Run a native command without letting its stderr (cloudflared writes INF logs there)
 # trip $ErrorActionPreference='Stop'. Returns the native exit code.
 function Invoke-NativeQuiet {
@@ -218,6 +238,7 @@ Write-Host '== Configuring DNS routes ==' -ForegroundColor Cyan
 $dnsMissing  = @()  # no A record at all
 $dnsNotProxy = @()  # has A records but not Cloudflare anycast (not proxied / not pointing to tunnel)
 $dnsZombies  = @()  # cloudflared mis-routed to the wrong zone (creates a literal "x.y.z.wrongzone" record)
+$tlsFail     = @()  # DNS is fine but CF edge has no SSL cert yet (separate sub-zone, Universal SSL pending)
 foreach ($hostname in $Routes.Keys) {
     Write-Host "  -> $hostname"
 
@@ -258,14 +279,20 @@ foreach ($hostname in $Routes.Keys) {
                     $cfHit = $true; break
                 }
             }
-            if (-not $cfHit) { $dnsNotProxy += $hostname }
+            if (-not $cfHit) {
+                $dnsNotProxy += $hostname
+            } elseif (-not (Test-EdgeTls $hostname)) {
+                # DNS resolves to CF anycast but the TLS handshake fails -> the
+                # edge cert for this hostname is not live yet.
+                $tlsFail += $hostname
+            }
         }
     } catch {
         Write-Warning "DoH verify failed for ${hostname}: $($_.Exception.Message)"
     }
 }
 
-if ($dnsMissing.Count + $dnsNotProxy.Count + $dnsZombies.Count -gt 0) {
+if ($dnsMissing.Count + $dnsNotProxy.Count + $dnsZombies.Count + $tlsFail.Count -gt 0) {
     Write-Warning ''
     Write-Warning '=== DNS verification problems ==='
 }
@@ -300,6 +327,19 @@ if ($dnsZombies.Count -gt 0) {
     Write-Warning '  2) dashboard -> the correct parent zone (e.g. ccwu.cc) -> DNS -> Records'
     Write-Warning "     -> add CNAME  Name=<subdomain>  Target=$uuid.cfargotunnel.com  Proxied"
     Write-Warning '  3) Or remove the sub-zone from your account if you do not need it as a separate zone.'
+}
+
+if ($tlsFail.Count -gt 0) {
+    Write-Warning ''
+    Write-Warning 'DNS is correct but the Cloudflare edge cannot complete a TLS handshake:'
+    $tlsFail | ForEach-Object { Write-Warning "    $_" }
+    Write-Warning 'Symptom: browser shows ERR_EMPTY_RESPONSE (connection opens, zero bytes back).'
+    Write-Warning 'Cause: this hostname is in its OWN Cloudflare zone whose Universal SSL'
+    Write-Warning '       certificate has not been issued/deployed yet (the tunnel itself is fine).'
+    Write-Warning 'Fix (recommended): delete that separate zone and instead add the record'
+    Write-Warning "       in the parent zone (e.g. ccwu.cc), reusing its already-live cert."
+    Write-Warning '     Or: dashboard -> that zone -> SSL/TLS -> Edge Certificates -> wait for'
+    Write-Warning '       Universal SSL to go Active (minutes to ~24h), or toggle it to retrigger.'
 }
 
 # ----- write config.yml -----
