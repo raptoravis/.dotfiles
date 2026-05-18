@@ -315,6 +315,16 @@ if command -v git >/dev/null 2>&1; then
     warn "  html-ppt-skill: SKILL.md missing after clone"
   fi
 
+  # 3c. anysearch-skill (single SKILL.md at repo root, no build step)
+  #     https://anysearch.com/install/skill-install.md
+  log "Installing anysearch skill for claude / codex / opencode"
+  clone_or_pull https://github.com/anysearch-ai/anysearch-skill "$PLUGIN_CACHE/anysearch-skill"
+  if [[ -f "$PLUGIN_CACHE/anysearch-skill/SKILL.md" ]]; then
+    link_skill "$PLUGIN_CACHE/anysearch-skill" anysearch
+  else
+    warn "  anysearch-skill: SKILL.md missing after clone"
+  fi
+
   # 4. understand-anything (upstream provides a multi-target installer)
   log "Installing understand-anything for claude / codex / opencode"
   if command -v curl >/dev/null 2>&1; then

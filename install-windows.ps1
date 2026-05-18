@@ -375,6 +375,17 @@ if (Test-Cmd git) {
         Write-Warn2 '  html-ppt-skill: SKILL.md missing after clone'
     }
 
+    # 3c. anysearch-skill (single SKILL.md at repo root, no build step)
+    #     https://anysearch.com/install/skill-install.md
+    Write-Step 'Installing anysearch skill for claude / codex / opencode'
+    $anysearchRepo = Join-Path $PluginCache 'anysearch-skill'
+    CloneOrPull 'https://github.com/anysearch-ai/anysearch-skill' $anysearchRepo
+    if (Test-Path (Join-Path $anysearchRepo 'SKILL.md')) {
+        LinkSkillToRoots $anysearchRepo 'anysearch'
+    } else {
+        Write-Warn2 '  anysearch-skill: SKILL.md missing after clone'
+    }
+
     # 4. understand-anything (upstream multi-target installer; bash required)
     #    Upstream uses `ln -sfn` per skill. On Git Bash for Windows, ln -s
     #    silently degrades to a copy unless MSYS=winsymlinks:nativestrict is
