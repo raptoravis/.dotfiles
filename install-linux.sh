@@ -355,6 +355,41 @@ if command -v git >/dev/null 2>&1; then
     warn "  frontend-design: SKILL.md not found in upstream"
   fi
 
+  # 6a. nextlevelbuilder/ui-ux-pro-max-skill — multi-skill plugin monorepo
+  log "Installing ui-ux-pro-max skills (cross-CLI)"
+  clone_or_pull https://github.com/nextlevelbuilder/ui-ux-pro-max-skill "$PLUGIN_CACHE/ui-ux-pro-max-skill"
+  link_skills_from "$PLUGIN_CACHE/ui-ux-pro-max-skill"
+
+  # 6b. vercel-labs/agent-skills — pick web-design-guidelines only
+  log "Installing web-design-guidelines skill (cross-CLI)"
+  clone_or_pull https://github.com/vercel-labs/agent-skills "$PLUGIN_CACHE/vercel-agent-skills"
+  if [[ -f "$PLUGIN_CACHE/vercel-agent-skills/skills/web-design-guidelines/SKILL.md" ]]; then
+    link_skill "$PLUGIN_CACHE/vercel-agent-skills/skills/web-design-guidelines" web-design-guidelines
+  else
+    warn "  web-design-guidelines: SKILL.md not found in upstream"
+  fi
+
+  # 6c. anthropics/skills — official monorepo; pick skill-creator, mcp-builder, webapp-testing
+  log "Installing anthropics/skills subset (skill-creator / mcp-builder / webapp-testing)"
+  clone_or_pull https://github.com/anthropics/skills "$PLUGIN_CACHE/anthropics-skills"
+  for s in skill-creator mcp-builder webapp-testing; do
+    if [[ -f "$PLUGIN_CACHE/anthropics-skills/skills/$s/SKILL.md" ]]; then
+      link_skill "$PLUGIN_CACHE/anthropics-skills/skills/$s" "$s"
+    else
+      warn "  anthropics/skills/$s: SKILL.md not found"
+    fi
+  done
+
+  # 6d. upstash/context7 — primarily an MCP server; also ships a find-docs SKILL.md.
+  #     MCP registration happens after the claude/codex CLI install (further down).
+  log "Installing context7 find-docs skill (cross-CLI)"
+  clone_or_pull https://github.com/upstash/context7 "$PLUGIN_CACHE/context7"
+  if [[ -f "$PLUGIN_CACHE/context7/skills/find-docs/SKILL.md" ]]; then
+    link_skill "$PLUGIN_CACHE/context7/skills/find-docs" find-docs
+  else
+    warn "  context7/find-docs: SKILL.md not found in upstream"
+  fi
+
   # 7. (was: ruvnet/ruflo — clone + skill scan)
   #    ruflo is now installed as an npm CLI in the npm-globals block below to
   #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
@@ -459,6 +494,10 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing ruflo (multi-agent orchestrator) via npm"
     npm install -g ruflo@latest 2>/dev/null || warn "  ruflo install failed"
   fi
+  if ! command -v claude-mem >/dev/null 2>&1; then
+    log "Installing claude-mem via npm"
+    npm install -g claude-mem 2>/dev/null || warn "  claude-mem install failed"
+  fi
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
@@ -471,6 +510,19 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v opencode >/dev/null 2>&1; then
     log "Installing OpenCode CLI (opencode-ai)"
     npm install -g opencode-ai 2>/dev/null || warn "  opencode install failed"
+  fi
+
+  # Register upstash/context7 as an MCP server for Claude Code & Codex.
+  # Idempotent: `mcp add` errors if already registered, which we swallow.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering context7 MCP for Claude Code (idempotent)"
+    claude mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
+      || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering context7 MCP for Codex (idempotent)"
+    codex mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
+      || log "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 else
   warn "npm not on PATH -- skipping npm-based CLI installs (apt nodejs may be too old; need Node 18+)"

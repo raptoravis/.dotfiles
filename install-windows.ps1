@@ -432,6 +432,48 @@ if (Test-Cmd git) {
         Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
     }
 
+    # 6a. nextlevelbuilder/ui-ux-pro-max-skill — multi-skill plugin monorepo
+    Write-Step 'Installing ui-ux-pro-max skills (cross-CLI)'
+    $uiUxRepo = Join-Path $PluginCache 'ui-ux-pro-max-skill'
+    CloneOrPull 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill' $uiUxRepo
+    LinkSkillsFrom $uiUxRepo
+
+    # 6b. vercel-labs/agent-skills — pick web-design-guidelines only
+    Write-Step 'Installing web-design-guidelines skill (cross-CLI)'
+    $vercelRepo = Join-Path $PluginCache 'vercel-agent-skills'
+    CloneOrPull 'https://github.com/vercel-labs/agent-skills' $vercelRepo
+    $wdgSrc = Join-Path $vercelRepo 'skills\web-design-guidelines'
+    if (Test-Path (Join-Path $wdgSrc 'SKILL.md')) {
+        LinkSkillToRoots $wdgSrc 'web-design-guidelines'
+    } else {
+        Write-Warn2 '  web-design-guidelines: SKILL.md not found in upstream'
+    }
+
+    # 6c. anthropics/skills — official monorepo; pick skill-creator, mcp-builder, webapp-testing
+    Write-Step 'Installing anthropics/skills subset (skill-creator / mcp-builder / webapp-testing)'
+    $anthroRepo = Join-Path $PluginCache 'anthropics-skills'
+    CloneOrPull 'https://github.com/anthropics/skills' $anthroRepo
+    foreach ($s in @('skill-creator', 'mcp-builder', 'webapp-testing')) {
+        $src = Join-Path $anthroRepo "skills\$s"
+        if (Test-Path (Join-Path $src 'SKILL.md')) {
+            LinkSkillToRoots $src $s
+        } else {
+            Write-Warn2 "  anthropics/skills/${s}: SKILL.md not found"
+        }
+    }
+
+    # 6d. upstash/context7 — primarily an MCP server; also ships a find-docs SKILL.md.
+    #     MCP registration happens after the claude/codex CLI install (further down).
+    Write-Step 'Installing context7 find-docs skill (cross-CLI)'
+    $ctx7Repo = Join-Path $PluginCache 'context7'
+    CloneOrPull 'https://github.com/upstash/context7' $ctx7Repo
+    $ctx7Skill = Join-Path $ctx7Repo 'skills\find-docs'
+    if (Test-Path (Join-Path $ctx7Skill 'SKILL.md')) {
+        LinkSkillToRoots $ctx7Skill 'find-docs'
+    } else {
+        Write-Warn2 '  context7/find-docs: SKILL.md not found in upstream'
+    }
+
     # 7. (was: ruvnet/ruflo — clone + skill scan)
     #    ruflo is now installed as an npm CLI in the npm-globals block below to
     #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
@@ -538,6 +580,11 @@ if (Test-Cmd npm) {
         npm install -g 'ruflo@latest'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  ruflo install failed' }
     }
+    if (-not (Test-Cmd claude-mem)) {
+        Write-Step 'Installing claude-mem via npm'
+        npm install -g claude-mem
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude-mem install failed' }
+    }
 
     # AI coding CLIs (Claude Code / Codex / OpenCode)
     if (-not (Test-Cmd claude)) {
@@ -554,6 +601,19 @@ if (Test-Cmd npm) {
         Write-Step 'Installing OpenCode CLI (opencode-ai)'
         npm install -g 'opencode-ai'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode install failed' }
+    }
+
+    # Register upstash/context7 as an MCP server for Claude Code & Codex.
+    # Idempotent: `mcp add` errors if already registered, which we swallow.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering context7 MCP for Claude Code (idempotent)'
+        claude mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
+    }
+    if (Test-Cmd codex) {
+        Write-Step 'Registering context7 MCP for Codex (idempotent)'
+        codex mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 } else {
     Write-Warn2 'npm not on PATH -- skipping npm-based CLI installs (open a new shell after scoop installs nodejs-lts, then re-run)'
