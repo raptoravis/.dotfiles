@@ -380,6 +380,12 @@ config.use_fancy_tab_bar = true
 -- Keys
 config.enable_kitty_keyboard = false
 config.disable_default_key_bindings = false
+-- Treat Alt as a clean Meta modifier instead of routing it through OS key
+-- composition. Without this (Windows default = true) Alt+<key> combos like
+-- Claude Code's Alt+V (paste image from clipboard) may not reach the app as
+-- Meta+V. Trade-off: Alt can no longer type composed/accented characters.
+config.send_composed_key_when_left_alt_is_pressed = false
+config.send_composed_key_when_right_alt_is_pressed = false
 config.keys = K.keybinds()
 
 -- Events
