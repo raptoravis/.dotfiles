@@ -165,5 +165,6 @@
   "tui": "default",
   "autoMemoryEnabled": true,
   "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
   "verbose": true
 }
