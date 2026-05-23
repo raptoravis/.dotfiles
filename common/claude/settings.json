@@ -135,7 +135,8 @@
   "enabledPlugins": {
     "claude-hud@claude-hud": true,
     "handoff@handoff-marketplace": true,
-    "codex@openai-codex": true
+    "codex@openai-codex": true,
+    "claude-code-setup@anthropics-official": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -156,6 +157,13 @@
       "source": {
         "source": "github",
         "repo": "openai/codex-plugin-cc"
+      },
+      "autoUpdate": true
+    },
+    "anthropics-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
       },
       "autoUpdate": true
     }
