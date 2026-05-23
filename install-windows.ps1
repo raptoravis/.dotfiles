@@ -546,6 +546,44 @@ if (Test-Cmd git) {
 }
 
 # ---------------------------------------------------------------------------
+# 7a-bis) Claude Code: defaultShell -> PowerShell (Windows only)
+#     common/claude/settings.json is shared across mac/linux/windows via dotter,
+#     so Windows-specific shell selection goes into settings.local.json (Claude
+#     Code's machine-local overlay). Prefer pwsh (PowerShell 7+) when present,
+#     fall back to Windows PowerShell 5.1.
+# ---------------------------------------------------------------------------
+Write-Step 'Configuring Claude Code defaultShell -> PowerShell'
+$claudeDir = Join-Path $env:USERPROFILE '.claude'
+if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
+$claudeLocal = Join-Path $claudeDir 'settings.local.json'
+$pwshCmd = Get-Command pwsh -ErrorAction SilentlyContinue
+if ($pwshCmd) {
+    $shellPath = $pwshCmd.Source
+} else {
+    $shellPath = (Get-Command powershell -ErrorAction SilentlyContinue).Source
+}
+if ($shellPath) {
+    $localObj = if (Test-Path $claudeLocal) {
+        try { Get-Content $claudeLocal -Raw | ConvertFrom-Json } catch { [pscustomobject]@{} }
+    } else { [pscustomobject]@{} }
+    if (-not $localObj) { $localObj = [pscustomobject]@{} }
+    $current = $localObj.PSObject.Properties['defaultShell']
+    if ($current -and $current.Value -eq $shellPath) {
+        Write-Host "  defaultShell already set to $shellPath"
+    } else {
+        if ($current) {
+            $localObj.defaultShell = $shellPath
+        } else {
+            $localObj | Add-Member -NotePropertyName defaultShell -NotePropertyValue $shellPath -Force
+        }
+        ($localObj | ConvertTo-Json -Depth 32) | Set-Content -Path $claudeLocal -Encoding UTF8
+        Write-Host "  set defaultShell = $shellPath in $claudeLocal"
+    }
+} else {
+    Write-Warn2 '  neither pwsh nor powershell found on PATH — skipped'
+}
+
+# ---------------------------------------------------------------------------
 # 7b) Claude Code companion CLIs (rtk hook)
 #     Claude-specific marketplace plugins are declared in
 #     common/claude/settings.json. Portable skills are installed above for all
