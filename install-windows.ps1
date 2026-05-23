@@ -253,15 +253,6 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
-# Register graphify skill for every supported coding CLI present on this machine.
-if (Test-Cmd graphify) {
-    foreach ($platform in @('claude', 'codex', 'opencode')) {
-        Write-Step "Registering graphify skill for $platform"
-        graphify install --platform $platform 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  graphify install --platform $platform failed" }
-    }
-}
-
 # ---------------------------------------------------------------------------
 # 7b-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -623,6 +614,16 @@ if (Test-Cmd npm) {
         npm install -g claude-mem
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude-mem install failed' }
     }
+    if (-not (Test-Cmd codegraph)) {
+        Write-Step 'Installing codegraph via npm'
+        npm install -g '@colbymchenry/codegraph'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codegraph install failed' }
+    }
+    if (Test-Cmd codegraph) {
+        Write-Step 'Registering codegraph with claude / codex / opencode'
+        codegraph install --target=claude,codex,opencode --yes 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph install failed (run 'codegraph install' interactively)" }
+    }
 
     # AI coding CLIs (Claude Code / Codex / OpenCode)
     if (-not (Test-Cmd claude)) {
@@ -864,18 +865,16 @@ if (-not (Test-Path $SessionsDir)) {
 Write-Step 'Done. Open a new terminal to pick up the environment.'
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' graphify: per-project setup' -ForegroundColor Cyan
+Write-Host ' codegraph: per-project setup' -ForegroundColor Cyan
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ' For each project where you want a knowledge graph, run:'
 Write-Host ''
 Write-Host '   cd <your-project>'
-Write-Host '   graphify hook install     # auto-rebuild on commit/checkout'
-Write-Host '   graphify update .         # initial AST build (no API cost)'
+Write-Host '   codegraph init -i         # interactive: index + register MCP'
+Write-Host '   codegraph sync            # incremental update'
 Write-Host ''
-Write-Host ' Then in your AI coding CLI (any of these works):'
-Write-Host '   claude     # Claude Code     -> /graphify .'
-Write-Host '   codex      # OpenAI Codex    -> /graphify .'
-Write-Host '   opencode   # OpenCode        -> /graphify .'
+Write-Host ' Agents call codegraph_search / _context / _explore via MCP.'
+Write-Host ' Output lives in .codegraph/ (gitignored).'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan

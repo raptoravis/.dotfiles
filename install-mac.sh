@@ -200,14 +200,6 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
-if command -v graphify >/dev/null 2>&1; then
-  for platform in claude codex opencode; do
-    log "Registering graphify skill for $platform"
-    graphify install --platform "$platform" >/dev/null 2>&1 \
-      || warn "  graphify install --platform $platform failed"
-  done
-fi
-
 # ---------------------------------------------------------------------------
 # 7a-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -476,6 +468,15 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing claude-mem via npm"
     npm install -g claude-mem 2>/dev/null || warn "  claude-mem install failed"
   fi
+  if ! command -v codegraph >/dev/null 2>&1; then
+    log "Installing codegraph via npm"
+    npm install -g @colbymchenry/codegraph 2>/dev/null || warn "  codegraph install failed"
+  fi
+  if command -v codegraph >/dev/null 2>&1; then
+    log "Registering codegraph with claude / codex / opencode"
+    codegraph install --target=claude,codex,opencode --yes >/dev/null 2>&1 \
+      || warn "  codegraph install failed (run 'codegraph install' interactively)"
+  fi
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
@@ -621,18 +622,16 @@ fi
 log "Done. Open a new terminal to pick up the environment."
 echo
 echo "============================================================"
-echo " graphify: per-project setup"
+echo " codegraph: per-project setup"
 echo "============================================================"
 echo " For each project where you want a knowledge graph, run:"
 echo
 echo "   cd <your-project>"
-echo "   graphify hook install     # auto-rebuild on commit/checkout"
-echo "   graphify update .         # initial AST build (no API cost)"
+echo "   codegraph init -i         # interactive: index + register MCP"
+echo "   codegraph sync            # incremental update"
 echo
-echo " Then in your AI coding CLI (any of these works):"
-echo "   claude     # Claude Code     -> /graphify ."
-echo "   codex      # OpenAI Codex    -> /graphify ."
-echo "   opencode   # OpenCode        -> /graphify ."
+echo " Agents call codegraph_search / _context / _explore via MCP."
+echo " Output lives in .codegraph/ (gitignored)."
 echo "============================================================"
 echo
 echo "============================================================"
