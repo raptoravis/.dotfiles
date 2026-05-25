@@ -267,8 +267,10 @@ if (Test-Cmd git) {
     $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     $CodexSkills = Join-Path $CodexHome 'skills'
     $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
+    $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
+    $ReasonixSkills = Join-Path $ReasonixHome 'skills'
     $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $PluginCache | Out-Null
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PluginCache | Out-Null
 
     # Track what THIS run installs so -Clean can diff against on-disk state.
     $InstalledSkills  = @{}
@@ -289,7 +291,7 @@ if (Test-Cmd git) {
     }
 
     function LinkSkillToRoots($src, $name) {
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
             $dest = Join-Path $root $name
             if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
@@ -500,7 +502,7 @@ if (Test-Cmd git) {
         Write-Step 'Clean mode: removing skills / plugins / codex prompts no longer managed by this script'
 
         # 1) Skill symlinks pointing into $PluginCache that are not in this run's set.
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
             if (-not (Test-Path $root)) { continue }
             Get-ChildItem -Force -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
                 if ($_.LinkType -ne 'SymbolicLink' -and $_.LinkType -ne 'Junction') { return }

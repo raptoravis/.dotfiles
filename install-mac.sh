@@ -213,8 +213,9 @@ if command -v git >/dev/null 2>&1; then
   CLAUDE_SKILLS="$HOME/.claude/skills"
   CODEX_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills"
   OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
+  REASONIX_SKILLS="${REASONIX_HOME:-$HOME/.reasonix}/skills"
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
-  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$PLUGIN_CACHE"
+  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
 
   declare -A INSTALLED_SKILLS=() INSTALLED_PLUGINS=() INSTALLED_PROMPTS=()
 
@@ -234,6 +235,7 @@ if command -v git >/dev/null 2>&1; then
     ln -sfn "$src" "$CLAUDE_SKILLS/$name"
     ln -sfn "$src" "$CODEX_SKILLS/$name"
     ln -sfn "$src" "$OPENCODE_SKILLS/$name"
+    ln -sfn "$src" "$REASONIX_SKILLS/$name"
     INSTALLED_SKILLS["$name"]=1
   }
 
@@ -305,7 +307,7 @@ if command -v git >/dev/null 2>&1; then
   if command -v curl >/dev/null 2>&1; then
     # Defensive: remove any stale real-dir residue under skill roots so
     # upstream's `ln -sfn` doesn't fail with "cannot overwrite directory".
-    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS"; do
+    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS"; do
       if [[ -d "$root" ]]; then
         for d in "$root"/understand*; do
           [[ -d "$d" && ! -L "$d" ]] && rm -rf "$d"
@@ -398,7 +400,7 @@ if command -v git >/dev/null 2>&1; then
   if (( CLEAN )); then
     log "Clean mode: removing skills / plugins / codex prompts no longer managed by this script"
 
-    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS"; do
+    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS"; do
       [[ -d "$root" ]] || continue
       for entry in "$root"/*; do
         [[ -L "$entry" ]] || continue
