@@ -512,6 +512,10 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing OpenCode CLI (opencode-ai)"
     npm install -g opencode-ai 2>/dev/null || warn "  opencode install failed"
   fi
+  if ! command -v reasonix >/dev/null 2>&1; then
+    log "Installing DeepSeek-Reasonix CLI (reasonix)"
+    npm install -g reasonix 2>/dev/null || warn "  reasonix install failed (requires Node.js >= 22)"
+  fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
