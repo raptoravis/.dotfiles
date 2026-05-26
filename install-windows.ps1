@@ -253,15 +253,6 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
-# Register graphify skill for every supported coding CLI present on this machine.
-if (Test-Cmd graphify) {
-    foreach ($platform in @('claude', 'codex', 'opencode')) {
-        Write-Step "Registering graphify skill for $platform"
-        graphify install --platform $platform 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  graphify install --platform $platform failed" }
-    }
-}
-
 # ---------------------------------------------------------------------------
 # 7b-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -634,6 +625,25 @@ if (Test-Cmd npm) {
         Write-Step 'Registering codegraph with claude / codex / opencode'
         codegraph install --target=claude,codex,opencode --yes 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph install failed (run 'codegraph install' interactively)" }
+
+        # reasonix isn't a known codegraph target — register manually in its config.json
+        $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
+        if (Test-Path $ReasonixCfg) {
+            Write-Step 'Registering codegraph MCP with reasonix'
+            try {
+                $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
+                if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
+                    $cfg | Add-Member -NotePropertyName mcp -NotePropertyValue @() -Force
+                }
+                $existing = @($cfg.mcp) | Where-Object { $_ -like 'codegraph=*' }
+                if (-not $existing) {
+                    $cfg.mcp = @($cfg.mcp) + 'codegraph=codegraph serve --mcp'
+                    ($cfg | ConvertTo-Json -Depth 20) | Set-Content $ReasonixCfg -Encoding utf8
+                }
+            } catch {
+                Write-Warn2 '  failed to register codegraph with reasonix'
+            }
+        }
     }
 
     # AI coding CLIs (Claude Code / Codex / OpenCode)
@@ -891,21 +901,6 @@ Write-Host '   codegraph sync            # incremental update'
 Write-Host ''
 Write-Host ' Agents call codegraph_search / _context / _explore via MCP.'
 Write-Host ' Output lives in .codegraph/ (gitignored).'
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ''
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' graphify: per-project setup' -ForegroundColor Cyan
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' For each project where you want a knowledge graph, run:'
-Write-Host ''
-Write-Host '   cd <your-project>'
-Write-Host '   graphify hook install     # auto-rebuild on commit/checkout'
-Write-Host '   graphify update .         # initial AST build (no API cost)'
-Write-Host ''
-Write-Host ' Then in your AI coding CLI (any of these works):'
-Write-Host '   claude     # Claude Code     -> /graphify .'
-Write-Host '   codex      # OpenAI Codex    -> /graphify .'
-Write-Host '   opencode   # OpenCode        -> /graphify .'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan

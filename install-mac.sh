@@ -200,14 +200,6 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
-if command -v graphify >/dev/null 2>&1; then
-  for platform in claude codex opencode; do
-    log "Registering graphify skill for $platform"
-    graphify install --platform "$platform" >/dev/null 2>&1 \
-      || warn "  graphify install --platform $platform failed"
-  done
-fi
-
 # ---------------------------------------------------------------------------
 # 7a-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -486,6 +478,20 @@ if command -v npm >/dev/null 2>&1; then
     log "Registering codegraph with claude / codex / opencode"
     codegraph install --target=claude,codex,opencode --yes >/dev/null 2>&1 \
       || warn "  codegraph install failed (run 'codegraph install' interactively)"
+    # reasonix isn't a known codegraph target — register manually in its config.json
+    REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
+    if [ -f "$REASONIX_CFG" ] && command -v node >/dev/null 2>&1; then
+      log "Registering codegraph MCP with reasonix"
+      REASONIX_CFG="$REASONIX_CFG" node -e '
+        const fs=require("fs"), p=process.env.REASONIX_CFG;
+        const c=JSON.parse(fs.readFileSync(p,"utf8"));
+        c.mcp=Array.isArray(c.mcp)?c.mcp:[];
+        if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith("codegraph="))){
+          c.mcp.push("codegraph=codegraph serve --mcp");
+          fs.writeFileSync(p, JSON.stringify(c,null,2)+"\n");
+        }
+      ' || warn "  failed to register codegraph with reasonix"
+    fi
   fi
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
@@ -646,21 +652,6 @@ echo "   codegraph sync            # incremental update"
 echo
 echo " Agents call codegraph_search / _context / _explore via MCP."
 echo " Output lives in .codegraph/ (gitignored)."
-echo "============================================================"
-echo
-echo "============================================================"
-echo " graphify: per-project setup"
-echo "============================================================"
-echo " For each project where you want a knowledge graph, run:"
-echo
-echo "   cd <your-project>"
-echo "   graphify hook install     # auto-rebuild on commit/checkout"
-echo "   graphify update .         # initial AST build (no API cost)"
-echo
-echo " Then in your AI coding CLI (any of these works):"
-echo "   claude     # Claude Code     -> /graphify ."
-echo "   codex      # OpenAI Codex    -> /graphify ."
-echo "   opencode   # OpenCode        -> /graphify ."
 echo "============================================================"
 echo
 echo "============================================================"
