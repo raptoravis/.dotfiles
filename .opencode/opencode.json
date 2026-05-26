@@ -1,3 +1,5 @@
 {
-  "plugin": []
+  "plugin": [
+    ".opencode/plugins/graphify.js"
+  ]
 }

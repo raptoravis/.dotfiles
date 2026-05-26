@@ -200,6 +200,14 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
+if command -v graphify >/dev/null 2>&1; then
+  for platform in claude codex opencode; do
+    log "Registering graphify skill for $platform"
+    graphify install --platform "$platform" >/dev/null 2>&1 \
+      || warn "  graphify install --platform $platform failed"
+  done
+fi
+
 # ---------------------------------------------------------------------------
 # 7a-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -638,6 +646,21 @@ echo "   codegraph sync            # incremental update"
 echo
 echo " Agents call codegraph_search / _context / _explore via MCP."
 echo " Output lives in .codegraph/ (gitignored)."
+echo "============================================================"
+echo
+echo "============================================================"
+echo " graphify: per-project setup"
+echo "============================================================"
+echo " For each project where you want a knowledge graph, run:"
+echo
+echo "   cd <your-project>"
+echo "   graphify hook install     # auto-rebuild on commit/checkout"
+echo "   graphify update .         # initial AST build (no API cost)"
+echo
+echo " Then in your AI coding CLI (any of these works):"
+echo "   claude     # Claude Code     -> /graphify ."
+echo "   codex      # OpenAI Codex    -> /graphify ."
+echo "   opencode   # OpenCode        -> /graphify ."
 echo "============================================================"
 echo
 echo "============================================================"

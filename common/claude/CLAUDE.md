@@ -21,3 +21,6 @@
 - **codegraph** — pre-indexed code knowledge graph exposed as MCP tools (`codegraph_search`, `codegraph_context`, `codegraph_explore`, `codegraph_callers`, `codegraph_impact`).
 - Activates automatically when `.codegraph/` exists in the project root. If it's missing, suggest `codegraph init -i`.
 - Prefer these MCP tools over raw Grep when answering "where is X used / what calls Y / what would change if I edit Z" — they're faster and dependency-aware.
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
