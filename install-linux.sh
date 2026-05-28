@@ -612,8 +612,13 @@ if command -v git >/dev/null 2>&1; then
       log "set git $key = $val"
     fi
   }
-  set_git user.name        raptoravis
-  set_git user.email       raptoravis@gmail.com
+  # Identity: only set from env vars; never overwrite existing values.
+  if [ -n "${GIT_USER_NAME:-}" ] && [ -z "$(git config --global --get user.name 2>/dev/null)" ]; then
+    set_git user.name "$GIT_USER_NAME"
+  fi
+  if [ -n "${GIT_USER_EMAIL:-}" ] && [ -z "$(git config --global --get user.email 2>/dev/null)" ]; then
+    set_git user.email "$GIT_USER_EMAIL"
+  fi
   set_git http.version     HTTP/1.1
   set_git http.postBuffer  524288000
   set_git core.compression 0

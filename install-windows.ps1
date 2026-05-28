@@ -728,8 +728,13 @@ function Set-GitConfigIfChanged {
         Write-Host "  set git $Key = $Value"
     }
 }
-Set-GitConfigIfChanged 'user.name'        'raptoravis'
-Set-GitConfigIfChanged 'user.email'       'raptoravis@gmail.com'
+# Identity: only set from env vars; never overwrite existing values.
+if ($env:GIT_USER_NAME -and -not (git config --global --get user.name 2>$null)) {
+    Set-GitConfigIfChanged 'user.name'  $env:GIT_USER_NAME
+}
+if ($env:GIT_USER_EMAIL -and -not (git config --global --get user.email 2>$null)) {
+    Set-GitConfigIfChanged 'user.email' $env:GIT_USER_EMAIL
+}
 Set-GitConfigIfChanged 'http.version'     'HTTP/1.1'
 Set-GitConfigIfChanged 'http.postBuffer'  '524288000'
 Set-GitConfigIfChanged 'core.longpaths'   'true'
