@@ -68,6 +68,7 @@ $Tools = @(
     'fzf', 'ripgrep', 'bat',
     'cloudflared',
     'witr',
+    'cyberduck',
     'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
@@ -891,6 +892,21 @@ $SessionsDir = Join-Path $env:USERPROFILE '.local\share\wezterm\sessions'
 if (-not (Test-Path $SessionsDir)) {
     New-Item -ItemType Directory -Path $SessionsDir -Force | Out-Null
     Write-Host "  created $SessionsDir"
+}
+
+# ---------------------------------------------------------------------------
+# 12) WinUtil (ChrisTitusTech) launcher
+#     WinUtil is a run-on-demand, admin-required GUI tool with no scoop/winget
+#     package -- upstream only ships the `irm https://christitus.com/win | iex`
+#     launch command. The `winutil` launcher lives in windows\bin (already on
+#     the user PATH from step 8); just confirm it's present.
+# ---------------------------------------------------------------------------
+$WinUtilLauncher = Join-Path $DotfilesDir 'windows\bin\winutil.bat'
+if (Test-Path $WinUtilLauncher) {
+    Write-Step 'WinUtil launcher available on PATH'
+    Write-Host '  run `winutil` (elevation prompt appears) to launch ChrisTitusTech WinUtil'
+} else {
+    Write-Warn2 "WinUtil launcher missing at $WinUtilLauncher"
 }
 
 Write-Step 'Done. Open a new terminal to pick up the environment.'

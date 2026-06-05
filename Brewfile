@@ -22,6 +22,7 @@ brew "eza"
 
 # File Management
 brew "yazi"
+cask "cyberduck"
 
 # Git
 brew "lazygit"
