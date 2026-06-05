@@ -146,7 +146,8 @@
     "handoff@handoff-marketplace": true,
     "codex@openai-codex": true,
     "claude-code-setup@anthropics-official": true,
-    "code-simplifier@anthropics-official": true
+    "code-simplifier@anthropics-official": true,
+    "yunxing@yunxing": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -176,6 +177,12 @@
         "repo": "anthropics/claude-plugins-official"
       },
       "autoUpdate": true
+    },
+    "yunxing": {
+      "source": {
+        "source": "github",
+        "repo": "raptoravis/yunxing"
+      }
     }
   },
   "alwaysThinkingEnabled": true,
