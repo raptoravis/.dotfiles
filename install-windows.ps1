@@ -112,6 +112,28 @@ if (Test-Path $ScoopFile) {
 }
 
 # ---------------------------------------------------------------------------
+# 4b) winget apps (GUI apps not carried in the scoop set)
+#     PowerToys ships via winget (App Installer, preinstalled on Windows 11).
+# ---------------------------------------------------------------------------
+if (Test-Cmd winget) {
+    Write-Step 'Installing winget apps'
+    $WingetApps = @('Microsoft.PowerToys')
+    foreach ($id in $WingetApps) {
+        $installed = winget list --id $id --source winget --accept-source-agreements 2>$null |
+            Select-String -SimpleMatch $id -Quiet
+        if ($installed) {
+            Write-Host "  $id already installed"
+        } else {
+            winget install --id $id --source winget --silent `
+                --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed: $id" }
+        }
+    }
+} else {
+    Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
+}
+
+# ---------------------------------------------------------------------------
 # 5) Rust toolchain (rustup-init silent install)
 # ---------------------------------------------------------------------------
 if (-not (Test-Cmd rustup)) {
