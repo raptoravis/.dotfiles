@@ -282,7 +282,7 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
 # 7b-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills, understand-anything
+#       handoff, andrej-karpathy-skills
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) only run
 #     inside Claude Code and are not ported here.
 # ---------------------------------------------------------------------------
@@ -402,38 +402,6 @@ if (Test-Cmd git) {
         LinkSkillToRoots $anysearchRepo 'anysearch'
     } else {
         Write-Warn2 '  anysearch-skill: SKILL.md missing after clone'
-    }
-
-    # 4. understand-anything (upstream multi-target installer; bash required)
-    #    Upstream uses `ln -sfn` per skill. On Git Bash for Windows, ln -s
-    #    silently degrades to a copy unless MSYS=winsymlinks:nativestrict is
-    #    set AND the shell can create native symlinks (Developer Mode or
-    #    admin). Without that, the second run sees real dirs at the targets
-    #    and errors with "cannot overwrite directory". Force native symlink
-    #    mode and clean stale real-dir residue before invoking upstream.
-    if (Test-Cmd bash) {
-        Write-Step 'Installing understand-anything for claude / codex / opencode'
-        foreach ($skillsRoot in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills)) {
-            if (Test-Path $skillsRoot) {
-                Get-ChildItem $skillsRoot -Directory -Filter 'understand*' -ErrorAction SilentlyContinue | ForEach-Object {
-                    if (-not $_.LinkType) {
-                        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-                    }
-                }
-            }
-        }
-        $prevMsys = $env:MSYS
-        $env:MSYS = 'winsymlinks:nativestrict'
-        try {
-            foreach ($tgt in @('claude', 'codex', 'opencode')) {
-                bash -c "curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh | bash -s $tgt"
-                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  understand-anything install failed for $tgt (need Developer Mode or admin shell for native symlinks)" }
-            }
-        } finally {
-            if ($null -eq $prevMsys) { Remove-Item Env:MSYS -ErrorAction SilentlyContinue } else { $env:MSYS = $prevMsys }
-        }
-    } else {
-        Write-Warn2 '  bash not on PATH -- skip understand-anything (run install-linux.sh inside WSL to set it up there)'
     }
 
     # 5. anthropics/claude-plugins-official monorepo — pick portable subsets

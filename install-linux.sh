@@ -214,7 +214,7 @@ fi
 # 8a-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
 #     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills, understand-anything
+#       handoff, andrej-karpathy-skills
 #     Claude-Code-specific bits (slash /commands, hooks/hooks.json) are not
 #     ported — they only run inside Claude Code.
 # ---------------------------------------------------------------------------
@@ -317,24 +317,6 @@ if command -v git >/dev/null 2>&1; then
     link_skill "$PLUGIN_CACHE/anysearch-skill" anysearch
   else
     warn "  anysearch-skill: SKILL.md missing after clone"
-  fi
-
-  # 4. understand-anything (upstream provides a multi-target installer)
-  log "Installing understand-anything for claude / codex / opencode"
-  if command -v curl >/dev/null 2>&1; then
-    # Defensive: remove any stale real-dir residue under skill roots so
-    # upstream's `ln -sfn` doesn't fail with "cannot overwrite directory".
-    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS"; do
-      if [[ -d "$root" ]]; then
-        for d in "$root"/understand*; do
-          [[ -d "$d" && ! -L "$d" ]] && rm -rf "$d"
-        done
-      fi
-    done
-    for tgt in claude codex opencode; do
-      curl -fsSL https://raw.githubusercontent.com/Lum1104/Understand-Anything/main/install.sh \
-        | bash -s "$tgt" || warn "  understand-anything install failed for $tgt"
-    done
   fi
 
   # 5. anthropics/claude-plugins-official monorepo — pick portable subsets

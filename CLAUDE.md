@@ -91,7 +91,7 @@ stylua --check common/nvim/                            # lua (config: common/lin
 
 ## Cross-CLI agent skills (non-obvious — read before adding skills)
 
-`install-{mac,linux,windows}` install a curated set of portable skills (handoff, karpathy, excalidraw-diagram, html-ppt, frontend-design, understand-anything) and link each into **all four** CLI roots:
+`install-{mac,linux,windows}` install a curated set of portable skills (handoff, karpathy, excalidraw-diagram, html-ppt, frontend-design) and link each into **all four** CLI roots:
 
 - `~/.agents/skills/`
 - `~/.claude/skills/`
