@@ -41,10 +41,10 @@
       "Read(**/*id_rsa*)",
       "Bash(sudo *)",
       "Bash(rm -rf /*)",
-      "Bash(npm publish *)",
-      "Bash(docker push *)",
-      "Bash(wrangler deploy *)",
-      "Bash(terraform apply *)",
+      // "Bash(npm publish *)",
+      // "Bash(docker push *)",
+      // "Bash(wrangler deploy *)",
+      // "Bash(terraform apply *)",
       "Bash(kubectl delete *)"
     ],
     "defaultMode": "bypassPermissions",
@@ -182,5 +182,6 @@
   "autoMemoryEnabled": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
-  "verbose": true
+  "verbose": true,
+  "model": "sonnet"
 }
