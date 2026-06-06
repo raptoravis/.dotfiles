@@ -112,12 +112,14 @@ if (Test-Path $ScoopFile) {
 }
 
 # ---------------------------------------------------------------------------
-# 4b) winget apps (GUI apps not carried in the scoop set)
-#     PowerToys ships via winget (App Installer, preinstalled on Windows 11).
+# 4b) winget apps (not carried in the scoop set)
+#     PowerToys + Coreutils ship via winget (App Installer, preinstalled on
+#     Windows 11). Microsoft.Coreutils is MS's port of GNU coreutils:
+#     https://github.com/microsoft/coreutils
 # ---------------------------------------------------------------------------
 if (Test-Cmd winget) {
     Write-Step 'Installing winget apps'
-    $WingetApps = @('Microsoft.PowerToys')
+    $WingetApps = @('Microsoft.PowerToys', 'Microsoft.Coreutils')
     foreach ($id in $WingetApps) {
         $installed = winget list --id $id --source winget --accept-source-agreements 2>$null |
             Select-String -SimpleMatch $id -Quiet
