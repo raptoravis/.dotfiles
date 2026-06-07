@@ -32,10 +32,6 @@
       "Bash(powershell -NoProfile -Command \"Get-Process -Name wezterm-gui -ErrorAction SilentlyContinue | Select-Object Id,ProcessName\")"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./secrets/**)",
-      "Read(./credentials.*)",
-      "Read(./.credentials.*)",
       "Read(**/*.pem)",
       "Read(**/*id_rsa*)",
       "Bash(sudo *)",
