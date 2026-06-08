@@ -1,6 +1,6 @@
 {
   "_note": "showEffortLevel kept false: claude-hud 0.1.0 crashes on Claude Code's object-shaped stdin.effort (effort.js formatEffort assumes a string). Re-enable once upstream guards non-string input.",
-  "language": "zh",
+  "language": "en",
   "lineLayout": "expanded",
   "showSeparators": false,
   "pathLevels": 2,
