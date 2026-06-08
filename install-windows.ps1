@@ -74,12 +74,68 @@ $Tools = @(
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
 $Deps      = @('autohotkey', 'gcc', 'cmake', 'fastfetch', 'firacode')
 
+# Snapshot installed scoop apps once. `scoop export` emits JSON (apps[].Name);
+# fall back to parsing `scoop list` on older scoop versions.
+$InstalledScoop = @()
+try {
+    $exported = (scoop export 2>$null) | ConvertFrom-Json
+    if ($exported -and $exported.apps) {
+        $InstalledScoop = @($exported.apps | ForEach-Object { $_.Name })
+    }
+} catch {
+    $InstalledScoop = @(scoop list 2>$null | ForEach-Object { $_.Name } | Where-Object { $_ })
+}
+
+# Background-service packages whose running exe holds the scoop shim open,
+# which makes `scoop update` fail to replace the shim (Access denied / in use).
+# These are safe to stop+let-the-user-restart before updating. Interactive apps
+# (nvim, etc.) are deliberately NOT listed: scoop already skips updating them
+# when their process is running, and killing them would lose unsaved work.
+$ScoopRestartable = @('cloudflared')
+
+# Stop only the scoop-managed instance of $pkg (match by exe path under the
+# app's scoop dir), so unrelated same-named programs on the system are untouched.
+function Stop-ScoopAppProcesses($pkg) {
+    $appDir = Join-Path $env:USERPROFILE "scoop\apps\$pkg"
+    Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Path -and $_.Path.StartsWith($appDir, [System.StringComparison]::OrdinalIgnoreCase)
+    } | ForEach-Object {
+        Write-Host "    stopping $($_.ProcessName) (pid $($_.Id)) before update"
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Package name -> process name, where they differ (default: same as package).
+# Used to detect a running app and skip its update instead of letting scoop
+# print a wall of "instances still running" errors.
+$ScoopProcName = @{
+    'nodejs-lts' = 'node'
+    'neovim'     = 'nvim'
+}
+function Test-ScoopAppRunning($pkg) {
+    $proc = if ($script:ScoopProcName.ContainsKey($pkg)) { $script:ScoopProcName[$pkg] } else { $pkg }
+    [bool](Get-Process -Name $proc -ErrorAction SilentlyContinue)
+}
+
 function Install-ScoopPackages($label, $pkgs) {
     Write-Step "Installing $label"
     foreach ($p in $pkgs) {
-        $installed = scoop list 2>$null | Select-String -SimpleMatch -Pattern "^$p\s" -Quiet
-        if ($installed) {
-            Write-Host "  $p already installed"
+        if ($script:InstalledScoop -contains $p) {
+            if ($script:ScoopRestartable -contains $p) {
+                # Background service: stop its scoop instance, update, user restarts.
+                Write-Host "  $p already installed -- updating"
+                Stop-ScoopAppProcesses $p
+                scoop update $p
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+            } elseif (Test-ScoopAppRunning $p) {
+                # Interactive/long-running app (nvim, node...): don't kill it,
+                # don't let scoop spam errors -- just skip this update.
+                Write-Host "  $p already installed -- running, skip update"
+            } else {
+                Write-Host "  $p already installed -- updating"
+                scoop update $p
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+            }
         } else {
             scoop install $p
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed: $p" }
