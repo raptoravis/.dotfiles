@@ -1,0 +1,36 @@
+{
+  "_note": "showEffortLevel kept false: claude-hud 0.1.0 crashes on Claude Code's object-shaped stdin.effort (effort.js formatEffort assumes a string). Re-enable once upstream guards non-string input.",
+  "language": "zh",
+  "lineLayout": "expanded",
+  "showSeparators": false,
+  "pathLevels": 2,
+  "gitStatus": {
+    "enabled": true,
+    "showDirty": true,
+    "showAheadBehind": true,
+    "showFileStats": true
+  },
+  "display": {
+    "showModel": true,
+    "showProject": true,
+    "showContextBar": true,
+    "contextValue": "both",
+    "showClaudeCodeVersion": true,
+    "showEffortLevel": false,
+    "showConfigCounts": true,
+    "showCost": true,
+    "showDuration": true,
+    "showSpeed": true,
+    "showTokenBreakdown": true,
+    "showSessionTokens": true,
+    "showPromptCache": true,
+    "showUsage": true,
+    "usageBarEnabled": true,
+    "usageCompact": false,
+    "showResetLabel": true,
+    "showSessionName": true,
+    "showTools": true,
+    "showAgents": true,
+    "showTodos": true
+  }
+}
