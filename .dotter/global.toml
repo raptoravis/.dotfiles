@@ -22,6 +22,7 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 # provider switch. The repo's common/claude/settings.json is the shared *base*;
 # sync it into cc-switch's common config manually (see install-* scripts).
 "common/claude/statusline.mjs" = "~/.claude/statusline.mjs"
+"common/claude/claude-hud-usage-refresh.mjs" = "~/.claude/claude-hud-usage-refresh.mjs"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/RTK.md" = "~/.claude/RTK.md"
 "common/claude/claude-hud-config.json" = "~/.claude/plugins/claude-hud/config.json"
