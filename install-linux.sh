@@ -650,6 +650,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 12b) MANUAL: sync Claude settings into cc-switch
+#      ~/.claude/settings.json is NOT symlinked by dotter — cc-switch owns it
+#      and injects the env block (ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN) on
+#      every provider switch. The repo's common/claude/settings.json is the
+#      shared *base* (permissions / hooks / enabledPlugins / statusLine). Copy
+#      that base into cc-switch's common config ("通用配置") by hand so cc-switch
+#      composes base + per-provider env into ~/.claude/settings.json.
+# ---------------------------------------------------------------------------
+warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
+
+# ---------------------------------------------------------------------------
 # 13) WezTerm session state directory (created by common/wezterm/wezterm.lua
 #     for save/restore — pre-create so the lua mkdir fallback never runs).
 # ---------------------------------------------------------------------------

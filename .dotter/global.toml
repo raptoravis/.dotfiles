@@ -15,7 +15,12 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/bash" = "~/.config/bash"
 "common/tmux/tmux.conf" = "~/.tmux.conf"
 "common/uv" = "~/.config/uv"
-"common/claude/settings.json" = "~/.claude/settings.json"
+# NOTE: settings.json is intentionally NOT symlinked here. cc-switch owns
+# ~/.claude/settings.json (it injects the env block — ANTHROPIC_BASE_URL /
+# ANTHROPIC_AUTH_TOKEN — when switching providers). A dotter symlink would let
+# cc-switch write the auth token through into this git repo and break on every
+# provider switch. The repo's common/claude/settings.json is the shared *base*;
+# sync it into cc-switch's common config manually (see install-* scripts).
 "common/claude/statusline.mjs" = "~/.claude/statusline.mjs"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/RTK.md" = "~/.claude/RTK.md"

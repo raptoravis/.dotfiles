@@ -589,9 +589,10 @@ if (Test-Cmd git) {
 
 # ---------------------------------------------------------------------------
 # 7a-bis) Claude Code: defaultShell -> PowerShell (Windows only)
-#     common/claude/settings.json is shared across mac/linux/windows via dotter,
-#     so Windows-specific shell selection goes into settings.local.json (Claude
-#     Code's machine-local overlay). Prefer pwsh (PowerShell 7+) when present,
+#     Windows-specific shell selection goes into settings.local.json (Claude
+#     Code's machine-local overlay), kept separate from the cc-switch-managed
+#     settings.json so it survives provider switches. Prefer pwsh (PowerShell
+#     7+) when present,
 #     fall back to Windows PowerShell 5.1.
 # ---------------------------------------------------------------------------
 Write-Step 'Configuring Claude Code defaultShell -> PowerShell'
@@ -930,6 +931,18 @@ if (Test-Cmd dotter) {
 } else {
     Write-Warn2 'dotter not on PATH — open a new shell so cargo bin is loaded, then re-run.'
 }
+
+# ---------------------------------------------------------------------------
+# 10b) MANUAL: sync Claude settings into cc-switch
+#     ~/.claude/settings.json is NOT symlinked by dotter — cc-switch owns it and
+#     injects the env block (ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN) on every
+#     provider switch. The repo's common/claude/settings.json is the shared
+#     *base* (permissions / hooks / enabledPlugins / statusLine). You must copy
+#     that base into cc-switch's common config ("通用配置") by hand so cc-switch
+#     composes base + per-provider env into ~/.claude/settings.json. Skipping
+#     this means the shared settings won't apply after a provider switch.
+# ---------------------------------------------------------------------------
+Write-Warn2 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
 # 11) WezTerm session state directory.
