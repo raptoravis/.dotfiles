@@ -69,6 +69,7 @@ $Tools = @(
     'cloudflared',
     'witr',
     'cyberduck',
+    'sniffnet',
     'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
