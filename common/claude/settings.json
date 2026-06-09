@@ -129,7 +129,7 @@
     "codex@openai-codex": true,
     "claude-code-setup@anthropics-official": true,
     "code-simplifier@anthropics-official": true,
-    "yunxing@yunxing": true
+    "tunan@tunan": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -160,10 +160,10 @@
       },
       "autoUpdate": true
     },
-    "yunxing": {
+    "tunan": {
       "source": {
         "source": "github",
-        "repo": "raptoravis/yunxing"
+        "repo": "raptoravis/tunan"
       }
     }
   },
