@@ -396,12 +396,22 @@ if ($InstallService) {
         -replace '^credentials-file:.*', "credentials-file: `"$sysCreds`"" `
         | Set-Content $sysConfig -Encoding UTF8
 
+    # Log to disk so a crash leaves a trace. --loglevel/--logfile are global flags
+    # and must precede the `tunnel run` subcommand.
+    $logDir = 'C:\ProgramData\cloudflared'
+    if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+    $logFile = Join-Path $logDir 'cloudflared.log'
+
     # Use sc.exe to create the service with explicit binPath (note the space after `=`).
     $cloudflaredExe = (Get-Command cloudflared).Source
-    $binPath = "`"$cloudflaredExe`" --config `"$sysConfig`" tunnel run $TunnelName"
+    $binPath = "`"$cloudflaredExe`" --config `"$sysConfig`" --loglevel info --logfile `"$logFile`" tunnel run $TunnelName"
     Write-Host "  binPath: $binPath"
     sc.exe create cloudflared binPath= "$binPath" start= auto DisplayName= 'Cloudflared Tunnel' | Out-Host
     sc.exe description cloudflared "cloudflared tunnel run $TunnelName (managed by create_cloudflared_tunnel.ps1)" | Out-Host
+
+    # Auto-heal on crash: restart after 5s, reset the failure counter daily so the
+    # 3-action ladder applies per-day rather than being exhausted permanently.
+    sc.exe failure cloudflared reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Host
 
     Start-Service cloudflared
     Start-Sleep -Seconds 4
