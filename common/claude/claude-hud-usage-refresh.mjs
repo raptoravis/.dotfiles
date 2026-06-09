@@ -29,7 +29,13 @@ try {
   }
 } catch {}
 
-function readAccessToken() {
+function readToken() {
+  // cc-switch injects the active account's token into the environment, so
+  // prefer it — that's the CURRENT user. Falling back to ~/.claude's stored
+  // OAuth credential would poll a stale (possibly previous) account, or simply
+  // not exist on Windows where Claude Code keeps no .credentials.json file.
+  const envToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
+  if (typeof envToken === "string" && envToken.trim()) return envToken.trim();
   try {
     const raw = readFileSync(join(claudeDir, ".credentials.json"), "utf8");
     const oauth = JSON.parse(raw)?.claudeAiOauth;
@@ -38,6 +44,28 @@ function readAccessToken() {
   } catch {
     return null;
   }
+}
+
+function writeSnapshot(snapshot) {
+  try {
+    mkdirSync(dirname(snapshotPath), { recursive: true });
+    const tmp = `${snapshotPath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(snapshot), "utf8");
+    renameSync(tmp, snapshotPath); // atomic
+  } catch {}
+}
+
+// Overwrite whatever's on disk with an explicit "no data" snapshot. The HUD's
+// readSnapshotUsage treats all-null as no data and hides the bars, so this
+// clears a previous account's stale value instead of leaving it on screen.
+// The fresh mtime also throttles the next refresh — we don't re-hit the API
+// every render just because there's nothing to show.
+function writeUnavailable() {
+  writeSnapshot({
+    updatedAt: Date.now(),
+    fiveHour: { pct: null, resetAt: null },
+    sevenDay: { pct: null, resetAt: null },
+  });
 }
 
 // API resets_at may be an ISO string or epoch (s or ms); normalize to epoch ms.
@@ -75,11 +103,11 @@ function fetchUsage(token) {
         let data = "";
         res.on("data", (c) => (data += c));
         res.on("end", () => {
-          if (res.statusCode !== 200) return resolve(null);
+          if (res.statusCode !== 200) return resolve({ ok: false, status: res.statusCode });
           try {
-            resolve(JSON.parse(data));
+            resolve({ ok: true, status: 200, json: JSON.parse(data) });
           } catch {
-            resolve(null);
+            resolve({ ok: false, status: 200 });
           }
         });
       },
@@ -93,23 +121,34 @@ function fetchUsage(token) {
   });
 }
 
-const token = readAccessToken();
-if (!token) process.exit(0);
+const token = readToken();
+if (!token) {
+  writeUnavailable();
+  process.exit(0);
+}
 
-const api = await fetchUsage(token);
-if (!api) process.exit(0);
+const res = await fetchUsage(token);
+if (res === null) process.exit(0); // transient network error — keep last good snapshot
 
+if (!res.ok) {
+  // 401/403 = the token is rejected or lacks the usage scope (a cc-switch
+  // token-injected account carries user:inference but not user:profile, which
+  // /api/oauth/usage requires). That's definitive, so clear the stale value.
+  // Other status codes may be transient server hiccups — leave the snapshot.
+  if (res.status === 401 || res.status === 403) writeUnavailable();
+  process.exit(0);
+}
+
+const api = res.json;
 const snapshot = {
   updatedAt: Date.now(),
   fiveHour: { pct: toPct(api.five_hour?.utilization), resetAt: toEpochMs(api.five_hour?.resets_at) },
   sevenDay: { pct: toPct(api.seven_day?.utilization), resetAt: toEpochMs(api.seven_day?.resets_at) },
 };
 
-if (snapshot.fiveHour.pct === null && snapshot.sevenDay.pct === null) process.exit(0);
+if (snapshot.fiveHour.pct === null && snapshot.sevenDay.pct === null) {
+  writeUnavailable();
+  process.exit(0);
+}
 
-try {
-  mkdirSync(dirname(snapshotPath), { recursive: true });
-  const tmp = `${snapshotPath}.tmp`;
-  writeFileSync(tmp, JSON.stringify(snapshot), "utf8");
-  renameSync(tmp, snapshotPath); // atomic
-} catch {}
+writeSnapshot(snapshot);
