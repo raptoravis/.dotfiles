@@ -94,12 +94,19 @@ try {
 # when their process is running, and killing them would lose unsaved work.
 $ScoopRestartable = @('cloudflared')
 
-# Stop only the scoop-managed instance of $pkg (match by exe path under the
-# app's scoop dir), so unrelated same-named programs on the system are untouched.
+# Stop only the scoop-managed instance of $pkg, so unrelated same-named programs
+# on the system are untouched. Matches both the app dir (process started from the
+# versioned exe) AND the shim exe (process started via `scoop\shims\<pkg>.exe`,
+# e.g. a cloudflared tunnel) -- the shim holder is what locks the file scoop must
+# replace during `scoop update`.
 function Stop-ScoopAppProcesses($pkg) {
-    $appDir = Join-Path $env:USERPROFILE "scoop\apps\$pkg"
+    $appDir  = Join-Path $env:USERPROFILE "scoop\apps\$pkg"
+    $shimExe = Join-Path $env:USERPROFILE "scoop\shims\$pkg.exe"
     Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Path -and $_.Path.StartsWith($appDir, [System.StringComparison]::OrdinalIgnoreCase)
+        $_.Path -and (
+            $_.Path.StartsWith($appDir, [System.StringComparison]::OrdinalIgnoreCase) -or
+            $_.Path.Equals($shimExe, [System.StringComparison]::OrdinalIgnoreCase)
+        )
     } | ForEach-Object {
         Write-Host "    stopping $($_.ProcessName) (pid $($_.Id)) before update"
         Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
@@ -190,6 +197,47 @@ if (Test-Cmd winget) {
     }
 } else {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
+}
+
+# ---------------------------------------------------------------------------
+# 4c) Npcap -- packet-capture driver that sniffnet needs (provides wpcap.dll).
+#     Not a scoop package (kernel driver, needs admin) and NOT on winget (the
+#     old Insecure.Npcap id was pulled). The free edition's installer is
+#     GUI-only -- --silent is an OEM-paid feature -- so we download it straight
+#     from npcap.com and launch it. Keep "WinPcap API-compatible Mode" checked
+#     so wpcap.dll lands in System32 where sniffnet looks for it.
+# ---------------------------------------------------------------------------
+$npcapDll = @(
+    (Join-Path $env:WINDIR 'System32\wpcap.dll'),        # WinPcap-compatible mode
+    (Join-Path $env:WINDIR 'System32\Npcap\wpcap.dll')   # Npcap-only mode
+)
+if ($npcapDll | Where-Object { Test-Path $_ }) {
+    Write-Step 'Npcap already installed (wpcap.dll present)'
+} else {
+    Write-Step 'Installing Npcap (sniffnet dependency)'
+    # No stable "latest" URL on npcap.com -- scrape the homepage for the current
+    # dist/npcap-X.YZ.exe link, fall back to a pinned version if that fails.
+    $npcapVer = '1.88'
+    try {
+        $html = (Invoke-WebRequest -Uri 'https://npcap.com/' -UseBasicParsing).Content
+        $m = [regex]::Match($html, 'dist/npcap-([0-9.]+)\.exe')
+        if ($m.Success) { $npcapVer = $m.Groups[1].Value }
+    } catch {
+        Write-Warn2 "  couldn't reach npcap.com -- using pinned npcap-$npcapVer"
+    }
+    $npcapUrl = "https://npcap.com/dist/npcap-$npcapVer.exe"
+    $npcapExe = Join-Path $env:TEMP "npcap-$npcapVer.exe"
+    try {
+        Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapExe -UseBasicParsing
+        Write-Host '  the GUI installer will open -- keep "WinPcap API-compatible Mode" checked'
+        Start-Process -FilePath $npcapExe -Wait
+        Remove-Item $npcapExe -ErrorAction SilentlyContinue
+        if (-not ($npcapDll | Where-Object { Test-Path $_ })) {
+            Write-Warn2 '  Npcap installer finished but wpcap.dll not found -- re-run and keep WinPcap API-compatible Mode checked'
+        }
+    } catch {
+        Write-Warn2 '  Npcap install failed -- grab it from https://npcap.com (sniffnet needs wpcap.dll)'
+    }
 }
 
 # ---------------------------------------------------------------------------
