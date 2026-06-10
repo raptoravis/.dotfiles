@@ -463,8 +463,10 @@ if command -v npm >/dev/null 2>&1; then
     npm install -g @colbymchenry/codegraph 2>/dev/null || warn "  codegraph install failed"
   fi
   if command -v codegraph >/dev/null 2>&1; then
-    log "Registering codegraph with claude / codex / opencode"
-    codegraph install --target=claude,codex,opencode --yes >/dev/null 2>&1 \
+    # Claude Code is wired separately via `claude mcp add` below (needs the
+    # `claude` binary, installed in the AI-coding-CLIs block).
+    log "Registering codegraph with codex / opencode"
+    codegraph install --target=codex,opencode --yes >/dev/null 2>&1 \
       || warn "  codegraph install failed (run 'codegraph install' interactively)"
     # reasonix isn't a known codegraph target — register manually in its config.json
     REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
@@ -505,6 +507,11 @@ if command -v npm >/dev/null 2>&1; then
     log "Registering context7 MCP for Claude Code (idempotent)"
     claude mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
+  fi
+  if command -v claude >/dev/null 2>&1 && command -v codegraph >/dev/null 2>&1; then
+    log "Registering codegraph MCP for Claude Code (user scope, idempotent)"
+    claude mcp add codegraph -s user -- codegraph serve --mcp 2>/dev/null \
+      || log "  codegraph MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then
     log "Registering context7 MCP for Codex (idempotent)"

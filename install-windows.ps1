@@ -705,8 +705,10 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codegraph install failed' }
     }
     if (Test-Cmd codegraph) {
-        Write-Step 'Registering codegraph with claude / codex / opencode'
-        codegraph install --target=claude,codex,opencode --yes 2>$null | Out-Null
+        # Claude Code is wired separately via `claude mcp add` below (needs the
+        # `claude` binary, installed in the AI-coding-CLIs block).
+        Write-Step 'Registering codegraph with codex / opencode'
+        codegraph install --target=codex,opencode --yes 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph install failed (run 'codegraph install' interactively)" }
 
         # reasonix isn't a known codegraph target — register manually in its config.json
@@ -757,6 +759,11 @@ if (Test-Cmd npm) {
         Write-Step 'Registering context7 MCP for Claude Code (idempotent)'
         claude mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
+    }
+    if ((Test-Cmd claude) -and (Test-Cmd codegraph)) {
+        Write-Step 'Registering codegraph MCP for Claude Code (user scope, idempotent)'
+        claude mcp add codegraph -s user -- codegraph serve --mcp 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  codegraph MCP already registered for claude (or registration failed — see 'claude mcp list')" }
     }
     if (Test-Cmd codex) {
         Write-Step 'Registering context7 MCP for Codex (idempotent)'
