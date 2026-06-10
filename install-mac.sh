@@ -418,23 +418,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7b) Claude Code companion CLIs (rtk hook)
-#     Claude-specific marketplace plugins are declared in
-#     common/claude/settings.json. Portable skills are installed above for all
-#     supported coding CLIs.
-# ---------------------------------------------------------------------------
-if ! command -v rtk >/dev/null 2>&1; then
-  log "Installing rtk (LLM output compressor + Claude Code hook)"
-  curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh \
-    || warn "  rtk install script failed"
-fi
-# Note: do not run `rtk init -g` here. The hook, RTK.md, and @RTK.md reference
-# are all baked into common/claude/{settings.json,RTK.md,CLAUDE.md} and wired
-# by dotter (step 10). Running `rtk init -g` would create real files that block
-# dotter's symlinks.
-
-# ---------------------------------------------------------------------------
-# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
+# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
@@ -511,7 +495,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7d) pnpm via corepack (ships with Node >= 16.10)
+# 7c) pnpm via corepack (ships with Node >= 16.10)
 # ---------------------------------------------------------------------------
 if command -v corepack >/dev/null 2>&1; then
   log "Enabling pnpm via corepack"

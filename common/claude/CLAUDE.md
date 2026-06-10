@@ -16,7 +16,6 @@
 - 仅当用户在同一指令里写了"commit + push + ff-merge"这种连写时，按字面授权范围执行；他说 "commit" 就只 commit 不 push
 - 不影响纯 local 操作（编辑文件 / mkdir / 装依赖 / 跑测试）— 那些可以照常做
 
-@RTK.md
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
@@ -51,4 +50,3 @@ Use codegraph for **structural** questions — what calls what, what would break
 
 The MCP server returns "not initialized." Ask the user: *"I notice this project doesn't have CodeGraph initialized. Want me to run `codegraph init -i` to build the index?"*
 <!-- CODEGRAPH_END -->
-

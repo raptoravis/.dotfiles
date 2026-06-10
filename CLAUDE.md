@@ -53,7 +53,7 @@ Dotter picks packages by reading `.dotter/<hostname>.toml` first; if absent it f
 
 ### Bootstrap (preferred — does more than `cargo make init`)
 
-The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of truth for first-time setup. They install OS packages, Rust/Cargo tools, npm CLIs, agent skills, the rtk hook, and finally run `dotter -v`.
+The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of truth for first-time setup. They install OS packages, Rust/Cargo tools, npm CLIs, agent skills, and finally run `dotter -v`.
 
 ```bash
 # macOS
@@ -66,7 +66,7 @@ The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of t
 powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
-`cargo make init` is the older path — it still works for the package-install steps but does not handle agent skills, rtk, or npm CLIs.
+`cargo make init` is the older path — it still works for the package-install steps but does not handle agent skills or npm CLIs.
 
 ### Daily
 
