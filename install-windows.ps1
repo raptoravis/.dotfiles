@@ -411,7 +411,13 @@ if (Test-Cmd git) {
         if (Test-Path (Join-Path $dir '.git')) {
             Push-Location $dir
             git pull --quiet --ff-only 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
+            if ($LASTEXITCODE -ne 0) {
+                # Upstream may have rewritten history (force-push/squash). This is a
+                # throwaway mirror, so hard-reset to the remote instead of failing.
+                git fetch --quiet 2>$null
+                git reset --hard --quiet '@{u}' 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
+            }
             Pop-Location
         } else {
             git clone --depth=1 --quiet $url $dir
@@ -708,7 +714,10 @@ if (Test-Cmd npm) {
         # Claude Code is wired separately via `claude mcp add` below (needs the
         # `claude` binary, installed in the AI-coding-CLIs block).
         Write-Step 'Registering codegraph with codex / opencode'
-        codegraph install --target=codex,opencode --yes 2>$null | Out-Null
+        # NB: quote the whole --target arg — PowerShell treats a bare comma as the
+        # array operator, so `--target=codex,opencode` reaches codegraph as the
+        # single invalid id "codex opencode". Quoting keeps it one literal token.
+        codegraph install '--target=codex,opencode' --yes 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph install failed (run 'codegraph install' interactively)" }
 
         # reasonix isn't a known codegraph target — register manually in its config.json
@@ -761,9 +770,14 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
     }
     if ((Test-Cmd claude) -and (Test-Cmd codegraph)) {
-        Write-Step 'Registering codegraph MCP for Claude Code (user scope, idempotent)'
-        claude mcp add codegraph -s user -- codegraph serve --mcp 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  codegraph MCP already registered for claude (or registration failed — see 'claude mcp list')" }
+        claude mcp get codegraph 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Step 'codegraph MCP already registered for Claude Code (user scope)'
+        } else {
+            Write-Step 'Registering codegraph MCP for Claude Code (user scope)'
+            claude mcp add codegraph -s user -- codegraph serve --mcp 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration FAILED — run manually: claude mcp add codegraph -s user -- codegraph serve --mcp" }
+        }
     }
     if (Test-Cmd codex) {
         Write-Step 'Registering context7 MCP for Codex (idempotent)'

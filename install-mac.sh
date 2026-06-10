@@ -222,7 +222,12 @@ if command -v git >/dev/null 2>&1; then
   clone_or_pull() {
     local url="$1" dir="$2"
     if [[ -d "$dir/.git" ]]; then
-      git -C "$dir" pull --quiet --ff-only 2>/dev/null || warn "  pull failed: $dir"
+      if ! git -C "$dir" pull --quiet --ff-only 2>/dev/null; then
+        # upstream may have rewritten history (force-push/squash) — hard-reset
+        # this throwaway mirror to the remote instead of staying diverged.
+        git -C "$dir" fetch --quiet 2>/dev/null
+        git -C "$dir" reset --hard --quiet '@{u}' 2>/dev/null || warn "  pull failed: $dir"
+      fi
     else
       git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
     fi
@@ -488,9 +493,13 @@ if command -v npm >/dev/null 2>&1; then
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v claude >/dev/null 2>&1 && command -v codegraph >/dev/null 2>&1; then
-    log "Registering codegraph MCP for Claude Code (user scope, idempotent)"
-    claude mcp add codegraph -s user -- codegraph serve --mcp 2>/dev/null \
-      || log "  codegraph MCP already registered for claude (or registration failed — see 'claude mcp list')"
+    if claude mcp get codegraph >/dev/null 2>&1; then
+      log "codegraph MCP already registered for Claude Code (user scope)"
+    else
+      log "Registering codegraph MCP for Claude Code (user scope)"
+      claude mcp add codegraph -s user -- codegraph serve --mcp >/dev/null 2>&1 \
+        || warn "  codegraph MCP registration FAILED — run manually: claude mcp add codegraph -s user -- codegraph serve --mcp"
+    fi
   fi
   if command -v codex >/dev/null 2>&1; then
     log "Registering context7 MCP for Codex (idempotent)"
