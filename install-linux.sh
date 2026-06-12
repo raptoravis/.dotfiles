@@ -505,6 +505,12 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing DeepSeek-Reasonix CLI (reasonix)"
     npm install -g reasonix || warn "  reasonix install failed (requires Node.js >= 22)"
   fi
+  # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
+  # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
+  if ! command -v mimo >/dev/null 2>&1; then
+    log "Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)"
+    npm install -g @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
+  fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -527,6 +533,55 @@ if command -v npm >/dev/null 2>&1; then
     codex mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
+
+  # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
+  # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
+  # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
+  GH_MCP_URL="https://api.githubusercontent.com/mcp/"
+  if command -v claude >/dev/null 2>&1; then
+    if claude mcp get github >/dev/null 2>&1; then
+      log "github MCP already registered for Claude Code (user scope)"
+    else
+      log "Registering github MCP for Claude Code (remote HTTP, OAuth on first use)"
+      claude mcp add --transport http github "$GH_MCP_URL" -s user >/dev/null \
+        || warn "  github MCP registration FAILED — run: claude mcp add --transport http github $GH_MCP_URL -s user"
+    fi
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering github MCP for Codex (remote HTTP; run 'codex mcp login github' to OAuth)"
+    codex mcp add github --url "$GH_MCP_URL" 2>/dev/null \
+      || log "  github MCP already registered for codex (or registration failed — see 'codex mcp list')"
+  fi
+  # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
+  # config idempotently. MiMo additionally gets codegraph (local) since
+  # `codegraph install` doesn't know the mimocode target.
+  if command -v node >/dev/null 2>&1; then
+    register_json_mcp() {  # $1=config file  $2=JSON object to merge under .mcp
+      MCP_FILE="$1" MCP_ADD="$2" node -e '
+        const fs=require("fs"), path=require("path");
+        const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD);
+        let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){}
+        c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{};
+        let changed=false;
+        for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } }
+        if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
+      ' || warn "  failed to write MCP config to $1"
+    }
+    GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
+    CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
+    if command -v opencode >/dev/null 2>&1; then
+      log "Registering github MCP for opencode (~/.config/opencode/opencode.json)"
+      register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
+    fi
+    if command -v mimo >/dev/null 2>&1; then
+      log "Registering github + codegraph MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
+      command -v codegraph >/dev/null 2>&1 \
+        && register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CG_LOCAL_JSON"
+    fi
+  fi
+  # reasonix: its `mcp` config is a stdio command-string array and can't take a
+  # remote HTTP url, so it keeps its existing stdio github server (PAT-based).
 else
   warn "npm not on PATH -- skipping npm-based CLI installs (apt nodejs may be too old; need Node 18+)"
 fi

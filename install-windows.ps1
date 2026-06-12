@@ -761,6 +761,13 @@ if (Test-Cmd npm) {
         npm install -g 'reasonix'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  reasonix install failed (requires Node.js >= 22)' }
     }
+    # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
+    # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
+    if (-not (Test-Cmd mimo)) {
+        Write-Step 'Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)'
+        npm install -g '@mimo-ai/cli'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
+    }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -784,6 +791,51 @@ if (Test-Cmd npm) {
         codex mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
+
+    # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
+    # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
+    # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
+    $GhMcpUrl = 'https://api.githubusercontent.com/mcp/'
+    if (Test-Cmd claude) {
+        claude mcp get github 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Step 'github MCP already registered for Claude Code (user scope)'
+        } else {
+            Write-Step 'Registering github MCP for Claude Code (remote HTTP, OAuth on first use)'
+            claude mcp add --transport http github $GhMcpUrl -s user 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  github MCP registration FAILED — run: claude mcp add --transport http github $GhMcpUrl -s user" }
+        }
+    }
+    if (Test-Cmd codex) {
+        Write-Step "Registering github MCP for Codex (remote HTTP; run 'codex mcp login github' to OAuth)"
+        codex mcp add github --url $GhMcpUrl 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  github MCP already registered for codex (or registration failed — see 'codex mcp list')" }
+    }
+    # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
+    # config idempotently. MiMo additionally gets codegraph (local) since
+    # `codegraph install` doesn't know the mimocode target.
+    if (Test-Cmd node) {
+        function Register-JsonMcp([string]$File, [string]$AddJson) {
+            $env:MCP_FILE = $File
+            $env:MCP_ADD = $AddJson
+            node -e 'const fs=require("fs"), path=require("path"); const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD); let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){} c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{}; let changed=false; for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } } if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }'
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed to write MCP config to $File" }
+            Remove-Item Env:MCP_FILE, Env:MCP_ADD -ErrorAction SilentlyContinue
+        }
+        $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true}}'
+        $CgLocalJson = '{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
+        if (Test-Cmd opencode) {
+            Write-Step 'Registering github MCP for opencode (~/.config/opencode/opencode.json)'
+            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
+        }
+        if (Test-Cmd mimo) {
+            Write-Step 'Registering github + codegraph MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
+            if (Test-Cmd codegraph) { Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CgLocalJson }
+        }
+    }
+    # reasonix: its `mcp` config is a stdio command-string array and can't take a
+    # remote HTTP url, so it keeps its existing stdio github server (PAT-based).
 } else {
     Write-Warn2 'npm not on PATH -- skipping npm-based CLI installs (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
