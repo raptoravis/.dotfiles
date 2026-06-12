@@ -428,23 +428,23 @@ fi
 if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
-    npm install -g hostc 2>/dev/null || warn "  hostc install failed"
+    npm install -g hostc || warn "  hostc install failed"
   fi
   if ! command -v openwolf >/dev/null 2>&1; then
     log "Installing openwolf via npm"
-    npm install -g openwolf 2>/dev/null || warn "  openwolf install failed"
+    npm install -g openwolf || warn "  openwolf install failed"
   fi
   if ! command -v ruflo >/dev/null 2>&1; then
     log "Installing ruflo (multi-agent orchestrator) via npm"
-    npm install -g ruflo@latest 2>/dev/null || warn "  ruflo install failed"
+    npm install -g ruflo@latest || warn "  ruflo install failed"
   fi
   if ! command -v claude-mem >/dev/null 2>&1; then
     log "Installing claude-mem via npm"
-    npm install -g claude-mem 2>/dev/null || warn "  claude-mem install failed"
+    npm install -g claude-mem || warn "  claude-mem install failed"
   fi
   if ! command -v codegraph >/dev/null 2>&1; then
     log "Installing codegraph via npm"
-    npm install -g @colbymchenry/codegraph 2>/dev/null || warn "  codegraph install failed"
+    npm install -g @colbymchenry/codegraph || warn "  codegraph install failed"
   fi
   if command -v codegraph >/dev/null 2>&1; then
     # Claude Code is wired separately via `claude mcp add` below (needs the
@@ -470,19 +470,19 @@ if command -v npm >/dev/null 2>&1; then
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
-    npm install -g @anthropic-ai/claude-code 2>/dev/null || warn "  claude-code install failed"
+    npm install -g @anthropic-ai/claude-code || warn "  claude-code install failed"
   fi
   if ! command -v codex >/dev/null 2>&1; then
     log "Installing Codex CLI (@openai/codex)"
-    npm install -g @openai/codex 2>/dev/null || warn "  codex install failed"
+    npm install -g @openai/codex || warn "  codex install failed"
   fi
   if ! command -v opencode >/dev/null 2>&1; then
     log "Installing OpenCode CLI (opencode-ai)"
-    npm install -g opencode-ai 2>/dev/null || warn "  opencode install failed"
+    npm install -g opencode-ai || warn "  opencode install failed"
   fi
   if ! command -v reasonix >/dev/null 2>&1; then
     log "Installing DeepSeek-Reasonix CLI (reasonix)"
-    npm install -g reasonix 2>/dev/null || warn "  reasonix install failed (requires Node.js >= 22)"
+    npm install -g reasonix || warn "  reasonix install failed (requires Node.js >= 22)"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -497,7 +497,7 @@ if command -v npm >/dev/null 2>&1; then
       log "codegraph MCP already registered for Claude Code (user scope)"
     else
       log "Registering codegraph MCP for Claude Code (user scope)"
-      claude mcp add codegraph -s user -- codegraph serve --mcp >/dev/null 2>&1 \
+      claude mcp add codegraph -s user -- codegraph serve --mcp >/dev/null \
         || warn "  codegraph MCP registration FAILED — run manually: claude mcp add codegraph -s user -- codegraph serve --mcp"
     fi
   fi
