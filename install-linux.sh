@@ -534,6 +534,20 @@ if command -v npm >/dev/null 2>&1; then
       || log "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 
+  # Register chrome-devtools MCP (local stdio via npx) for Claude Code & Codex.
+  # Drives a real Chrome via the DevTools Protocol; idempotent — `mcp add`
+  # errors if already registered, which we swallow.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering chrome-devtools MCP for Claude Code (idempotent)"
+    claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
+      || log "  chrome-devtools MCP already registered for claude (or registration failed — see 'claude mcp list')"
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering chrome-devtools MCP for Codex (idempotent)"
+    codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
+      || log "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')"
+  fi
+
   # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
   # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
   # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
@@ -569,15 +583,18 @@ if command -v npm >/dev/null 2>&1; then
     }
     GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
     CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
+    CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
+      register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + codegraph MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      log "Registering github + codegraph + chrome-devtools MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
       command -v codegraph >/dev/null 2>&1 \
         && register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CG_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
     fi
   fi
   # reasonix: its `mcp` config is a stdio command-string array and can't take a
