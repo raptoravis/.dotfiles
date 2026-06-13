@@ -551,7 +551,7 @@ if command -v npm >/dev/null 2>&1; then
   # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
   # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
   # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
-  GH_MCP_URL="https://api.githubusercontent.com/mcp/"
+  GH_MCP_URL="https://api.githubcopilot.com/mcp/"
   if command -v claude >/dev/null 2>&1; then
     if claude mcp get github >/dev/null 2>&1; then
       log "github MCP already registered for Claude Code (user scope)"

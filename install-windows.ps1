@@ -809,7 +809,7 @@ if (Test-Cmd npm) {
     # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
     # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
     # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
-    $GhMcpUrl = 'https://api.githubusercontent.com/mcp/'
+    $GhMcpUrl = 'https://api.githubcopilot.com/mcp/'
     if (Test-Cmd claude) {
         claude mcp get github 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
