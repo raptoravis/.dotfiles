@@ -682,18 +682,13 @@ if ($shellPath) {
 }
 
 # ---------------------------------------------------------------------------
-# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
+# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if (Test-Cmd npm) {
     if (-not (Test-Cmd hostc)) {
         Write-Step 'Installing hostc (edge tunnel CLI) via npm'
         npm install -g hostc
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  hostc install failed' }
-    }
-    if (-not (Test-Cmd openwolf)) {
-        Write-Step 'Installing openwolf via npm'
-        npm install -g openwolf
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  openwolf install failed' }
     }
     if (-not (Test-Cmd ruflo)) {
         Write-Step 'Installing ruflo (multi-agent orchestrator) via npm'
@@ -806,18 +801,25 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
-    # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
-    # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
-    # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
+    # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
+    # does NOT support OAuth dynamic client registration, so clients must auth with a
+    # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
+    # GH_TOKEN env vars, then the gh CLI's stored token. Claude/Codex register via
+    # their CLIs; opencode & MiMo Code (an opencode fork) take a JSON `mcp` entry.
     $GhMcpUrl = 'https://api.githubcopilot.com/mcp/'
+    $GhMcpPat = $env:GITHUB_PERSONAL_ACCESS_TOKEN
+    if (-not $GhMcpPat) { $GhMcpPat = $env:GH_TOKEN }
+    if (-not $GhMcpPat -and (Test-Cmd gh)) { $GhMcpPat = (gh auth token 2>$null) }
     if (Test-Cmd claude) {
         claude mcp get github 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-Step 'github MCP already registered for Claude Code (user scope)'
+        } elseif ($GhMcpPat) {
+            Write-Step 'Registering github MCP for Claude Code (remote HTTP, PAT header)'
+            claude mcp add --transport http github $GhMcpUrl -H "Authorization: Bearer $GhMcpPat" -s user 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  github MCP registration FAILED — run: claude mcp add --transport http github $GhMcpUrl -H `"Authorization: Bearer <PAT>`" -s user" }
         } else {
-            Write-Step 'Registering github MCP for Claude Code (remote HTTP, OAuth on first use)'
-            claude mcp add --transport http github $GhMcpUrl -s user 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  github MCP registration FAILED — run: claude mcp add --transport http github $GhMcpUrl -s user" }
+            Write-Warn2 '  no GitHub PAT found (set GITHUB_PERSONAL_ACCESS_TOKEN or run ''gh auth login'') -- skipping github MCP for Claude Code (remote endpoint OAuth/DCR is unsupported)'
         }
     }
     if (Test-Cmd codex) {
@@ -836,7 +838,11 @@ if (Test-Cmd npm) {
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed to write MCP config to $File" }
             Remove-Item Env:MCP_FILE, Env:MCP_ADD -ErrorAction SilentlyContinue
         }
-        $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true}}'
+        if ($GhMcpPat) {
+            $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true,"headers":{"Authorization":"Bearer ' + $GhMcpPat + '"}}}'
+        } else {
+            $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true}}'
+        }
         $CgLocalJson = '{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
         if (Test-Cmd opencode) {
@@ -1106,19 +1112,6 @@ Write-Host '   codegraph sync            # incremental update'
 Write-Host ''
 Write-Host ' Agents call codegraph_search / _context / _explore via MCP.'
 Write-Host ' Output lives in .codegraph/ (gitignored).'
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ''
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' openwolf: per-project setup' -ForegroundColor Cyan
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' For each project where you want OpenWolf context management:'
-Write-Host ''
-Write-Host '   cd <your-project>'
-Write-Host '   openwolf init             # creates .wolf/ in the project'
-Write-Host '   openwolf status           # check daemon health'
-Write-Host '   openwolf dashboard        # open browser dashboard'
-Write-Host ''
-Write-Host ' Then your AI coding CLI will read .wolf/OPENWOLF.md each session.'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray

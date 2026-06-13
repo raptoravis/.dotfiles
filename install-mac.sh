@@ -423,16 +423,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI; openwolf — context manager)
+# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
     npm install -g hostc || warn "  hostc install failed"
-  fi
-  if ! command -v openwolf >/dev/null 2>&1; then
-    log "Installing openwolf via npm"
-    npm install -g openwolf || warn "  openwolf install failed"
   fi
   if ! command -v ruflo >/dev/null 2>&1; then
     log "Installing ruflo (multi-agent orchestrator) via npm"
@@ -527,17 +523,25 @@ if command -v npm >/dev/null 2>&1; then
       || log "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 
-  # Register GitHub's official remote MCP server (streamable HTTP). Auth is OAuth
-  # on first use — no PAT needed. Claude/Codex register via their CLIs; opencode &
-  # MiMo Code (an opencode fork) take a JSON `mcp` entry written directly.
+  # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
+  # does NOT support OAuth dynamic client registration, so clients must auth with a
+  # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
+  # GH_TOKEN env vars, then the gh CLI's stored token. Claude/Codex register via
+  # their CLIs; opencode & MiMo Code (an opencode fork) take a JSON `mcp` entry.
   GH_MCP_URL="https://api.githubcopilot.com/mcp/"
+  GH_MCP_PAT="${GITHUB_PERSONAL_ACCESS_TOKEN:-${GH_TOKEN:-}}"
+  if [ -z "$GH_MCP_PAT" ] && command -v gh >/dev/null 2>&1; then
+    GH_MCP_PAT="$(gh auth token 2>/dev/null || true)"
+  fi
   if command -v claude >/dev/null 2>&1; then
     if claude mcp get github >/dev/null 2>&1; then
       log "github MCP already registered for Claude Code (user scope)"
+    elif [ -n "$GH_MCP_PAT" ]; then
+      log "Registering github MCP for Claude Code (remote HTTP, PAT header)"
+      claude mcp add --transport http github "$GH_MCP_URL" -H "Authorization: Bearer $GH_MCP_PAT" -s user >/dev/null \
+        || warn "  github MCP registration FAILED — run: claude mcp add --transport http github $GH_MCP_URL -H \"Authorization: Bearer <PAT>\" -s user"
     else
-      log "Registering github MCP for Claude Code (remote HTTP, OAuth on first use)"
-      claude mcp add --transport http github "$GH_MCP_URL" -s user >/dev/null \
-        || warn "  github MCP registration FAILED — run: claude mcp add --transport http github $GH_MCP_URL -s user"
+      warn "  no GitHub PAT found (set GITHUB_PERSONAL_ACCESS_TOKEN or run 'gh auth login') — skipping github MCP for Claude Code (remote endpoint OAuth/DCR is unsupported)"
     fi
   fi
   if command -v codex >/dev/null 2>&1; then
@@ -560,7 +564,11 @@ if command -v npm >/dev/null 2>&1; then
         if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
       ' || warn "  failed to write MCP config to $1"
     }
-    GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
+    if [ -n "$GH_MCP_PAT" ]; then
+      GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true,\"headers\":{\"Authorization\":\"Bearer $GH_MCP_PAT\"}}}"
+    else
+      GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
+    fi
     CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
@@ -723,17 +731,4 @@ echo "   codegraph sync            # incremental update"
 echo
 echo " Agents call codegraph_search / _context / _explore via MCP."
 echo " Output lives in .codegraph/ (gitignored)."
-echo "============================================================"
-echo
-echo "============================================================"
-echo " openwolf: per-project setup"
-echo "============================================================"
-echo " For each project where you want OpenWolf context management:"
-echo
-echo "   cd <your-project>"
-echo "   openwolf init             # creates .wolf/ in the project"
-echo "   openwolf status           # check daemon health"
-echo "   openwolf dashboard        # open browser dashboard"
-echo
-echo " Then your AI coding CLI will read .wolf/OPENWOLF.md each session."
 echo "============================================================"
