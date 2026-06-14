@@ -356,6 +356,21 @@ if command -v git >/dev/null 2>&1; then
     warn "  context7/find-docs: SKILL.md not found in upstream"
   fi
 
+  # 6e. leonxlnx/taste-skill — anti-slop frontend design monorepo; pick
+  #     design-taste-frontend, redesign-existing-projects, image-to-code.
+  log "Installing taste-skill subset (design-taste-frontend / redesign-existing-projects / image-to-code)"
+  clone_or_pull https://github.com/leonxlnx/taste-skill "$PLUGIN_CACHE/taste-skill"
+  for entry in "taste-skill:design-taste-frontend" \
+               "redesign-skill:redesign-existing-projects" \
+               "image-to-code-skill:image-to-code"; do
+    src_dir="${entry%%:*}"; link_name="${entry##*:}"
+    if [[ -f "$PLUGIN_CACHE/taste-skill/skills/$src_dir/SKILL.md" ]]; then
+      link_skill "$PLUGIN_CACHE/taste-skill/skills/$src_dir" "$link_name"
+    else
+      warn "  taste-skill/$src_dir: SKILL.md not found in upstream"
+    fi
+  done
+
   # 7. (was: ruvnet/ruflo — clone + skill scan)
   #    ruflo is now installed as an npm CLI in the npm-globals block below to
   #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
