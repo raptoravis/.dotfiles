@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# claude-reset.ps1 — 查询 Claude 订阅的 5h / weekly 用量窗口 reset 时间（响应头方案）
+# get-claude-reset-status.ps1 — 查询 Claude 订阅的 5h / weekly 用量窗口 reset 时间（响应头方案）
 #
 # 思路：用 ~/.claude/settings.json 里的 OAuth token 调一次 /v1/messages（max_tokens=1），
 # 从响应头 anthropic-ratelimit-unified-* 里读 reset。
