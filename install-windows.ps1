@@ -809,14 +809,18 @@ if (Test-Cmd npm) {
     # Register chrome-devtools MCP (local stdio via npx) for Claude Code & Codex.
     # Drives a real Chrome via the DevTools Protocol; idempotent — `mcp add`
     # errors if already registered, which we swallow.
+    # NOTE: on Windows `npx` is a `.cmd` shim and cannot be spawned directly —
+    # it must be invoked through `cmd /c`, otherwise the spawn fails and the
+    # server never connects (same wrapper the working context7/playwright use).
+    # User scope so it is available in every project, not just the install cwd.
     if (Test-Cmd claude) {
         Write-Step 'Registering chrome-devtools MCP for Claude Code (idempotent)'
-        claude mcp add chrome-devtools -- npx -y 'chrome-devtools-mcp@latest' 2>$null
+        claude mcp add chrome-devtools -s user -- cmd /c npx -y 'chrome-devtools-mcp@latest' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  chrome-devtools MCP already registered for claude (or registration failed — see 'claude mcp list')" }
     }
     if (Test-Cmd codex) {
         Write-Step 'Registering chrome-devtools MCP for Codex (idempotent)'
-        codex mcp add chrome-devtools -- npx -y 'chrome-devtools-mcp@latest' 2>$null
+        codex mcp add chrome-devtools -- cmd /c npx -y 'chrome-devtools-mcp@latest' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
