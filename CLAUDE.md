@@ -2,12 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# OpenWolf
-
-@.wolf/OPENWOLF.md
-
-This project uses OpenWolf for context management. Read and follow .wolf/OPENWOLF.md every session. Check .wolf/cerebrum.md before generating code. Check .wolf/anatomy.md before reading files.
-
 # Dotfiles — AI Assistant Guide
 
 A cross-platform dotfiles repo managed by [dotter](https://github.com/SuperCuber/dotter) (symlinks), [cargo-make](https://github.com/sagiegurari/cargo-make) (tasks), and [mise](https://github.com/jdx/mise) (runtimes). Forked from msetsma; current working tree at `D:\dev\.dotfiles` on Windows (also accessed from WSL via `/mnt/d/dev/.dotfiles`).
