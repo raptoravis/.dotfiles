@@ -3,3 +3,11 @@
 
 # Use system Python (managed by mise)
 python-preference = "managed"
+
+# 默认包索引：aliyun 镜像（raw#176）。
+# 原 tsinghua 镜像对部分仅 sdist 的包（如 oss2）的 tarball 偶发 403、且缺部分文件，
+# 改用 aliyun 镜像（同 pypi 布局、同 hash，国内同样快且更全）。
+# 注意：若环境里仍设了 UV_INDEX_URL 环境变量，它会覆盖本配置——需一并移除/改为 aliyun。
+[[index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
