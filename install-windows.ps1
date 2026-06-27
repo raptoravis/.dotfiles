@@ -281,6 +281,7 @@ $CargoTools = [ordered]@{
     'pstop'        = 'pstop'
     'psnet'        = 'psnet'
     'abtop'        = 'abtop'
+    'rmux'         = 'rmux'
 }
 foreach ($t in $CargoTools.Keys) {
     if (Test-Cmd $CargoTools[$t]) {
@@ -824,6 +825,21 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
+    # Register zcaceres/fetch-mcp (local stdio via npx, package `mcp-fetch-server`)
+    # for Claude Code & Codex. Fetches web content as HTML/markdown/text/JSON.
+    # Same `cmd /c npx` wrapper as above; idempotent — `mcp add` errors if already
+    # registered, which we swallow.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering fetch MCP for Claude Code (idempotent)'
+        claude mcp add fetch -s user -- cmd /c npx -y 'mcp-fetch-server' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  fetch MCP already registered for claude (or registration failed — see 'claude mcp list')" }
+    }
+    if (Test-Cmd codex) {
+        Write-Step 'Registering fetch MCP for Codex (idempotent)'
+        codex mcp add fetch -- cmd /c npx -y 'mcp-fetch-server' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  fetch MCP already registered for codex (or registration failed — see 'codex mcp list')" }
+    }
+
     # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
     # does NOT support OAuth dynamic client registration, so clients must auth with a
     # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
@@ -868,16 +884,19 @@ if (Test-Cmd npm) {
         }
         $CgLocalJson = '{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
+        $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
+            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
         }
         if (Test-Cmd mimo) {
-            Write-Step 'Registering github + codegraph + chrome-devtools MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Write-Step 'Registering github + codegraph + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
             if (Test-Cmd codegraph) { Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CgLocalJson }
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
+            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
         }
     }
     # reasonix: its `mcp` config is a stdio command-string array and can't take a

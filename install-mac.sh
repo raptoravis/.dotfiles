@@ -538,6 +538,20 @@ if command -v npm >/dev/null 2>&1; then
       || log "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 
+  # Register zcaceres/fetch-mcp (local stdio via npx, package `mcp-fetch-server`)
+  # for Claude Code & Codex. Fetches web content as HTML/markdown/text/JSON.
+  # Idempotent — `mcp add` errors if already registered, which we swallow.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering fetch MCP for Claude Code (idempotent)"
+    claude mcp add fetch -- npx -y mcp-fetch-server 2>/dev/null \
+      || log "  fetch MCP already registered for claude (or registration failed — see 'claude mcp list')"
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering fetch MCP for Codex (idempotent)"
+    codex mcp add fetch -- npx -y mcp-fetch-server 2>/dev/null \
+      || log "  fetch MCP already registered for codex (or registration failed — see 'codex mcp list')"
+  fi
+
   # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
   # does NOT support OAuth dynamic client registration, so clients must auth with a
   # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
@@ -586,17 +600,20 @@ if command -v npm >/dev/null 2>&1; then
     fi
     CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
+    FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + codegraph + chrome-devtools MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      log "Registering github + codegraph + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
       command -v codegraph >/dev/null 2>&1 \
         && register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CG_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
     fi
   fi
   # reasonix: its `mcp` config is a stdio command-string array and can't take a
