@@ -33,15 +33,31 @@ function Write-Step  ($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn2 ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+function Test-Admin {
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent())
+        .IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Install-Scoop {
+    # Scoop's installer blocks running as admin by default.
+    # Detect elevation and pass -RunAsAdmin if needed.
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+    if (Test-Admin) {
+        $installer = Join-Path $env:TEMP 'scoop-install.ps1'
+        Invoke-RestMethod -Uri 'https://get.scoop.sh' -OutFile $installer
+        try       { & $installer -RunAsAdmin }
+        finally   { Remove-Item $installer -ErrorAction SilentlyContinue }
+    } else {
+        Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+    }
+}
 
 # ---------------------------------------------------------------------------
 # 1) Scoop (user-scope package manager — no admin required)
 # ---------------------------------------------------------------------------
 if (-not (Test-Cmd scoop)) {
     Write-Step 'Installing Scoop'
-    # Scoop's installer requires RemoteSigned for the current user.
-    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-    Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+    Install-Scoop
 } else {
     # Scoop shim found on PATH — verify the actual app is functional.
     # Common failure mode: the shim exists but the scoop app was accidentally
@@ -52,8 +68,7 @@ if (-not (Test-Cmd scoop)) {
         # Remove broken shims + the scoop app dir so the installer starts clean.
         Remove-Item "$env:USERPROFILE\scoop\shims" -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item "$env:USERPROFILE\scoop\apps\scoop" -Recurse -Force -ErrorAction SilentlyContinue
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+        Install-Scoop
     } else {
         Write-Step "Scoop already installed: $(scoop --version | Select-Object -First 1)"
     }
@@ -1059,8 +1074,7 @@ $devCurrent = Get-ItemProperty -Path $DevModeKey -Name $DevModeVal -ErrorAction 
 if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
     Write-Step 'Developer Mode already enabled'
 } else {
-    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if ($isAdmin) {
+    if (Test-Admin) {
         Write-Step 'Enabling Developer Mode (for symlink permission)'
         if (-not (Test-Path $DevModeKey)) {
             New-Item -Path $DevModeKey -Force | Out-Null
