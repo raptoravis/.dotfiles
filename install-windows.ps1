@@ -43,7 +43,20 @@ if (-not (Test-Cmd scoop)) {
     Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
     Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
 } else {
-    Write-Step "Scoop already installed: $(scoop --version | Select-Object -First 1)"
+    # Scoop shim found on PATH — verify the actual app is functional.
+    # Common failure mode: the shim exists but the scoop app was accidentally
+    # deleted / corrupted, so `scoop ...` calls fail with "not recognized".
+    $scoopApp = Join-Path $env:USERPROFILE 'scoop\apps\scoop\current\bin\scoop.ps1'
+    if (-not (Test-Path $scoopApp)) {
+        Write-Warn2 'Scoop shim found but scoop app is missing — reinstalling'
+        # Remove broken shims + the scoop app dir so the installer starts clean.
+        Remove-Item "$env:USERPROFILE\scoop\shims" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$env:USERPROFILE\scoop\apps\scoop" -Recurse -Force -ErrorAction SilentlyContinue
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
+    } else {
+        Write-Step "Scoop already installed: $(scoop --version | Select-Object -First 1)"
+    }
 }
 
 # git is needed for buckets and many manifests; install up-front and silently.
