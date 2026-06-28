@@ -34,8 +34,7 @@ function Write-Warn2 ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 function Test-Admin {
-    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent())
-        .IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
 function Install-Scoop {
