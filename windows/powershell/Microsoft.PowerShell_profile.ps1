@@ -287,6 +287,13 @@ function Set-Title() {
 # upstream) so Set-Title runs on every prompt redraw.
 $Script:_origPrompt = (Get-Command prompt -ErrorAction SilentlyContinue).ScriptBlock
 function prompt {
+    # OSC 9;9 — report CWD to Windows Terminal for duplicate tab/pane & session restore.
+    # Only emit inside Windows Terminal (WT_SESSION is set by WT).
+    if ($env:WT_SESSION) {
+        $cwd = $executionContext.SessionState.Path.CurrentLocation.ProviderPath
+        Write-Host -NoNewLine "$([char]27)]9;9;$cwd$([char]27)\"
+    }
+
     Set-Title
     # Sync the .NET process cwd with the PSDrive location. Set-Location only
     # updates Get-Location; child processes (starship) inherit the unchanged

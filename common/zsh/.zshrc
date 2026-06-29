@@ -66,6 +66,17 @@ done
 # starship
 (( $+commands[starship] )) && eval "$(starship init zsh)"
 
+# OSC 9;9 — report CWD to Windows Terminal for duplicate tab/pane & session restore.
+# Only runs inside Windows Terminal (WT_SESSION is set by WT) with wslpath available.
+if [[ -n "$WT_SESSION" ]] && (( $+commands[wslpath] )); then
+    _report_cwd_to_wt() {
+        local win_path
+        win_path=$(wslpath -w "$PWD" 2>/dev/null) || return
+        print -Pn "\e]9;9;$win_path\e\\"
+    }
+    precmd_functions+=(_report_cwd_to_wt)
+fi
+
 # mise (runtime version manager)
 eval "$(mise activate zsh)"
 

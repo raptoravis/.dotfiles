@@ -24,7 +24,10 @@
     { "command": { "action": "newTab", "profile": "WSL (zsh)" }, "keys": "ctrl+shift+2" },
     { "command": { "action": "newTab", "profile": "Command Prompt" }, "keys": "ctrl+shift+3" },
 
-    // Panes (split)
+    // Duplicate tab (inherits CWD via OSC 9;9)
+    { "command": "duplicateTab", "keys": "ctrl+shift+d" },
+
+    // Panes (split — inherits CWD via OSC 9;9 when splitMode=duplicate)
     { "command": { "action": "splitPane", "split": "auto", "splitMode": "duplicate" }, "keys": "alt+shift+d" },
 
     // Font size
