@@ -404,13 +404,7 @@ if command -v git >/dev/null 2>&1; then
     fi
   done
 
-  # 7. (was: ruvnet/ruflo — clone + skill scan)
-  #    ruflo is now installed as an npm CLI in the npm-globals block below to
-  #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
-  #    activation: `npx ruflo@latest init` and
-  #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
-
-  # 8. Codex slash-prompts ported from Claude Code commands/
+  # 7. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
   #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
@@ -483,10 +477,6 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
     npm install -g hostc || warn "  hostc install failed"
-  fi
-  if ! command -v ruflo >/dev/null 2>&1; then
-    log "Installing ruflo (multi-agent orchestrator) via npm"
-    npm install -g ruflo@latest || warn "  ruflo install failed"
   fi
   if ! command -v claude-mem >/dev/null 2>&1; then
     log "Installing claude-mem via npm"

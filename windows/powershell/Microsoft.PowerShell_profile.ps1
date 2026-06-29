@@ -4,7 +4,7 @@
 
 # PSReadLine — predictive intellisense + history dropdown + tab menu
 Import-Module PSReadLine
-Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView
+Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView -ErrorAction SilentlyContinue
 Set-PSReadLineOption -EditMode Windows -HistorySearchCursorMovesToEnd
 Set-PSReadLineKeyHandler -Key Tab           -Function MenuComplete
 Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward

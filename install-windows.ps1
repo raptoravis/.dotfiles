@@ -93,6 +93,7 @@ scoop bucket add versions   2>$null | Out-Null
 $Tools = @(
     'lazygit', 'gh', 'neovim', 'yazi', 'wezterm-nightly',
     'fzf', 'ripgrep', 'bat',
+    'starship', 'fd',
     'cloudflared',
     'witr',
     'cyberduck',
@@ -676,13 +677,7 @@ if (Test-Cmd git) {
         }
     }
 
-    # 7. (was: ruvnet/ruflo — clone + skill scan)
-    #    ruflo is now installed as an npm CLI in the npm-globals block below to
-    #    expose its full feature set (orchestrator, MCP server, hooks). Per-repo
-    #    activation: `npx ruflo@latest init` and
-    #    `claude mcp add ruflo -- npx ruflo@latest mcp start`.
-
-    # 8. Codex slash-prompts ported from Claude Code commands/
+    # 7. Codex slash-prompts ported from Claude Code commands/
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as
     #    /handoff-create, /commit etc. inside Codex.
     Write-Step 'Installing Codex prompts (handoff / commit-commands)'
@@ -794,11 +789,6 @@ if (Test-Cmd npm) {
         Write-Step 'Installing hostc (edge tunnel CLI) via npm'
         npm install -g hostc
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  hostc install failed' }
-    }
-    if (-not (Test-Cmd ruflo)) {
-        Write-Step 'Installing ruflo (multi-agent orchestrator) via npm'
-        npm install -g 'ruflo@latest'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  ruflo install failed' }
     }
     if (-not (Test-Cmd claude-mem)) {
         Write-Step 'Installing claude-mem via npm'
