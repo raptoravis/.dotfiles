@@ -110,6 +110,17 @@ else
     || warn "  ghostty cask install failed (check Brewfile)"
 fi
 
+# VS Code — primary editor; declared in Brewfile but brew bundle may skip
+# already-installed casks without upgrading.
+log "Installing/upgrading VS Code"
+if command -v code >/dev/null 2>&1; then
+  brew upgrade --cask visual-studio-code --no-quarantine 2>/dev/null \
+    && log "  VS Code upgraded" || log "  VS Code already up to date"
+else
+  brew install --cask visual-studio-code --no-quarantine 2>/dev/null \
+    || warn "  VS Code cask install failed (check Brewfile)"
+fi
+
 # Starship is referenced in .zshrc but not in the Brewfile.
 if ! command -v starship >/dev/null 2>&1; then
   log "Installing starship prompt"

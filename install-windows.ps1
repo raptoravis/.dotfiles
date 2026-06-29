@@ -191,6 +191,15 @@ if ($ScoopShims -notin ($env:Path -split ';')) {
     $env:Path = "$ScoopShims;$env:Path"
 }
 
+# VS Code — primary editor; available from extras bucket.
+if (-not (Test-Cmd code)) {
+    Write-Step 'Installing VS Code via Scoop'
+    scoop install vscode
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed: vscode' }
+} else {
+    Write-Host '  VS Code already installed'
+}
+
 # Telescope FZF Native (Neovim) and `cc`/`link` crate builds need a C compiler
 # and linker. VS Build Tools (step 4d) provides cl.exe + link.exe. Resolve the
 # MSVC toolchain directory via vswhere and add it to the session PATH so Rust /
