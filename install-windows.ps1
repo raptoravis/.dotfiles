@@ -83,9 +83,9 @@ if (-not (Test-Cmd git)) {
 # 2) Scoop buckets
 # ---------------------------------------------------------------------------
 Write-Step 'Adding Scoop buckets (extras, nerd-fonts, versions)'
-scoop bucket add extras     2>$null | Out-Null
-scoop bucket add nerd-fonts 2>$null | Out-Null
-scoop bucket add versions   2>$null | Out-Null
+scoop bucket add extras     *>$null
+scoop bucket add nerd-fonts *>$null
+scoop bucket add versions   *>$null
 
 # ---------------------------------------------------------------------------
 # 3) Core tools, languages, dependencies (matches Makefile.toml `windows-tools`)
