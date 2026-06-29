@@ -268,11 +268,19 @@ if (Get-Command starship -ErrorAction SilentlyContinue) {
 function Set-Title() {
     # Preserve $LASTEXITCODE so the user's command status survives the git call.
     $origLEC = $global:LASTEXITCODE
-    $repo = git rev-parse --show-toplevel 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $repo) {
-        $repo = (Get-Location).Path
+    $currentPath = (Get-Location).Path
+    # Cache the repo root per directory — git rev-parse is a process spawn
+    # and starship already runs its own git call for the prompt, so skipping
+    # a second one shaves ~100-300ms per prompt on Windows.
+    if ($global:_cachedTitlePath -ne $currentPath) {
+        $global:_cachedTitlePath = $currentPath
+        $repo = git rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $repo) {
+            $repo = $currentPath
+        }
+        $global:_cachedTitle = $repo
     }
-    $host.UI.RawUI.WindowTitle = $repo
+    $host.UI.RawUI.WindowTitle = $global:_cachedTitle
     $global:LASTEXITCODE = $origLEC
 }
 

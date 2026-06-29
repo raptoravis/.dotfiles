@@ -25,7 +25,15 @@ local config = wezterm.config_builder()
 --   - gui-startup -> deferred silent auto-restore
 -- ---------------------------------------------------------------------------
 local sessions_dir = wezterm.home_dir .. '/.local/share/wezterm/sessions'
-do
+-- Only spawn a shell to create the dir when it doesn't already exist.
+-- install-windows.ps1 creates this up-front, so os.execute is almost never hit.
+-- Using io.open as a probe avoids blocking the config load on cmd.exe startup.
+local _test_file = sessions_dir .. '/.__write_test'
+local _f = io.open(_test_file, 'w')
+if _f then
+    _f:close()
+    os.remove(_test_file)
+else
     local sep = package.config:sub(1, 1)
     if sep == '\\' then
         local win = sessions_dir:gsub('/', '\\')
