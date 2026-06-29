@@ -26,6 +26,7 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/claude-hud-config.json" = "~/.claude/plugins/claude-hud/config.json"
 "common/nushell" = "~/.config/nushell"
+"common/scripts/check-balance.py" = "~/.local/bin/check-balance.py"
 
 # WezTerm is no longer the default terminal on any platform. If you still use
 # it on a pure-Linux machine (not WSL), add "wezterm" to your packages list.
