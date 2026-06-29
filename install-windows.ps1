@@ -99,7 +99,7 @@ $Tools = @(
     'sniffnet',
     'FiraCode-NF'
 )
-$Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua', 'nodejs-lts')
+$Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
 $Deps      = @('autohotkey', 'gcc', 'cmake', 'fastfetch', 'firacode')
 
 # Snapshot installed scoop apps once. `scoop export` emits JSON (apps[].Name);
@@ -195,6 +195,56 @@ $gccShim = Join-Path $env:USERPROFILE 'scoop\apps\gcc\current\bin\gcc.exe'
 if (Test-Path $gccShim) {
     Write-Step 'Adding gcc shim for Neovim Telescope FZF Native'
     scoop shim add gcc $gccShim 2>$null | Out-Null
+}
+
+# ---------------------------------------------------------------------------
+# 3b) Node.js — Chocolatey (system-wide PATH) with Scoop fallback
+# ---------------------------------------------------------------------------
+if (-not (Test-Cmd node)) {
+    if (Test-Admin) {
+        # Install Chocolatey if not present
+        if (-not (Test-Cmd choco)) {
+            Write-Step 'Installing Chocolatey'
+            try {
+                irm 'https://community.chocolatey.org/install.ps1' | iex
+            } catch {
+                Write-Warn2 "  Chocolatey install failed: $_"
+            }
+        }
+        if (Test-Cmd choco) {
+            Write-Step 'Installing Node.js via Chocolatey'
+            choco install nodejs --version='24.18.0' -y --no-progress --no-color 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                # Refresh PATH so node/npm are available in this session
+                $chocoBin = Join-Path $env:ProgramData 'chocolatey\bin'
+                if ($chocoBin -notin ($env:Path -split ';')) {
+                    $env:Path = "$chocoBin;$env:Path"
+                }
+                $refreshEnv = Join-Path $env:ProgramData 'chocolatey\bin\refreshenv.cmd'
+                if (Test-Path $refreshEnv) { cmd /c $refreshEnv 2>$null }
+            } else {
+                Write-Warn2 '  Chocolatey nodejs install failed — falling back to Scoop'
+            }
+        } else {
+            Write-Warn2 '  Chocolatey not available — falling back to Scoop for Node.js'
+        }
+    } else {
+        Write-Warn2 '  Not running as admin — falling back to Scoop for Node.js'
+    }
+    # Fallback: install via Scoop if Chocolatey didn't succeed
+    if (-not (Test-Cmd node)) {
+        Write-Step 'Installing Node.js via Scoop (fallback)'
+        scoop install nodejs-lts
+    }
+} else {
+    Write-Step "Node.js already installed: $(node -v)"
+}
+# Ensure npm is on PATH for the npm-tools section below
+if (-not (Test-Cmd npm)) {
+    $ScoopShims = Join-Path $env:USERPROFILE 'scoop\shims'
+    if ($ScoopShims -notin ($env:Path -split ';')) {
+        $env:Path = "$ScoopShims;$env:Path"
+    }
 }
 
 # ---------------------------------------------------------------------------
