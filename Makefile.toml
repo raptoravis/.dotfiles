@@ -141,7 +141,7 @@ script = [
     "scoop bucket add extras 2>nul || echo extras bucket already added",
     "scoop bucket add nerd-fonts 2>nul || echo nerd-fonts bucket already added",
     "scoop bucket add versions 2>nul || echo versions bucket already added",
-    "scoop install lazygit neovim yazi wezterm fzf ripgrep bat FiraCode-NF",
+    "scoop install lazygit neovim yazi windows-terminal fzf ripgrep bat FiraCode-NF",
 
     "echo --- Installing Languages ---",
     "scoop install python go lua lua51 luarocks stylua",
@@ -284,7 +284,8 @@ script = [
     "echo --- Updating Homebrew & Packages ---",
     "brew update",
     "brew upgrade",
-    "brew upgrade --cask wezterm@nightly --no-quarantine --greedy-latest",
+    "echo --- Updating/Upgrading Ghostty ---",
+    "brew upgrade --cask ghostty --no-quarantine --greedy-latest 2>/dev/null || brew install --cask ghostty 2>/dev/null || echo '  ghostty install/upgrade done'",
 
     "echo --- Updating Python CLI tools ---",
     "uv tool upgrade --all",

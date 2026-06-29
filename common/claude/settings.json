@@ -28,8 +28,7 @@
       "mcp__codegraph__codegraph_node",
       "mcp__codegraph__codegraph_explore",
       "mcp__codegraph__codegraph_files",
-      "mcp__codegraph__codegraph_status",
-      "Bash(powershell -NoProfile -Command \"Get-Process -Name wezterm-gui -ErrorAction SilentlyContinue | Select-Object Id,ProcessName\")"
+      "mcp__codegraph__codegraph_status"
     ],
     "deny": [
       "Read(**/*.pem)",

@@ -10,25 +10,16 @@
 .Trashes
 .Trash-*
 
-# WezTerm configuration files
+# WezTerm runtime artifacts (if used on bare Linux)
 wezterm.log
-wezterm-creds.json
-wezterm-ssh-agent.sock
-wezterm-icon-cache
+wezterm-*.*
 .cache/wezterm
-
-# If you keep WezTerm config in a specific folder
-.config/wezterm/*.log
-.config/wezterm/.temp
 
 # Starship prompt configuration
 .starship
 
 # Starship cache files
 .cache/starship
-
-# Ignore specific WezTerm settings or logs (if applicable)
-wezterm-*.*  # Example: wezterm-errors.txt or other temp files
 
 # General backup and temporary files
 *.bak

@@ -175,7 +175,7 @@ cargo make info            # Show all available commands
 
 ### Windows-only (GUI layer)
 
-[WezTerm](https://github.com/wez/wezterm) | [AutoHotkey](https://github.com/AutoHotkey/AutoHotkey) | [Scoop](https://scoop.sh/)
+[Windows Terminal](https://github.com/microsoft/terminal) | [AutoHotkey](https://github.com/AutoHotkey/AutoHotkey) | [Scoop](https://scoop.sh/)
 
 ---
 

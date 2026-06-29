@@ -781,10 +781,11 @@ fi
 warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 13) WezTerm session state directory (created by common/wezterm/wezterm.lua
-#     for save/restore — pre-create so the lua mkdir fallback never runs).
+# 13) WezTerm session state directory — only needed if wezterm is installed.
 # ---------------------------------------------------------------------------
-mkdir -p "$HOME/.local/share/wezterm/sessions"
+if command -v wezterm >/dev/null 2>&1; then
+  mkdir -p "$HOME/.local/share/wezterm/sessions"
+fi
 
 # ---------------------------------------------------------------------------
 # 12) Default shell

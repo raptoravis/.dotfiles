@@ -12,16 +12,16 @@ Unix-first. The core dev environment (zsh, neovim, CLI tools) targets unix; Wind
 
 ```
 macOS:    native apps (Ghostty, AeroSpace) --> unix backend (zsh, neovim, tmux)
-Windows:  native apps (WezTerm, AHK)       --> WSL2 --> unix backend (zsh, neovim, tmux)
+Windows:  native apps (Windows Terminal, AHK) --> WSL2 --> unix backend (zsh, neovim, tmux)
 ```
 
 ### Directory model
 
 | Directory  | Purpose | Dotter package |
 |------------|---------|----------------|
-| `common/`  | Cross-platform base layer — shell, editors, dev tools, linters, wezterm, nushell | `common` |
+| `common/`  | Cross-platform base layer — shell, editors, dev tools, linters, nushell | `common` |
 | `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | `mac` |
-| `windows/` | Windows-only host integration (ahk, wsl, powershell) | `windows` |
+| `windows/` | Windows-only host integration (ahk, wsl, powershell, terminal) | `windows` |
 
 ### Platform detection
 

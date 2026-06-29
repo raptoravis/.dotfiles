@@ -1,0 +1,143 @@
+// Windows Terminal settings — managed by dotter
+// https://github.com/SuperCuber/dotter
+// See also: https://aka.ms/terminal-documentation
+//
+// Symlinked via dotter into %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+// Requires Developer Mode for non-admin symlinks (enabled by install-windows.ps1).
+
+{
+  "$schema": "https://aka.ms/terminal-profiles-schema",
+
+  "actions":
+  [
+    // Clipboard
+    { "command": { "action": "copy", "singleLine": false }, "keys": "ctrl+c" },
+    { "command": "paste", "keys": "ctrl+v" },
+
+    // Tabs
+    { "command": "closeTab", "keys": "ctrl+shift+w" },
+    { "command": { "action": "nextTab" }, "keys": "ctrl+tab" },
+    { "command": { "action": "prevTab" }, "keys": "ctrl+shift+tab" },
+
+    // New tab with specific profiles
+    { "command": { "action": "newTab", "profile": "PowerShell 7" }, "keys": "ctrl+shift+1" },
+    { "command": { "action": "newTab", "profile": "WSL (zsh)" }, "keys": "ctrl+shift+2" },
+    { "command": { "action": "newTab", "profile": "Command Prompt" }, "keys": "ctrl+shift+3" },
+
+    // Panes (split)
+    { "command": { "action": "splitPane", "split": "auto", "splitMode": "duplicate" }, "keys": "alt+shift+d" },
+
+    // Font size
+    { "command": "adjustFontSizeUp", "keys": "ctrl+=" },
+    { "command": "adjustFontSizeDown", "keys": "ctrl+-" },
+    { "command": "resetFontSize", "keys": "ctrl+0" },
+
+    // Search
+    { "command": "find", "keys": "ctrl+shift+f" },
+
+    // Fullscreen
+    { "command": "toggleFullscreen", "keys": "alt+enter" },
+
+    // Command palette
+    { "command": "commandPalette", "keys": "ctrl+shift+p" },
+  ],
+
+  "copyFormatting": "none",
+  "copyOnSelect": false,
+
+  "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+
+  "disabledProfileSources": [],
+  "disableAnimations": true,
+
+  "profiles":
+  {
+    "defaults":
+    {
+      "colorScheme": "Tokyo Night",
+      "font":
+      {
+        "face": "FiraCode Nerd Font",
+        "size": 11
+      },
+      "opacity": 100,
+      "useAcrylic": false,
+      "cursorShape": "bar",
+      "antialiasingMode": "grayscale",
+      "intenseTextStyle": "bold",
+      "startingDirectory": "D:\\dev",
+      "scrollbarState": "hidden",
+      "closeOnExit": "graceful"
+    },
+    "list":
+    [
+      {
+        "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+        "name": "PowerShell 7",
+        "commandline": "pwsh.exe -NoLogo",
+        "icon": "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png",
+        "hidden": false
+      },
+      {
+        "guid": "{2c4de342-38b7-51cf-b940-2309a097f518}",
+        "name": "WSL (zsh)",
+        "commandline": "wsl.exe --cd ~",
+        "source": "Windows.Terminal.Wsl",
+        "icon": "ms-appx:///ProfileIcons/{9acb9455-ca41-5af7-950f-204b4cbf56df}.png",
+        "hidden": false
+      },
+      {
+        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+        "name": "Windows PowerShell",
+        "commandline": "powershell.exe",
+        "hidden": true
+      },
+      {
+        "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+        "name": "Command Prompt",
+        "commandline": "cmd.exe",
+        "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
+        "hidden": true
+      }
+    ]
+  },
+
+  "schemes":
+  [
+    {
+      "name": "Tokyo Night",
+      "background": "#1a1b26",
+      "foreground": "#a9b1d6",
+      "cursorColor": "#c0caf5",
+      "selectionBackground": "#33467c",
+      "black": "#32344a",
+      "red": "#f7768e",
+      "green": "#9ece6a",
+      "yellow": "#e0af68",
+      "blue": "#7aa2f7",
+      "purple": "#ad8ee6",
+      "cyan": "#449dab",
+      "white": "#9699a8",
+      "brightBlack": "#444b6a",
+      "brightRed": "#ff7a93",
+      "brightGreen": "#b9f27c",
+      "brightYellow": "#ff9e64",
+      "brightBlue": "#7da6ff",
+      "brightPurple": "#bb9af7",
+      "brightCyan": "#0db9d7",
+      "brightWhite": "#abb2bf"
+    }
+  ],
+
+  "newTabMenu": [],
+
+  "showTabsInTitlebar": true,
+  "showTerminalTitleInTab": false,
+  "snapToGridOnResize": false,
+  "startOnUserLogin": true,
+  "tabSwitcherMode": "mru",
+  "theme": "dark",
+  "useAcrylicInTabRow": false,
+  "windowingBehavior": "useExisting",
+  "wordDelimiters": " ./\\()\"'-:,.;<>~!@#$%^&*|+=[]{}~?│"
+}

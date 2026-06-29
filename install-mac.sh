@@ -727,10 +727,9 @@ fi
 warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 11) WezTerm session state directory (created by common/wezterm/wezterm.lua
-#     for save/restore — pre-create so the lua mkdir fallback never runs).
+# 11) Ghostty config directory — pre-create so dotter can symlink into it.
 # ---------------------------------------------------------------------------
-mkdir -p "$HOME/.local/share/wezterm/sessions"
+mkdir -p "$HOME/.config/ghostty"
 
 # ---------------------------------------------------------------------------
 # 12) Default shell

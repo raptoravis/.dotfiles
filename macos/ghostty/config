@@ -1,16 +1,26 @@
 theme = {{theme_ghostty}}
-window-decoration = true
+
+# Font
+font-family = FiraCode Nerd Font
 font-size = 14
-confirm-close-surface = false
+
+# Window
+window-decoration = true
 background-opacity = 1
 background-blur = 20
-
-# Add padding around the terminal content (in pixels)
 window-padding-x = 0
 window-padding-y = 0
+confirm-close-surface = false
+macos-titlebar-style = tabs
 
+# Cursor
+cursor-style = bar
+cursor-style-blink = false
 
-# Global keybinding to summon a temp terminal
+# Scrollback
+scrollback-limit = 10000
+
+# Global keybinding to summon a quick terminal
 # https://ghostty.org/docs/config/reference#quick-terminal-size
 quick-terminal-screen = main
 quick-terminal-size = 1000px,700px

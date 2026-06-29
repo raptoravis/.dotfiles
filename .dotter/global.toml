@@ -2,7 +2,7 @@
 copy_command = "pbcopy"  # default/fallback
 theme            = "tokyo-night"                # tokyo-night | catppuccin-macchiato | catppuccin-mocha | gruvbox-dark
 theme_ghostty    = "TokyoNight"                # Tokyo Night | Catppuccin Macchiato | Catppuccin Mocha | GruvboxDark
-theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Catppuccin Macchiato (Gogh) | Catppuccin Mocha (Gogh) | GruvboxDark
+theme_wt         = "Tokyo Night"               # Windows Terminal — define color table in windows/terminal/settings.json
 
 [common.files]
 "common/linters" = "~/.config"
@@ -26,6 +26,10 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/claude-hud-config.json" = "~/.claude/plugins/claude-hud/config.json"
 "common/nushell" = "~/.config/nushell"
+
+# WezTerm is no longer the default terminal on any platform. If you still use
+# it on a pure-Linux machine (not WSL), add "wezterm" to your packages list.
+[wezterm.files]
 "common/wezterm/constants.lua" = "~/.config/wezterm/constants.lua"
 "common/wezterm/functions.lua" = "~/.config/wezterm/functions.lua"
 "common/wezterm/keybinds.lua" = "~/.config/wezterm/keybinds.lua"
@@ -33,6 +37,7 @@ theme_wezterm    = "Tokyo Night Storm (Gogh)"   # Tokyo Night Storm (Gogh) | Cat
 
 [windows.files]
 "windows/wsl/.wslconfig" = "~/.wslconfig"
+"windows/terminal/settings.json" = "~/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
 
 [mac.files]
 "common/bottom" = "~/Library/Application Support/bottom"

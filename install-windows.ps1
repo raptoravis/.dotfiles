@@ -13,7 +13,7 @@ param(
     [string]$DotfilesDir = $PSScriptRoot,
     # HTTP proxy applied as user-level HTTPS_PROXY/HTTP_PROXY/ALL_PROXY and to
     # `git config --global`. Mirrors $env:PROXY_URL in the pwsh profile so
-    # tools launched outside pwsh (wezterm plugin clones, vscode, etc.) reach
+    # tools launched outside pwsh (vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
     # When set, after install removes agent-skill links / plugin-cache dirs /
@@ -91,7 +91,7 @@ scoop bucket add versions   2>$null | Out-Null
 # 3) Core tools, languages, dependencies (matches Makefile.toml `windows-tools`)
 # ---------------------------------------------------------------------------
 $Tools = @(
-    'lazygit', 'gh', 'neovim', 'yazi', 'wezterm-nightly',
+    'lazygit', 'gh', 'neovim', 'yazi', 'windows-terminal',
     'fzf', 'ripgrep', 'bat',
     'starship', 'fd',
     'cloudflared',
@@ -101,7 +101,7 @@ $Tools = @(
     'FiraCode-NF'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
-$Deps      = @('autohotkey', 'gcc', 'cmake', 'fastfetch', 'firacode')
+$Deps      = @('autohotkey', 'cmake', 'fastfetch', 'firacode')
 
 # Snapshot installed scoop apps once. `scoop export` emits JSON (apps[].Name);
 # fall back to parsing `scoop list` on older scoop versions.
@@ -191,11 +191,34 @@ if ($ScoopShims -notin ($env:Path -split ';')) {
     $env:Path = "$ScoopShims;$env:Path"
 }
 
-# Telescope FZF Native (Neovim) needs a real gcc shim
-$gccShim = Join-Path $env:USERPROFILE 'scoop\apps\gcc\current\bin\gcc.exe'
-if (Test-Path $gccShim) {
-    Write-Step 'Adding gcc shim for Neovim Telescope FZF Native'
-    scoop shim add gcc $gccShim 2>$null | Out-Null
+# Telescope FZF Native (Neovim) and `cc`/`link` crate builds need a C compiler
+# and linker. VS Build Tools (step 4d) provides cl.exe + link.exe. Resolve the
+# MSVC toolchain directory via vswhere and add it to the session PATH so Rust /
+# Neovim / Python native extensions use the VS linker instead of MinGW GCC.
+$VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$MsvcDir = ''
+if (Test-Path $VsWhere) {
+    $vsPath = & $VsWhere -latest -products '*' -requires 'Microsoft.VisualStudio.Workload.VCTools' -property installationPath 2>$null
+    if ($vsPath) {
+        $msvcRoot = Join-Path $vsPath 'VC\Tools\MSVC'
+        $latestMs = Get-ChildItem $msvcRoot -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+        if ($latestMs) { $MsvcDir = Join-Path $latestMs.FullName 'bin\Hostx64\x64' }
+    }
+}
+if ($MsvcDir -and (Test-Path (Join-Path $MsvcDir 'cl.exe'))) {
+    $env:Path = "$MsvcDir;$env:Path"
+    Write-Step "VS toolchain: cl.exe + link.exe found at $MsvcDir"
+    Write-Host '  New terminals should run vcvarsall.bat or use "Developer Command Prompt for VS 2022"'
+} else {
+    # Fallback: install MinGW gcc via scoop so Telescope FZF / cc crate still work
+    Write-Step 'Installing gcc (MinGW) via Scoop — VS Build Tools not detected'
+    scoop install gcc 2>$null | Out-Null
+    $gccScoop = Join-Path $env:USERPROFILE 'scoop\apps\gcc\current\bin\gcc.exe'
+    if (Test-Path $gccScoop) {
+        scoop shim add gcc $gccScoop 2>$null | Out-Null
+        Write-Host '  gcc shim added for Neovim Telescope FZF Native (fallback)'
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -324,6 +347,54 @@ if ($npcapDll | Where-Object { Test-Path $_ }) {
     } catch {
         Write-Warn2 '  Npcap install failed -- grab it from https://npcap.com (sniffnet needs wpcap.dll)'
     }
+}
+
+# ---------------------------------------------------------------------------
+# 4d) Visual Studio Build Tools — C++ compiler, MSBuild, CMake, headers.
+#     Needed by: Neovim Telescope FZF Native (requires gcc/cl), Windows
+#     Cargo builds (cc crate), Python native extensions, Windows SDK.
+#     Installed via the VS Bootstrapper; only downloads what's needed.
+#     Workload: VCTools (Desktop development with C++).
+#     Idempotent: `vs_where` detects existing installs.
+# ---------------------------------------------------------------------------
+$VSBootstrapUrl = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'
+$VSBootstrapExe = Join-Path $env:TEMP 'vs_BuildTools.exe'
+$VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+# Check if Build Tools are already installed by looking for vswhere or any
+# instance with the VCTools workload.
+$VsFound = $false
+if (Test-Path $VsWhere) {
+    $vsInstance = & $VsWhere -latest -products '*' -requires 'Microsoft.VisualStudio.Workload.VCTools' -format json 2>$null | ConvertFrom-Json
+    if ($vsInstance -and $vsInstance.Length -gt 0) {
+        Write-Step "Visual Studio Build Tools already installed: $($vsInstance[0].displayName)"
+        $VsFound = $true
+    }
+}
+
+if (-not $VsFound) {
+    Write-Step 'Installing Visual Studio Build Tools (C++ workloads)'
+    try {
+        Invoke-WebRequest -Uri $VSBootstrapUrl -OutFile $VSBootstrapExe -UseBasicParsing
+        Write-Host '  Download complete, running installer (this may take several minutes)...'
+
+        $proc = Start-Process -FilePath $VSBootstrapExe -ArgumentList @(
+            '--quiet', '--wait', '--norestart', '--nocache',
+            '--add', 'Microsoft.VisualStudio.Workload.VCTools',
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.22621',
+            '--includeRecommended'
+        ) -NoNewWindow -PassThru -Wait
+
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            Write-Host "  VS Build Tools installed (exit code: $($proc.ExitCode) — 3010 = reboot recommended)"
+        } else {
+            Write-Warn2 "  VS Build Tools installer exited with code $($proc.ExitCode) — re-run manually if needed"
+        }
+    } catch {
+        Write-Warn2 "  VS Build Tools install failed: $_"
+    }
+    Remove-Item $VSBootstrapExe -ErrorAction SilentlyContinue
 }
 
 # ---------------------------------------------------------------------------
@@ -1009,8 +1080,8 @@ function Set-UserEnvVarIfChanged($name, $value) {
 Set-UserEnvVarIfChanged 'XDG_CONFIG_HOME'  "$env:USERPROFILE\.config"
 Set-UserEnvVarIfChanged 'YAZI_CONFIG_HOME' "$env:USERPROFILE\.config\yazi"
 
-# Proxy — applied at the user scope so non-pwsh processes (wezterm plugin
-# clones, vscode, etc.) also route through it. The pwsh profile sets the
+# Proxy — applied at the user scope so non-pwsh processes (vscode, etc.)
+# also route through it. The pwsh profile sets the
 # same value at session scope via proxy_on; setting it at user scope makes
 # it visible before the profile runs.
 if ($ProxyUrl) {
@@ -1190,14 +1261,14 @@ if (Test-Cmd dotter) {
 Write-Warn2 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 11) WezTerm session state directory.
-#     wezterm.lua writes ~/.local/share/wezterm/sessions/ for save/restore;
-#     creating it up-front means the lua mkdir fallback never has to run.
+# 11) Windows Terminal settings directory.
+#     dotter symlinks windows/terminal/settings.json into the Windows Terminal
+#     package LocalState folder; creating parent dir so dotter doesn't fail.
 # ---------------------------------------------------------------------------
-$SessionsDir = Join-Path $env:USERPROFILE '.local\share\wezterm\sessions'
-if (-not (Test-Path $SessionsDir)) {
-    New-Item -ItemType Directory -Path $SessionsDir -Force | Out-Null
-    Write-Host "  created $SessionsDir"
+$WinTermDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
+if (-not (Test-Path $WinTermDir)) {
+    New-Item -ItemType Directory -Path $WinTermDir -Force | Out-Null
+    Write-Host "  created $WinTermDir"
 }
 
 # ---------------------------------------------------------------------------
