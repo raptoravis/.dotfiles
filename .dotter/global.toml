@@ -37,7 +37,7 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 
 [windows.files]
 "windows/wsl/.wslconfig" = "~/.wslconfig"
-"windows/terminal/settings.json" = "~/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json"
+"windows/terminal/settings.json" = "~/scoop/apps/windows-terminal/current/settings"
 
 [mac.files]
 "common/bottom" = "~/Library/Application Support/bottom"

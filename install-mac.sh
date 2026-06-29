@@ -99,6 +99,17 @@ else
   warn "Brewfile not found at $DOTFILES_DIR/Brewfile — skipping"
 fi
 
+# Ghostty is declared in Brewfile but brew bundle may skip already-installed
+# casks without upgrading them. Ensure it's installed and up to date.
+log "Installing/upgrading Ghostty terminal"
+if command -v ghostty >/dev/null 2>&1; then
+  brew upgrade --cask ghostty --no-quarantine --greedy-latest 2>/dev/null \
+    && log "  ghostty upgraded" || log "  ghostty already up to date"
+else
+  brew install --cask ghostty --no-quarantine 2>/dev/null \
+    || warn "  ghostty cask install failed (check Brewfile)"
+fi
+
 # Starship is referenced in .zshrc but not in the Brewfile.
 if ! command -v starship >/dev/null 2>&1; then
   log "Installing starship prompt"

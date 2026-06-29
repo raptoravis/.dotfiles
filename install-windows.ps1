@@ -1261,11 +1261,11 @@ if (Test-Cmd dotter) {
 Write-Warn2 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 11) Windows Terminal settings directory.
-#     dotter symlinks windows/terminal/settings.json into the Windows Terminal
-#     package LocalState folder; creating parent dir so dotter doesn't fail.
+# 11) Windows Terminal settings directory (Scoop portable mode).
+#     Scoop-installed windows-terminal >= 1.17 uses portable mode; settings
+#     live under the app dir rather than the packaged LocalState folder.
 # ---------------------------------------------------------------------------
-$WinTermDir = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState"
+$WinTermDir = Join-Path $env:USERPROFILE 'scoop\apps\windows-terminal\current\settings'
 if (-not (Test-Path $WinTermDir)) {
     New-Item -ItemType Directory -Path $WinTermDir -Force | Out-Null
     Write-Host "  created $WinTermDir"

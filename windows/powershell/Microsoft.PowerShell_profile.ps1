@@ -31,9 +31,8 @@ if (Get-Module -ListAvailable -Name PSFzf) {
 
 # ---------------------------------------------------------------------------
 # Lazy module loading — defer non-critical modules until first use.
-# Each tab in a wezterm session-restore otherwise serializes on profile
-# load; deferring Terminal-Icons / z / git-aliases shaves several hundred
-# ms per tab.
+# Deferring Terminal-Icons / z / git-aliases shaves several hundred ms
+# per prompt on Windows.
 # ---------------------------------------------------------------------------
 
 # Terminal-Icons — load on first ls/dir. Once the module is imported,
