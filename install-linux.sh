@@ -56,6 +56,24 @@ APT_PKGS=(
 sudo -E apt-get install -y -qq "${APT_PKGS[@]}"
 (( IS_WSL )) && sudo -E apt-get install -y -qq wslu 2>/dev/null || true
 
+# Ensure node/npm are on PATH after apt install.
+# On Debian/Ubuntu the 'nodejs' package provides /usr/bin/nodejs (not /usr/bin/node).
+# Create a symlink if only nodejs exists, so 'node' resolves too.
+if ! command -v node >/dev/null 2>&1 && command -v nodejs >/dev/null 2>&1; then
+  sudo ln -sf "$(command -v nodejs)" /usr/local/bin/node
+  log "  symlinked /usr/local/bin/node -> nodejs"
+fi
+if command -v node >/dev/null 2>&1; then
+  log "node: $(node --version 2>/dev/null || echo '?')"
+else
+  warn "node not on PATH after apt install — consider nodesource.com/setup_22.x for a current Node.js"
+fi
+if command -v npm >/dev/null 2>&1; then
+  log "npm:  $(npm --version 2>/dev/null || echo '?')"
+else
+  warn "npm not on PATH after apt install — consider nodesource.com/setup_22.x for a current Node.js"
+fi
+
 # WezTerm — only on bare Linux (WSL uses the Windows host's wezterm).
 # Default Debian/Ubuntu repos lag behind upstream by years; use wez's
 # fury.io apt repo for current builds.

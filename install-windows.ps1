@@ -182,6 +182,14 @@ Install-ScoopPackages 'core tools'   $Tools
 Install-ScoopPackages 'languages'    $Languages
 Install-ScoopPackages 'dependencies' $Deps
 
+# Ensure scoop shims are on PATH for the current session so freshly-installed
+# packages (node, npm, corepack, cargo, etc.) are immediately available
+# without requiring a new terminal.
+$ScoopShims = Join-Path $env:USERPROFILE 'scoop\shims'
+if ($ScoopShims -notin ($env:Path -split ';')) {
+    $env:Path = "$ScoopShims;$env:Path"
+}
+
 # Telescope FZF Native (Neovim) needs a real gcc shim
 $gccShim = Join-Path $env:USERPROFILE 'scoop\apps\gcc\current\bin\gcc.exe'
 if (Test-Path $gccShim) {
