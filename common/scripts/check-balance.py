@@ -18,7 +18,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 # ── 各 Provider 配置 ──────────────────────────────────────────────
@@ -115,7 +115,7 @@ def check_one(
     """查一个 provider 并打印结果。"""
     data = api_get(cfg["url"], api_key)
     infos, available = cfg["parse"](data)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
     head = f"{label}  balance  ({now})"
     sep = "─" * (len(head) + 4)
