@@ -1,1 +1,1 @@
-packages = [ "common", "mac" ]
+packages = [ "common", "mac", "wezterm" ]
