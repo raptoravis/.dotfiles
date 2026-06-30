@@ -165,14 +165,13 @@ function goto {
 # ---------------------------------------------------------------------------
 # Git helpers (override / extend git-aliases module)
 # ---------------------------------------------------------------------------
-#Set-Alias -Name gac -Value gaa && gcam
 function gac {
     param (
-        $p
+        [Parameter(Mandatory)] [string]$message
     )
 
-    gaa
-    gcam $p
+    git add .
+    git commit -am $message
 }
 
 #Set-Alias -Name gpa -Value gp && gp gh
