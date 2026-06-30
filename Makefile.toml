@@ -114,7 +114,10 @@ linux_alias = "linux-core-utils"
 [tasks.windows-core-utils]
 condition = { platforms = ["windows"] }
 script = [
-    "cargo install coreutils --features windows"
+    "# `--features windows` pulls in stdbuf, which needs LIBSTDBUF_DIR",
+    "# (a Unix LD_PRELOAD path) at compile time and won't build on Windows.",
+    "# feat_Tier1 gives the same core utils without stdbuf.",
+    "cargo install coreutils --no-default-features --features feat_Tier1"
 ]
 
 [tasks.mac-core-utils]

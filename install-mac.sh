@@ -127,6 +127,19 @@ if ! command -v starship >/dev/null 2>&1; then
   brew install starship
 fi
 
+# CLI tools not in Brewfile — install idempotently via brew.
+log "Installing CLI tools (jq, vhs, silicon, ffmpeg, ast-grep)"
+for pkg in jq vhs silicon ffmpeg ast-grep; do
+  bin="$pkg"
+  # ast-grep's CLI binary is `sg` (structural grep)
+  [[ "$pkg" == "ast-grep" ]] && bin="sg"
+  if command -v "$bin" >/dev/null 2>&1; then
+    log "  $pkg already installed"
+  else
+    brew install "$pkg" 2>/dev/null || warn "  $pkg brew install failed"
+  fi
+done
+
 # ---------------------------------------------------------------------------
 # 4) Rust toolchain (rustup)
 # ---------------------------------------------------------------------------
@@ -166,7 +179,18 @@ for entry in "${CARGO_TOOLS[@]}"; do
     log "  $crate already installed ($bin on PATH)"
     continue
   fi
-  cargo install "$crate" 2>&1 | tail -n1 || warn "  failed: $crate"
+  log "  installing $crate ..."
+  if cargo install "$crate" 2>&1 | tail -n1; then
+    # Verify binary landed — cargo may exit 0 but still fail to link.
+    bin_path="$HOME/.cargo/bin/$bin"
+    if [[ -x "$bin_path" ]]; then
+      log "    -> $bin_path"
+    else
+      warn "  $crate: cargo reported OK but $bin_path not found — check cargo output above for linker/build errors"
+    fi
+  else
+    warn "  failed: $crate"
+  fi
 done
 
 log "Installing coreutils"
@@ -301,10 +325,15 @@ if command -v git >/dev/null 2>&1; then
     link_skill "$PLUGIN_CACHE/excalidraw-diagram-skill" excalidraw-diagram
     if command -v uv >/dev/null 2>&1 && [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/references/pyproject.toml" ]]; then
       log "  excalidraw-diagram: uv sync + playwright chromium (one-time)"
-      ( cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" \
-        && uv sync --quiet 2>/dev/null \
-        && uv run --quiet playwright install chromium 2>/dev/null ) \
-        || warn "  excalidraw-diagram: renderer deps install failed (run uv sync + uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+      # Clear UV_INDEX_URL so uv.toml's aliyun mirror takes effect — the user's
+      # shell may have a stale/broken mirror env var (e.g. tsinghua 403).
+      sync_err=$(cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" && UV_INDEX_URL='' uv sync 2>&1)
+      if [[ $? -eq 0 ]]; then
+        UV_INDEX_URL='' uv run --quiet playwright install chromium 2>/dev/null \
+          || warn "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+      else
+        warn "  excalidraw-diagram: uv sync failed: $(echo "$sync_err" | tail -n5)"
+      fi
     else
       warn "  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred"
     fi
@@ -468,6 +497,15 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v codegraph >/dev/null 2>&1; then
     log "Installing codegraph via npm"
     npm install -g @colbymchenry/codegraph || warn "  codegraph install failed"
+  fi
+  if ! command -v agent-browser >/dev/null 2>&1; then
+    log "Installing agent-browser (browser automation for AI agents) via npm"
+    npm install -g agent-browser || warn "  agent-browser install failed"
+  fi
+  # One-time Chromium download for agent-browser (idempotent — skips if already present)
+  if command -v agent-browser >/dev/null 2>&1; then
+    log "agent-browser: downloading Chromium (one-time)"
+    agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
   fi
   if command -v codegraph >/dev/null 2>&1; then
     # Claude Code is wired separately via `claude mcp add` below (needs the

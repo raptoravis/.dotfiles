@@ -98,7 +98,9 @@ $Tools = @(
     'witr',
     'cyberduck',
     'sniffnet',
-    'FiraCode-NF'
+    'FiraCode-NF',
+    'jq', 'vhs', 'silicon', 'ffmpeg', 'ast-grep',
+    'dotter'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
 $Deps      = @('autohotkey', 'cmake', 'fastfetch', 'firacode')
@@ -428,6 +430,14 @@ if (Test-Cmd rustup) {
     }
 }
 
+# Always ensure ~/.cargo/bin is on session PATH — the rustup install block above
+# only sets it when rustup is freshly installed; re-runs need it too for the
+# cargo tools and dotter sections that follow.
+$CargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+if ((Test-Path $CargoBin) -and ($CargoBin -notin ($env:Path -split ';'))) {
+    $env:Path = "$CargoBin;$env:Path"
+}
+
 # ---------------------------------------------------------------------------
 # 6) Cargo tools
 # ---------------------------------------------------------------------------
@@ -450,18 +460,34 @@ $CargoTools = [ordered]@{
     'rmux'         = 'rmux'
 }
 foreach ($t in $CargoTools.Keys) {
-    if (Test-Cmd $CargoTools[$t]) {
-        Write-Host "  $t already installed ($($CargoTools[$t]) on PATH)"
+    $bin = $CargoTools[$t]
+    if (Test-Cmd $bin) {
+        Write-Host "  $t already installed ($bin on PATH)"
         continue
     }
+    Write-Host "  installing $t ..."
     cargo install $t
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed: $t" }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn2 "  failed: $t (cargo exit code: $LASTEXITCODE)"
+        continue
+    }
+    # Verify: cargo may report success but fail to produce the binary (e.g. linker
+    # errors, missing native deps). Check that the exe actually landed.
+    $binPath = Join-Path $CargoBin "$bin.exe"
+    if (-not (Test-Path $binPath)) {
+        Write-Warn2 "  ${t}: cargo reported OK but $bin.exe not found in $CargoBin — check cargo output above for linker / build errors"
+    } else {
+        Write-Host "    -> $binPath"
+    }
 }
 Write-Step 'Installing coreutils (windows feature)'
 if (Test-Cmd coreutils) {
     Write-Host '  coreutils already installed'
 } else {
-    cargo install coreutils --features windows
+    # `--features windows` pulls in stdbuf, which needs LIBSTDBUF_DIR
+    # (a Unix LD_PRELOAD path) at compile time and won't build on Windows.
+    # feat_Tier1 gives the same core utils without stdbuf.
+    cargo install coreutils --no-default-features --features feat_Tier1
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed: coreutils' }
 }
 
@@ -645,13 +671,23 @@ if (Test-Cmd git) {
         if ((Test-Cmd uv) -and (Test-Path (Join-Path $excaliRefs 'pyproject.toml'))) {
             Write-Step '  excalidraw-diagram: uv sync + playwright chromium (one-time)'
             Push-Location $excaliRefs
-            uv sync --quiet 2>$null
-            $syncExit = $LASTEXITCODE
-            if ($syncExit -eq 0) {
-                uv run --quiet playwright install chromium 2>$null
-                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $excaliRefs)" }
-            } else {
-                Write-Warn2 "  excalidraw-diagram: uv sync failed (run uv sync in $excaliRefs)"
+            # Clear UV_INDEX_URL so uv.toml's aliyun mirror takes effect — the
+            # user's shell may have a stale/broken mirror env var (e.g. tsinghua
+            # returning 403 on some wheels).
+            $oldUvIndex = $env:UV_INDEX_URL
+            $env:UV_INDEX_URL = ''
+            try {
+                $syncOutput = uv sync 2>&1 | Out-String
+                $syncExit = $LASTEXITCODE
+                if ($syncExit -eq 0) {
+                    uv run --quiet playwright install chromium 2>$null
+                    if ($LASTEXITCODE -ne 0) { Write-Warn2 "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $excaliRefs)" }
+                } else {
+                    $syncTrimmed = ($syncOutput -split "`n" | Select-Object -Last 5) -join "`n"
+                    Write-Warn2 "  excalidraw-diagram: uv sync failed (exit $syncExit): $syncTrimmed"
+                }
+            } finally {
+                $env:UV_INDEX_URL = $oldUvIndex
             }
             Pop-Location
         } else {
@@ -880,6 +916,17 @@ if (Test-Cmd npm) {
         npm install -g '@colbymchenry/codegraph'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codegraph install failed' }
     }
+    if (-not (Test-Cmd agent-browser)) {
+        Write-Step 'Installing agent-browser (browser automation for AI agents) via npm'
+        npm install -g agent-browser
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install failed' }
+    }
+    # One-time Chromium download for agent-browser (idempotent — skips if already present)
+    if (Test-Cmd agent-browser) {
+        Write-Step 'agent-browser: downloading Chromium (one-time)'
+        agent-browser install 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install (Chromium) failed' }
+    }
     if (Test-Cmd codegraph) {
         # Claude Code is wired separately via `claude mcp add` below (needs the
         # `claude` binary, installed in the AI-coding-CLIs block).
@@ -952,8 +999,8 @@ if (Test-Cmd npm) {
             Write-Step 'codegraph MCP already registered for Claude Code (user scope)'
         } else {
             Write-Step 'Registering codegraph MCP for Claude Code (user scope)'
-            claude mcp add codegraph -s user -- codegraph serve --mcp 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration FAILED — run manually: claude mcp add codegraph -s user -- codegraph serve --mcp" }
+            $codegraphErr = (claude mcp add codegraph -s user -- codegraph serve --mcp 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration FAILED: $codegraphErr" }
         }
     }
     if (Test-Cmd codex) {

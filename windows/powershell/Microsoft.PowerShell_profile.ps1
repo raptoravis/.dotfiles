@@ -244,7 +244,7 @@ proxy_on
 #$env:UV_EXTRA_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
 #$env:UV_EXTRA_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
 #$env:UV_EXTRA_INDEX_URL="https://pypi.org/simple/"
-$env:UV_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+$env:UV_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple/"
 $env:UV_LINK_MODE = "copy"
 
 #$env:ANTHROPIC_API_KEY="sk-d86c08e38dce47fda2bfbcd6671ac6de"

@@ -52,6 +52,7 @@ APT_PKGS=(
   build-essential pkg-config libssl-dev fastfetch tmux mosh
   unzip ca-certificates gnupg
   nodejs npm
+  jq ffmpeg
 )
 sudo -E apt-get install -y -qq "${APT_PKGS[@]}"
 (( IS_WSL )) && sudo -E apt-get install -y -qq wslu 2>/dev/null || true
@@ -164,9 +165,19 @@ rustup component add clippy rustfmt 2>/dev/null || true
 #    coreutils is provided by the base system on Linux, so we skip it.
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
-CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop)
+CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop silicon ast-grep)
 for tool in "${CARGO_TOOLS[@]}"; do
-  cargo install "$tool" 2>&1 | tail -n1 || warn "  failed: $tool"
+  if cargo install "$tool" 2>&1 | tail -n1; then
+    # Verify binary landed — cargo may exit 0 but still fail to link.
+    bin_path="$HOME/.cargo/bin/$tool"
+    if [[ -x "$bin_path" ]]; then
+      log "  -> $bin_path"
+    else
+      warn "  $tool: cargo reported OK but $bin_path not found — check cargo output above for linker/build errors"
+    fi
+  else
+    warn "  failed: $tool"
+  fi
 done
 
 # ---------------------------------------------------------------------------
@@ -189,6 +200,7 @@ if command -v go >/dev/null 2>&1; then
   log "Installing lazygit + lazydocker via go install"
   go install github.com/jesseduffield/lazygit@latest    || warn "  lazygit failed"
   go install github.com/jesseduffield/lazydocker@latest || warn "  lazydocker failed"
+  go install github.com/charmbracelet/vhs@latest        || warn "  vhs failed"
   export PATH="$(go env GOPATH 2>/dev/null)/bin:$PATH"
 fi
 
@@ -327,10 +339,15 @@ if command -v git >/dev/null 2>&1; then
     # Pre-install renderer deps (uv + playwright chromium) so the skill works on first run
     if command -v uv >/dev/null 2>&1 && [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/references/pyproject.toml" ]]; then
       log "  excalidraw-diagram: uv sync + playwright chromium (one-time)"
-      ( cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" \
-        && uv sync --quiet 2>/dev/null \
-        && uv run --quiet playwright install chromium 2>/dev/null ) \
-        || warn "  excalidraw-diagram: renderer deps install failed (run uv sync + uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+      # Clear UV_INDEX_URL so uv.toml's aliyun mirror takes effect — the user's
+      # shell may have a stale/broken mirror env var (e.g. tsinghua 403).
+      sync_err=$(cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" && UV_INDEX_URL='' uv sync 2>&1)
+      if [[ $? -eq 0 ]]; then
+        UV_INDEX_URL='' uv run --quiet playwright install chromium 2>/dev/null \
+          || warn "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+      else
+        warn "  excalidraw-diagram: uv sync failed: $(echo "$sync_err" | tail -n5)"
+      fi
     else
       warn "  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred"
     fi
@@ -500,6 +517,15 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v codegraph >/dev/null 2>&1; then
     log "Installing codegraph via npm"
     npm install -g @colbymchenry/codegraph || warn "  codegraph install failed"
+  fi
+  if ! command -v agent-browser >/dev/null 2>&1; then
+    log "Installing agent-browser (browser automation for AI agents) via npm"
+    npm install -g agent-browser || warn "  agent-browser install failed"
+  fi
+  # One-time Chromium download for agent-browser (idempotent — skips if already present)
+  if command -v agent-browser >/dev/null 2>&1; then
+    log "agent-browser: downloading Chromium (one-time)"
+    agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
   fi
   if command -v codegraph >/dev/null 2>&1; then
     # Claude Code is wired separately via `claude mcp add` below (needs the
