@@ -1,7 +1,7 @@
 [common.variables]
 copy_command = "pbcopy"  # default/fallback
 theme            = "tokyo-night"                # tokyo-night | catppuccin-macchiato | catppuccin-mocha | gruvbox-dark
-theme_ghostty    = "TokyoNight"                # Tokyo Night | Catppuccin Macchiato | Catppuccin Mocha | GruvboxDark
+theme_wezterm    = "Tokyo Night"               # Tokyo Night | Catppuccin Macchiato | Catppuccin Mocha | GruvboxDark
 theme_wt         = "Tokyo Night"               # Windows Terminal — define color table in windows/terminal/settings.json
 
 [common.files]
@@ -28,8 +28,8 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/nushell" = "~/.config/nushell"
 "common/scripts/check-balance.py" = "~/.local/bin/check-balance.py"
 
-# WezTerm is no longer the default terminal on any platform. If you still use
-# it on a pure-Linux machine (not WSL), add "wezterm" to your packages list.
+# WezTerm is the default terminal on macOS. Also available on pure Linux
+# (not WSL) by adding "wezterm" to your packages list.
 [wezterm.files]
 "common/wezterm/constants.lua" = "~/.config/wezterm/constants.lua"
 "common/wezterm/functions.lua" = "~/.config/wezterm/functions.lua"
@@ -44,7 +44,7 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/bottom" = "~/Library/Application Support/bottom"
 "macos/borders" = "~/.config/borders"
 "macos/aerospace" = "~/.config/aerospace"
-"macos/ghostty/config" = { target = "~/.config/ghostty/config", type = "template" }
+
 
 [linux.files]
 "common/bottom" = "~/.config/bottom"

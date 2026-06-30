@@ -6,7 +6,7 @@ AERO="/opt/homebrew/bin/aerospace"
 FALLBACK_WORKSPACE="6"
 
 typeset -A APP_WORKSPACE=(
-  Ghostty              1
+  WezTerm              1
   Code                 2
   "Visual Studio Code" 2
   Firefox              3

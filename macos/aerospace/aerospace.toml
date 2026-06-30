@@ -29,7 +29,7 @@ outer.left = 0
 [mode.main.binding]
 # Launch/Focus Apps
 ctrl-alt-cmd-c = '''exec-and-forget open -a "Visual Studio Code"'''
-ctrl-alt-cmd-t = '''exec-and-forget open -a "Ghostty"'''
+ctrl-alt-cmd-t = '''exec-and-forget open -a "WezTerm"'''
 ctrl-alt-cmd-b = '''exec-and-forget open -a "Firefox"'''
 ctrl-alt-cmd-m = '''exec-and-forget open -a "Microsoft Teams"'''
 ctrl-alt-cmd-n = '''exec-and-forget open -a "Obsidian"'''
@@ -95,7 +95,7 @@ alt-shift-l = ["join-with right", "mode main"]
 
 # Auto-assign windows to workspaces when they open
 [[on-window-detected]]
-if.app-name-regex-substring = "Ghostty"
+if.app-name-regex-substring = "WezTerm"
 run = "move-node-to-workspace 1"
 
 [[on-window-detected]]

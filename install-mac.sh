@@ -99,15 +99,15 @@ else
   warn "Brewfile not found at $DOTFILES_DIR/Brewfile — skipping"
 fi
 
-# Ghostty is declared in Brewfile but brew bundle may skip already-installed
+# WezTerm is declared in Brewfile but brew bundle may skip already-installed
 # casks without upgrading them. Ensure it's installed and up to date.
-log "Installing/upgrading Ghostty terminal"
-if command -v ghostty >/dev/null 2>&1; then
-  brew upgrade --cask ghostty --no-quarantine --greedy-latest 2>/dev/null \
-    && log "  ghostty upgraded" || log "  ghostty already up to date"
+log "Installing/upgrading WezTerm terminal"
+if command -v wezterm >/dev/null 2>&1; then
+  brew upgrade --cask wezterm --no-quarantine --greedy-latest 2>/dev/null \
+    && log "  wezterm upgraded" || log "  wezterm already up to date"
 else
-  brew install --cask ghostty --no-quarantine 2>/dev/null \
-    || warn "  ghostty cask install failed (check Brewfile)"
+  brew install --cask wezterm --no-quarantine 2>/dev/null \
+    || warn "  wezterm cask install failed (check Brewfile)"
 fi
 
 # VS Code — primary editor; declared in Brewfile but brew bundle may skip
@@ -263,7 +263,7 @@ if command -v git >/dev/null 2>&1; then
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
   mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
 
-  declare -A INSTALLED_SKILLS=() INSTALLED_PLUGINS=() INSTALLED_PROMPTS=()
+  INSTALLED_SKILLS="|" INSTALLED_PLUGINS="|" INSTALLED_PROMPTS="|"
 
   clone_or_pull() {
     local url="$1" dir="$2"
@@ -277,7 +277,7 @@ if command -v git >/dev/null 2>&1; then
     else
       git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
     fi
-    INSTALLED_PLUGINS["$(basename "$dir")"]=1
+    INSTALLED_PLUGINS="${INSTALLED_PLUGINS}$(basename "$dir")|"
   }
 
   link_skill() {
@@ -287,7 +287,7 @@ if command -v git >/dev/null 2>&1; then
     ln -sfn "$src" "$CODEX_SKILLS/$name"
     ln -sfn "$src" "$OPENCODE_SKILLS/$name"
     ln -sfn "$src" "$REASONIX_SKILLS/$name"
-    INSTALLED_SKILLS["$name"]=1
+    INSTALLED_SKILLS="${INSTALLED_SKILLS}$name|"
   }
 
   link_skills_from() {
@@ -329,8 +329,12 @@ if command -v git >/dev/null 2>&1; then
       # shell may have a stale/broken mirror env var (e.g. tsinghua 403).
       sync_err=$(cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" && UV_INDEX_URL='' uv sync 2>&1)
       if [[ $? -eq 0 ]]; then
-        UV_INDEX_URL='' uv run --quiet playwright install chromium 2>/dev/null \
-          || warn "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+        if compgen -G "$HOME/Library/Caches/ms-playwright/chromium-"* >/dev/null 2>&1; then
+          log "  excalidraw-diagram: playwright chromium already cached, skipping download"
+        else
+          UV_INDEX_URL='' uv run --quiet playwright install chromium 2>/dev/null \
+            || warn "  excalidraw-diagram: playwright chromium install failed (run 'uv run playwright install chromium' in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
+        fi
       else
         warn "  excalidraw-diagram: uv sync failed: $(echo "$sync_err" | tail -n5)"
       fi
@@ -432,7 +436,7 @@ if command -v git >/dev/null 2>&1; then
   copy_prompt() {
     [[ -f "$1" ]] || return 0
     cp -f "$1" "$CODEX_PROMPTS/$2"
-    INSTALLED_PROMPTS["$2"]=1
+    INSTALLED_PROMPTS="${INSTALLED_PROMPTS}$2|"
   }
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
   copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/quick.md"         handoff-quick.md
@@ -455,7 +459,7 @@ if command -v git >/dev/null 2>&1; then
         target="$(readlink "$entry")"
         case "$target" in "$PLUGIN_CACHE"/*) ;; *) continue ;; esac
         name="$(basename "$entry")"
-        if [[ -z "${INSTALLED_SKILLS[$name]:-}" ]]; then
+        if [[ "${INSTALLED_SKILLS}" != *"|${name}|"* ]]; then
           log "  rm stale skill link: $entry"
           rm -f "$entry"
         fi
@@ -465,14 +469,14 @@ if command -v git >/dev/null 2>&1; then
     for entry in "$PLUGIN_CACHE"/*; do
       [[ -d "$entry" ]] || continue
       name="$(basename "$entry")"
-      if [[ -z "${INSTALLED_PLUGINS[$name]:-}" ]]; then
+      if [[ "${INSTALLED_PLUGINS}" != *"|${name}|"* ]]; then
         log "  rm stale plugin cache: $entry"
         rm -rf "$entry"
       fi
     done
 
     for p in "${KNOWN_CODEX_PROMPTS[@]}"; do
-      if [[ -e "$CODEX_PROMPTS/$p" && -z "${INSTALLED_PROMPTS[$p]:-}" ]]; then
+      if [[ -e "$CODEX_PROMPTS/$p" && "${INSTALLED_PROMPTS}" != *"|${p}|"* ]]; then
         log "  rm stale codex prompt: $p"
         rm -f "$CODEX_PROMPTS/$p"
       fi
@@ -700,7 +704,7 @@ HOSTNAME_FQDN="$(hostname)"
 MACHINE_TOML="$DOTFILES_DIR/.dotter/${HOSTNAME_FQDN}.toml"
 if [[ ! -f "$MACHINE_TOML" ]]; then
   log "Creating dotter machine config: ${MACHINE_TOML#$DOTFILES_DIR/}"
-  printf 'packages = [ "common", "mac" ]\n' > "$MACHINE_TOML"
+  printf 'packages = [ "common", "mac", "wezterm" ]\n' > "$MACHINE_TOML"
 fi
 
 # ---------------------------------------------------------------------------
@@ -787,9 +791,10 @@ fi
 warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 11) Ghostty config directory — pre-create so dotter can symlink into it.
+# 11) WezTerm config & session directories — pre-create so dotter can symlink.
 # ---------------------------------------------------------------------------
-mkdir -p "$HOME/.config/ghostty"
+mkdir -p "$HOME/.config/wezterm"
+mkdir -p "$HOME/.local/share/wezterm/sessions"
 
 # ---------------------------------------------------------------------------
 # 12) Default shell

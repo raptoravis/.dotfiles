@@ -8,7 +8,7 @@ brew "borders"
 brew "sketchybar"
 
 # Terminal & Multiplexer
-cask "ghostty"
+cask "wezterm"
 brew "tmux"
 brew "mosh"
 

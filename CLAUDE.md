@@ -11,7 +11,7 @@ A cross-platform dotfiles repo managed by [dotter](https://github.com/SuperCuber
 Unix-first. The core dev environment (zsh, neovim, CLI tools) targets unix; Windows reaches it via WSL2. Both platforms converge on the same `common/` configs.
 
 ```
-macOS:    native apps (Ghostty, AeroSpace) --> unix backend (zsh, neovim, tmux)
+macOS:    native apps (WezTerm, AeroSpace) --> unix backend (zsh, neovim, tmux)
 Windows:  native apps (Windows Terminal, AHK) --> WSL2 --> unix backend (zsh, neovim, tmux)
 ```
 
@@ -20,7 +20,7 @@ Windows:  native apps (Windows Terminal, AHK) --> WSL2 --> unix backend (zsh, ne
 | Directory  | Purpose | Dotter package |
 |------------|---------|----------------|
 | `common/`  | Cross-platform base layer — shell, editors, dev tools, linters, nushell | `common` |
-| `macos/`   | macOS-only GUI apps (aerospace, ghostty, borders) | `mac` |
+| `macos/`   | macOS-only GUI apps (aerospace, borders) | `mac` |
 | `windows/` | Windows-only host integration (ahk, wsl, powershell, terminal) | `windows` |
 
 ### Platform detection

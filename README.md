@@ -11,7 +11,7 @@ Feel free to take what you want, but I would advise against blindly installing w
 This repo is designed around a **unix-first** philosophy. The core dev environment (zsh, neovim, CLI tools) targets unix, and Windows gets there via WSL2.
 
 ```
-macOS:    native apps (Ghostty, AeroSpace) --> unix backend (zsh, neovim, tmux)
+macOS:    native apps (WezTerm, AeroSpace) --> unix backend (zsh, neovim, tmux)
 Windows:  native apps (WezTerm, AHK)       --> WSL2 --> unix backend (zsh, neovim, tmux)
 ```
 
@@ -171,7 +171,7 @@ cargo make info            # Show all available commands
 
 ### macOS-only (GUI layer)
 
-[Ghostty](https://ghostty.org/) | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | [borders](https://github.com/FelixKratz/JankyBorders)
+[WezTerm](https://wezfurlong.org/wezterm/) | [AeroSpace](https://github.com/nikitabobko/AeroSpace) | [borders](https://github.com/FelixKratz/JankyBorders)
 
 ### Windows-only (GUI layer)
 
