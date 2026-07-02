@@ -1,0 +1,539 @@
+# wt-layout.ps1 - Windows Terminal layout save/restore.
+# Dot-sourced from Microsoft.PowerShell_profile.ps1.
+#
+#   wtsave <name>      Capture the focused WT window's layout to a named file.
+#   wtrestore <name>   Open a new WT window from a named layout file.
+#   wtlayouts          List saved layout names.
+#
+# Layout files live in ~/.config/wt-layouts/ as human-readable JSON. Each pane
+# has an editable `cwd` field (empty = profile default, non-empty = pinned dir).
+
+# ---------------------------------------------------------------------------
+# U1. Layout data model and file I/O
+# ---------------------------------------------------------------------------
+
+# Directory for saved layouts (machine-local runtime data, not in the repo).
+function Get-WtLayoutDir {
+    Join-Path (Join-Path $HOME '.config') 'wt-layouts'
+}
+
+<#
+.SYNOPSIS
+    Resolve the file path for a named layout.
+#>
+function Get-WtLayoutPath {
+    param([Parameter(Mandatory)] [string]$Name)
+    if ($Name -notmatch '^[A-Za-z0-9._-]+$') {
+        throw "Invalid layout name '$Name'. Use letters, digits, dot, underscore, or hyphen."
+    }
+    Join-Path (Get-WtLayoutDir) "$Name.json"
+}
+
+<#
+.SYNOPSIS
+    Write a layout object to a named file.
+.DESCRIPTION
+    Creates the layouts directory on first use and serialises the layout as
+    indented (human-readable) JSON. Overwrites an existing name.
+#>
+function Save-WtLayoutFile {
+    param(
+        [Parameter(Mandatory)] [string]$Name,
+        [Parameter(Mandatory)] $Layout
+    )
+    $dir = Get-WtLayoutDir
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $path = Get-WtLayoutPath -Name $Name
+    $json = $Layout | ConvertTo-Json -Depth 20
+    [System.IO.File]::WriteAllText($path, $json, [System.Text.UTF8Encoding]::new($false))
+}
+
+<#
+.SYNOPSIS
+    Read a named layout file into a PSCustomObject.
+#>
+function Read-WtLayoutFile {
+    param([Parameter(Mandatory)] [string]$Name)
+    $path = Get-WtLayoutPath -Name $Name
+    if (-not (Test-Path $path)) {
+        throw "No layout named '$Name'. Run 'wtsave $Name' first, or use 'wtlayouts' to list saved layouts."
+    }
+    Get-Content $path -Raw | ConvertFrom-Json
+}
+
+<#
+.SYNOPSIS
+    List the names of saved layouts.
+.DESCRIPTION
+    Returns layout names (without extension) from the layouts directory,
+    or an empty array when the directory does not exist yet.
+#>
+function List-WtLayouts {
+    $dir = Get-WtLayoutDir
+    if (-not (Test-Path $dir)) { return @() }
+    $items = Get-ChildItem -Path $dir -Filter '*.json' -File -ErrorAction SilentlyContinue
+    if (-not $items) { return @() }
+    $items | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_.Name) }
+}
+
+# ---------------------------------------------------------------------------
+# U3. Rectangle-to-split-tree reconstruction
+# ---------------------------------------------------------------------------
+# Given a flat list of pane rectangles (from UIA capture), build the recursive
+# split tree that WT uses internally: every node is a binary split (direction +
+# ratio) or a leaf referencing a pane index.
+#
+# WT splits are binary: each split divides one region into two axis-aligned
+# halves. The rectangles tile without overlap, so the nesting can be recovered
+# by recursive bisection -- find the clean dividing line that partitions the
+# group into two contiguous sub-groups, recurse on each, and stop at a single
+# rectangle (a leaf).
+
+<#
+.SYNOPSIS
+    Build a single-pane layout leaf node.
+#>
+function New-WtLeaf {
+    param([int]$PaneIndex)
+    [pscustomobject]@{ pane = $PaneIndex }
+}
+
+<#
+.SYNOPSIS
+    Build a split node linking two child subtrees.
+#>
+function New-WtSplitNode {
+    param(
+        [ValidateSet('vertical', 'horizontal')] [string]$Split,
+        [double]$Ratio,
+        $First,
+        $Second
+    )
+    [pscustomobject]@{
+        split  = $Split
+        ratio  = $Ratio
+        first  = $First
+        second = $Second
+    }
+}
+
+<#
+.SYNOPSIS
+    Try to partition a group of indexed rectangles by a vertical dividing line.
+.DESCRIPTION
+    A "vertical" split (in wt.exe terms `-V`) creates a left/right pair, so the
+    dividing line is a vertical x-threshold. Returns the two sub-groups (indices
+    preserved) and the split ratio if a clean partition is found.
+#>
+function Test-WtVerticalSplit {
+    param([Parameter(Mandatory)] [object[]]$Group)
+    # A clean vertical line means some rectangles end (right edge) exactly where
+    # others begin (left edge). Gather all distinct right-edges as candidates.
+    $candidates = @($Group | ForEach-Object { [double]($_.Rect.X + $_.Rect.Width) } | Sort-Object -Unique)
+    foreach ($lineX in $candidates) {
+        $leftGroup  = @($Group | Where-Object { ($_.Rect.X + $_.Rect.Width) -le ($lineX + 1) })
+        $rightGroup = @($Group | Where-Object { $_.Rect.X -ge ($lineX - 1) })
+        # Clean partition: every rectangle is in exactly one side, both non-empty.
+        if ($leftGroup.Count -gt 0 -and $rightGroup.Count -gt 0 -and
+            ($leftGroup.Count + $rightGroup.Count) -eq $Group.Count) {
+            # Ratio = second (right) group proportion; wt.exe -s is the NEW pane's size.
+            $minX = ($Group | ForEach-Object { $_.Rect.X } | Measure-Object -Minimum).Minimum
+            $maxX = ($Group | ForEach-Object { $_.Rect.X + $_.Rect.Width } | Measure-Object -Maximum).Maximum
+            $totalWidth = $maxX - $minX
+            $ratio = if ($totalWidth -gt 0) { ($maxX - $lineX) / $totalWidth } else { 0.5 }
+            return @{
+                Found  = $true
+                Split  = 'vertical'
+                Ratio  = $ratio
+                First  = $leftGroup
+                Second = $rightGroup
+            }
+        }
+    }
+    return @{ Found = $false }
+}
+
+<#
+.SYNOPSIS
+    Try to partition a group of indexed rectangles by a horizontal dividing line.
+.DESCRIPTION
+    A "horizontal" split (wt.exe `-H`) creates a top/bottom pair, so the
+    dividing line is a horizontal y-threshold.
+#>
+function Test-WtHorizontalSplit {
+    param([Parameter(Mandatory)] [object[]]$Group)
+    $candidates = @($Group | ForEach-Object { [double]($_.Rect.Y + $_.Rect.Height) } | Sort-Object -Unique)
+    foreach ($lineY in $candidates) {
+        $topGroup    = @($Group | Where-Object { ($_.Rect.Y + $_.Rect.Height) -le ($lineY + 1) })
+        $bottomGroup = @($Group | Where-Object { $_.Rect.Y -ge ($lineY - 1) })
+        if ($topGroup.Count -gt 0 -and $bottomGroup.Count -gt 0 -and
+            ($topGroup.Count + $bottomGroup.Count) -eq $Group.Count) {
+            $minY = ($Group | ForEach-Object { $_.Rect.Y } | Measure-Object -Minimum).Minimum
+            $maxY = ($Group | ForEach-Object { $_.Rect.Y + $_.Rect.Height } | Measure-Object -Maximum).Maximum
+            $totalHeight = $maxY - $minY
+            $ratio = if ($totalHeight -gt 0) { ($maxY - $lineY) / $totalHeight } else { 0.5 }
+            return @{
+                Found  = $true
+                Split  = 'horizontal'
+                Ratio  = $ratio
+                First  = $topGroup
+                Second = $bottomGroup
+            }
+        }
+    }
+    return @{ Found = $false }
+}
+
+<#
+.SYNOPSIS
+    Recursively bisect a group of indexed rectangles into a split tree.
+.DESCRIPTION
+    Stops at a single rectangle (leaf). Prefers a vertical dividing line, then
+    horizontal; falls back to the first element if no clean partition exists
+    (defensive -- rectangles from a real WT window always partition cleanly).
+#>
+function ConvertTo-WtSplitTree {
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)] [object[]]$Group)
+
+    if ($Group.Count -eq 1) {
+        return New-WtLeaf -PaneIndex $Group[0].Index
+    }
+
+    $v = Test-WtVerticalSplit -Group $Group
+    if ($v.Found) {
+        return New-WtSplitNode -Split $v.Split -Ratio $v.Ratio `
+            -First  (ConvertTo-WtSplitTree -Group $v.First) `
+            -Second (ConvertTo-WtSplitTree -Group $v.Second)
+    }
+
+    $h = Test-WtHorizontalSplit -Group $Group
+    if ($h.Found) {
+        return New-WtSplitNode -Split $h.Split -Ratio $h.Ratio `
+            -First  (ConvertTo-WtSplitTree -Group $h.First) `
+            -Second (ConvertTo-WtSplitTree -Group $h.Second)
+    }
+
+    # No clean partition found -- treat as a single pane (best-effort fallback).
+    return New-WtLeaf -PaneIndex $Group[0].Index
+}
+
+# ---------------------------------------------------------------------------
+# U4. Restore -- split-tree to wt.exe command generator
+# ---------------------------------------------------------------------------
+# Translate a layout file into a wt.exe command line. wt.exe builds a window
+# from left to right: `new-tab` creates the first pane of each tab, then
+# `split-pane` divides the focused pane. A newly created pane receives focus,
+# so the generator walks each tab's split tree in pre-order DFS -- emit the
+# first pane, split to create the sibling (now focused), recurse the sibling
+# subtree, then `move-focus` back to continue splitting the original branch.
+
+<#
+.SYNOPSIS
+    Build a single pane's argument fragment.
+.DESCRIPTION
+    Emits `-p <profile>` and `-d <cwd>` (only when cwd is non-empty).
+#>
+function Get-WtPaneArgs {
+    param([Parameter(Mandatory)] $Pane)
+    $a = @("-p `"$($Pane.profile)`"")
+    if ($Pane.cwd) {
+        $a += "-d `"$($Pane.cwd)`""
+    }
+    $a -join ' '
+}
+
+<#
+.SYNOPSIS
+    Resolve a tree node down to the pane index of its first (leftmost) leaf.
+#>
+function Resolve-WtLeafIndex {
+    param($Node)
+    $cur = $Node
+    while ($null -eq $cur.pane) {
+        $cur = $cur.first
+    }
+    return [int]$cur.pane
+}
+
+<#
+.SYNOPSIS
+    Emit a split-pane for the sibling, recurse its subtree, then move-focus back.
+.DESCRIPTION
+    wt.exe split-pane flags: -V splits left/right (new pane on right),
+    -H splits top/bottom (new pane on bottom). -s is the new pane's size
+    relative to the pane being split.
+#>
+function Add-WtSplitAndRecurse {
+    param(
+        $Node,
+        $Panes,
+        [System.Collections.Generic.List[string]]$Sink
+    )
+    $flag = if ($Node.split -eq 'vertical') { '-V' } else { '-H' }
+    $ratioStr = '{0:0.###}' -f $Node.ratio
+    $secondPane = $Panes[[int](Resolve-WtLeafIndex -Node $Node.second)]
+    $Sink.Add("split-pane $flag -s $ratioStr $(Get-WtPaneArgs $secondPane)")
+
+    # Recurse into the sibling subtree (it has focus after the split).
+    Add-WtChildFragments -Node $Node.second -Panes $Panes -Sink $Sink
+
+    # Move focus back toward the original branch.
+    if ($Node.split -eq 'vertical') {
+        $Sink.Add('move-focus left')
+    } else {
+        $Sink.Add('move-focus up')
+    }
+
+    # Recurse into the first child subtree (now that focus is back).
+    Add-WtChildFragments -Node $Node.first -Panes $Panes -Sink $Sink
+}
+
+<#
+.SYNOPSIS
+    Recurse into a child subtree, emitting split-panes for non-leaf nodes.
+#>
+function Add-WtChildFragments {
+    param($Node, $Panes, [System.Collections.Generic.List[string]]$Sink)
+    if ($null -ne $Node.pane) { return }
+    Add-WtSplitAndRecurse -Node $Node -Panes $Panes -Sink $Sink
+}
+
+<#
+.SYNOPSIS
+    Generate a wt.exe command line for a layout object.
+.DESCRIPTION
+    Produces a string beginning with `wt -w 0` and a sequence of
+    new-tab / split-pane / move-focus sub-commands separated by ` ; `.
+#>
+function New-WtCommand {
+    param([Parameter(Mandatory)] $Layout)
+    $fragments = [System.Collections.Generic.List[string]]::new()
+
+    for ($t = 0; $t -lt $Layout.tabs.Count; $t++) {
+        $tab = $Layout.tabs[$t]
+        $firstIndex = Resolve-WtLeafIndex -Node $tab.layout
+        $firstPane = $tab.panes[$firstIndex]
+        $titleArg = if ($tab.title) { "--title `"$($tab.title)`"" } else { '' }
+        $firstArgs = Get-WtPaneArgs $firstPane
+        $fragments.Add("new-tab $firstArgs $titleArg".Trim())
+
+        # Build splits for this tab (skip if single pane -- a bare leaf).
+        if ($null -eq $tab.layout.pane) {
+            Add-WtChildFragments -Node $tab.layout -Panes $tab.panes -Sink $fragments
+        }
+    }
+
+    "wt -w 0 " + ($fragments -join ' ; ')
+}
+
+# ---------------------------------------------------------------------------
+# U2. UIA capture -- tab and pane enumeration
+# ---------------------------------------------------------------------------
+# Walk the focused Windows Terminal window's UI Automation tree to extract
+# tab order, tab titles, pane rectangles, and profile names. Each pane is a
+# TermControl element carrying a BoundingRectangle and a Name equal to its
+# profile.
+
+# Load the UIA assemblies once per session.
+if (-not $script:WtUiaAssembliesLoaded) {
+    Add-Type -AssemblyName UIAutomationClient -ErrorAction SilentlyContinue
+    Add-Type -AssemblyName UIAutomationTypes -ErrorAction SilentlyContinue
+    $script:WtUiaAssembliesLoaded = $true
+}
+
+# Win32 helpers for the foreground-window / process check.
+if (-not ('WtWin32' -as [type])) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class WtWin32 {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+}
+"@ -ErrorAction SilentlyContinue
+}
+
+<#
+.SYNOPSIS
+    Find the focused Windows Terminal top-level window element.
+.DESCRIPTION
+    Uses the foreground window handle and verifies the owning process is
+    Windows Terminal (WindowsTerminal.exe). Throws a clear error when no
+    WT window is focused.
+#>
+function Get-WtFocusedWindow {
+    $hwnd = [WtWin32]::GetForegroundWindow()
+    $pidValue = [uint32]0
+    [void][WtWin32]::GetWindowThreadProcessId($hwnd, [ref]$pidValue)
+    if ($pidValue -eq 0) {
+        throw "Could not identify the focused window. Focus a Windows Terminal window and retry."
+    }
+    $proc = Get-Process -Id $pidValue -ErrorAction SilentlyContinue
+    if (-not $proc -or $proc.ProcessName -notmatch 'WindowsTerminal') {
+        $name = if ($proc) { $proc.ProcessName } else { 'unknown' }
+        throw "The focused window is not Windows Terminal (PID $pidValue, $name). Focus a Windows Terminal window and retry."
+    }
+    return [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+}
+
+<#
+.SYNOPSIS
+    Walk a WT window's UIA tree and collect tabs with their panes.
+.DESCRIPTION
+    Finds TabItem elements (each carrying a title) and, within each tab, the
+    TermControl elements (each carrying a BoundingRectangle and profile Name).
+    Returns an ordered list of PSCustomObjects:
+    @{ Title; Panes = @( @{ Rect; Profile } ) }.
+#>
+function Capture-WtWindow {
+    param([Parameter(Mandatory)] $Window)
+
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+
+    # Collect all TermControl descendants of a given element.
+    $paneCollector = {
+        param($element, $panes)
+        $cls = $element.Current.ClassName
+        if ($cls -match 'TermControl') {
+            $name = $element.Current.Name
+            $r = $element.Current.BoundingRectangle
+            $panes.Add([pscustomobject]@{
+                Profile = $name
+                Rect    = [pscustomobject]@{ X = [double]$r.X; Y = [double]$r.Y; Width = [double]$r.Width; Height = [double]$r.Height }
+            })
+        }
+        $child = $walker.GetFirstChild($element)
+        while ($child) {
+            & $paneCollector $child $panes
+            $child = $walker.GetNextSibling($child)
+        }
+    }
+
+    # Collect all TabItem descendants of a given element.
+    $tabCollector = {
+        param($element, $tabs)
+        $cls = $element.Current.ClassName
+        if ($cls -eq 'TabItem') {
+            $tabs.Add([pscustomobject]@{ Title = $element.Current.Name; Element = $element; Panes = [System.Collections.Generic.List[object]]::new() })
+        }
+        $child = $walker.GetFirstChild($element)
+        while ($child) {
+            & $tabCollector $child $tabs
+            $child = $walker.GetNextSibling($child)
+        }
+    }
+
+    $tabs = [System.Collections.Generic.List[object]]::new()
+    & $tabCollector $Window $tabs
+
+    if ($tabs.Count -eq 0) {
+        throw "No tabs found in the focused Windows Terminal window."
+    }
+
+    # Attribute TermControl panes to the tab subtree they live in.
+    foreach ($tab in $tabs) {
+        & $paneCollector $tab.Element $tab.Panes
+    }
+
+    # Build the ordered capture result.
+    $result = [System.Collections.Generic.List[object]]::new()
+    foreach ($tab in $tabs) {
+        $result.Add([pscustomobject]@{
+            Title = $tab.Title
+            Panes = @($tab.Panes)
+        })
+    }
+    return $result
+}
+
+<#
+.SYNOPSIS
+    Best-effort capture of a pane's working directory.
+.DESCRIPTION
+    UIA exposes no cwd property, and mapping a pane to its specific shell
+    process has no reliable public API. Returns an empty string; the layout
+    file's per-pane cwd field is hand-editable (R8) -- the guaranteed path.
+#>
+function Get-WtPaneCwd {
+    return ''
+}
+
+# ---------------------------------------------------------------------------
+# U5. wtsave / wtrestore / wtlayouts wiring
+# ---------------------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Capture the focused Windows Terminal window's layout to a named file.
+#>
+function wtsave {
+    param([Parameter(Mandatory, Position = 0)] [string]$Name)
+    $window = Get-WtFocusedWindow
+    $tabs = Capture-WtWindow -Window $window
+
+    $layoutTabs = [System.Collections.Generic.List[object]]::new()
+    foreach ($tab in $tabs) {
+        $panesList = [System.Collections.Generic.List[object]]::new()
+        $group = [System.Collections.Generic.List[object]]::new()
+        for ($i = 0; $i -lt $tab.Panes.Count; $i++) {
+            $pane = $tab.Panes[$i]
+            $panesList.Add([pscustomobject]@{
+                profile = $pane.Profile
+                cwd     = (Get-WtPaneCwd)
+            })
+            $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
+        }
+        $tree = if ($tab.Panes.Count -eq 1) {
+            New-WtLeaf -PaneIndex 0
+        } else {
+            ConvertTo-WtSplitTree -Group @($group)
+        }
+        $layoutTabs.Add([pscustomobject]@{
+            title  = $tab.Title
+            panes  = @($panesList)
+            layout = $tree
+        })
+    }
+
+    $layout = [pscustomobject]@{
+        name = $Name
+        tabs = @($layoutTabs)
+    }
+    Save-WtLayoutFile -Name $Name -Layout $layout
+    $path = Get-WtLayoutPath -Name $Name
+    Write-Host "Saved layout '$Name' -> $path"
+    Write-Host "  $($layoutTabs.Count) tab(s)."
+}
+
+<#
+.SYNOPSIS
+    Open a new Windows Terminal window from a named layout file.
+#>
+function wtrestore {
+    param([Parameter(Mandatory, Position = 0)] [string]$Name)
+    $layout = Read-WtLayoutFile -Name $Name
+    $cmd = New-WtCommand -Layout $layout
+    Write-Host "Restoring layout '$Name'..."
+    Invoke-Expression $cmd
+}
+
+<#
+.SYNOPSIS
+    List saved layout names.
+#>
+function wtlayouts {
+    $names = List-WtLayouts
+    if ($names.Count -eq 0) {
+        Write-Host "No saved layouts. Run 'wtsave <name>' to capture one."
+        return
+    }
+    Write-Host "Saved layouts ($(Get-WtLayoutDir)):"
+    foreach ($n in $names) {
+        Write-Host "  $n"
+    }
+}
