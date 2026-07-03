@@ -16,6 +16,14 @@
 - 仅当用户在同一指令里写了"commit + push + ff-merge"这种连写时，按字面授权范围执行；他说 "commit" 就只 commit 不 push
 - 不影响纯 local 操作（编辑文件 / mkdir / 装依赖 / 跑测试）— 那些可以照常做
 
+# planning
+
+**不要进入 plan mode，不要调用 `EnterPlanMode` 工具，不要用 `ExitPlanMode` 等批准。** 直接动手实现用户的要求。
+
+- 只有当用户明确说"先给我方案" / "先计划一下" / "plan" 时，才用普通对话文本写出方案，仍然不调用 `EnterPlanMode`/`ExitPlanMode`
+- **Why:** 用户已设 `permissions.defaultMode: bypassPermissions`，权限层已全自动；唯一还在卡的是模型自愿进 plan mode 等批准，这违背"尽量自动推进"的意图
+- 不影响在动手前用 2-3 句话说明意图再继续 —— 那是普通文本，不是 plan mode
+
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
