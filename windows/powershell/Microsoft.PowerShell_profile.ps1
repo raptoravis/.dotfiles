@@ -308,3 +308,9 @@ function prompt {
         "PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) "
     }
 }
+
+# ---------------------------------------------------------------------------
+# Windows Terminal layout save/restore (wtsave / wtrestore / wtlayouts).
+# Dot-sources a dedicated module to keep the profile readable.
+# ---------------------------------------------------------------------------
+. "$PSScriptRoot\wt-layout.ps1"
