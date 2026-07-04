@@ -573,20 +573,30 @@ if command -v npm >/dev/null 2>&1; then
   fi
 
   # Register tunan as a native plugin for Claude Code (enables slash commands,
-  # MCP auto-load, agents, and hooks). Add marketplace source then install.
+  # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
   if command -v claude >/dev/null 2>&1; then
     log "Registering tunan native plugin for Claude Code"
     claude plugins marketplace add https://github.com/raptoravis/tunan 2>/dev/null \
       || log "  tunan marketplace already registered for claude (or command failed)"
-    claude plugins install tunan@tunan -s user 2>/dev/null \
-      || log "  tunan plugin already installed for claude (or install failed — run 'claude plugins install tunan@tunan -s user')"
+    if claude plugins install tunan@tunan -s user 2>/dev/null; then
+      log "  tunan installed for claude"
+    else
+      log "  tunan already installed, updating for claude..."
+      claude plugins update tunan@tunan 2>/dev/null \
+        || warn "  tunan update for claude failed"
+    fi
   fi
   # Register tunan as a native plugin for OpenCode (enables slash commands,
   # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
   if command -v opencode >/dev/null 2>&1; then
     log "Registering tunan native plugin for OpenCode"
-    opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git 2>/dev/null \
-      || log "  tunan plugin already registered for opencode (or install failed — run 'opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git')"
+    if opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git 2>/dev/null; then
+      log "  tunan registered for opencode"
+    else
+      log "  tunan already registered, updating for opencode..."
+      opencode plugin update tunan 2>/dev/null \
+        || warn "  tunan update for opencode failed"
+    fi
   fi
   # Register tunan as a plugin marketplace source for Codex. The user must
   # then run `/plugins` inside Codex to install the plugin interactively.
@@ -598,13 +608,23 @@ if command -v npm >/dev/null 2>&1; then
   # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
   if command -v npx >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
-    npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
-      || log "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill \"*\" -a reasonix -g -y')"
+    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null; then
+      log "  tunan skills installed for reasonix"
+    else
+      log "  tunan skills already installed, updating for reasonix..."
+      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
+        || warn "  tunan skills update for reasonix failed"
+    fi
 
     log "Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)"
     for agent in claude-code codex opencode reasonix; do
-      npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
-        || log "  threejs-game-skills already installed for $agent (or install failed)"
+      if npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null; then
+        log "  threejs-game-skills installed for $agent"
+      else
+        log "  threejs-game-skills already installed, updating for $agent..."
+        npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
+          || warn "  threejs-game-skills update for $agent failed"
+      fi
     done
   fi
 
@@ -616,13 +636,9 @@ if command -v npm >/dev/null 2>&1; then
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v claude >/dev/null 2>&1 && command -v codegraph >/dev/null 2>&1; then
-    if claude mcp get codegraph >/dev/null 2>&1; then
-      log "codegraph MCP already registered for Claude Code (user scope)"
-    else
-      log "Registering codegraph MCP for Claude Code (user scope)"
-      claude mcp add codegraph -s user -- codegraph serve --mcp >/dev/null \
-        || warn "  codegraph MCP registration FAILED — run manually: claude mcp add codegraph -s user -- codegraph serve --mcp"
-    fi
+    log "Registering codegraph MCP for Claude Code (user scope)"
+    codegraph install --target=claude --yes 2>/dev/null \
+      || warn "  codegraph MCP registration for claude FAILED — run 'codegraph install' interactively"
   fi
   if command -v codex >/dev/null 2>&1; then
     log "Registering context7 MCP for Codex (idempotent)"

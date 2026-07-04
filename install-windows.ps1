@@ -946,20 +946,28 @@ if (Test-Cmd npm) {
     }
 
     # Register tunan as a native plugin for Claude Code (enables slash commands,
-    # MCP auto-load, agents, and hooks). Add marketplace source then install.
+    # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
     if (Test-Cmd claude) {
         Write-Step 'Registering tunan native plugin for Claude Code'
         claude plugins marketplace add 'https://github.com/raptoravis/tunan' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for claude (or command failed)" }
         claude plugins install 'tunan@tunan' -s user 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan plugin already installed for claude (or install failed — run 'claude plugins install tunan@tunan -s user')" }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  tunan already installed, updating...'
+            claude plugins update 'tunan@tunan' 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan update for claude failed' }
+        }
     }
     # Register tunan as a native plugin for OpenCode (enables slash commands,
     # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
     if (Test-Cmd opencode) {
         Write-Step 'Registering tunan native plugin for OpenCode'
         opencode plugin -g 'tunan@git+https://github.com/raptoravis/tunan.git' 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan plugin already registered for opencode (or install failed — run 'opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git')" }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  tunan already registered, updating...'
+            opencode plugin update tunan 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan update for opencode failed' }
+        }
     }
     # Register tunan as a plugin marketplace source for Codex. The user must
     # then run `/plugins` inside Codex to install the plugin interactively.
@@ -972,12 +980,20 @@ if (Test-Cmd npm) {
     if (Test-Cmd npx) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
         npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill `"*`" -a reasonix -g -y')" }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  tunan skills already installed, updating...'
+            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
+        }
 
         Write-Step 'Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)'
         foreach ($agent in @('claude-code', 'codex', 'opencode', 'reasonix')) {
             npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills already installed for ${agent} (or install failed)" }
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  threejs-game-skills already installed for ${agent}, updating..."
+                npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills update for ${agent} failed" }
+            }
         }
     }
 
@@ -989,14 +1005,9 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
     }
     if ((Test-Cmd claude) -and (Test-Cmd codegraph)) {
-        claude mcp get codegraph 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Step 'codegraph MCP already registered for Claude Code (user scope)'
-        } else {
-            Write-Step 'Registering codegraph MCP for Claude Code (user scope)'
-            $codegraphErr = (claude mcp add codegraph -s user -- codegraph serve --mcp 2>&1 | Out-String).Trim()
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration FAILED: $codegraphErr" }
-        }
+        Write-Step 'Registering codegraph MCP for Claude Code (user scope)'
+        $codegraphErr = (codegraph install '--target=claude' --yes 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration for claude FAILED: $codegraphErr" }
     }
     if (Test-Cmd codex) {
         Write-Step 'Registering context7 MCP for Codex (idempotent)'
