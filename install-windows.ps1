@@ -945,6 +945,36 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
     }
 
+    # Register tunan as a native plugin for Claude Code (enables slash commands,
+    # MCP auto-load, agents, and hooks). Add marketplace source then install.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering tunan native plugin for Claude Code'
+        claude plugins marketplace add 'https://github.com/raptoravis/tunan' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for claude (or command failed)" }
+        claude plugins install 'tunan@tunan' -s user 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan plugin already installed for claude (or install failed — run 'claude plugins install tunan@tunan -s user')" }
+    }
+    # Register tunan as a native plugin for OpenCode (enables slash commands,
+    # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+    if (Test-Cmd opencode) {
+        Write-Step 'Registering tunan native plugin for OpenCode'
+        opencode plugin -g 'tunan@git+https://github.com/raptoravis/tunan.git' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan plugin already registered for opencode (or install failed — run 'opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git')" }
+    }
+    # Register tunan as a plugin marketplace source for Codex. The user must
+    # then run `/plugins` inside Codex to install the plugin interactively.
+    if (Test-Cmd codex) {
+        Write-Step 'Registering tunan plugin marketplace for Codex'
+        codex plugin marketplace add raptoravis/tunan 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
+    }
+    # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+    if (Test-Cmd npx) {
+        Write-Step 'Installing tunan skills for Reasonix via npx'
+        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill `"*`" -a reasonix -g -y')" }
+    }
+
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
     if (Test-Cmd claude) {

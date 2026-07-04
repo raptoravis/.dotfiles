@@ -556,6 +556,36 @@ if command -v npm >/dev/null 2>&1; then
     npm install -g @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
   fi
 
+  # Register tunan as a native plugin for Claude Code (enables slash commands,
+  # MCP auto-load, agents, and hooks). Add marketplace source then install.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering tunan native plugin for Claude Code"
+    claude plugins marketplace add https://github.com/raptoravis/tunan 2>/dev/null \
+      || log "  tunan marketplace already registered for claude (or command failed)"
+    claude plugins install tunan@tunan -s user 2>/dev/null \
+      || log "  tunan plugin already installed for claude (or install failed — run 'claude plugins install tunan@tunan -s user')"
+  fi
+  # Register tunan as a native plugin for OpenCode (enables slash commands,
+  # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+  if command -v opencode >/dev/null 2>&1; then
+    log "Registering tunan native plugin for OpenCode"
+    opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git 2>/dev/null \
+      || log "  tunan plugin already registered for opencode (or install failed — run 'opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git')"
+  fi
+  # Register tunan as a plugin marketplace source for Codex. The user must
+  # then run `/plugins` inside Codex to install the plugin interactively.
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering tunan plugin marketplace for Codex"
+    codex plugin marketplace add raptoravis/tunan 2>/dev/null \
+      || log "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
+  fi
+  # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+  if command -v npx >/dev/null 2>&1; then
+    log "Installing tunan skills for Reasonix via npx"
+    npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
+      || log "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill \"*\" -a reasonix -g -y')"
+  fi
+
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
