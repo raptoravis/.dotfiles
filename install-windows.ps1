@@ -320,47 +320,6 @@ if (Test-Cmd winget) {
 }
 
 # ---------------------------------------------------------------------------
-# 4c) Npcap -- packet-capture driver that sniffnet needs (provides wpcap.dll).
-#     Not a scoop package (kernel driver, needs admin) and NOT on winget (the
-#     old Insecure.Npcap id was pulled). The free edition's installer is
-#     GUI-only -- --silent is an OEM-paid feature -- so we download it straight
-#     from npcap.com and launch it. Keep "WinPcap API-compatible Mode" checked
-#     so wpcap.dll lands in System32 where sniffnet looks for it.
-# ---------------------------------------------------------------------------
-$npcapDll = @(
-    (Join-Path $env:WINDIR 'System32\wpcap.dll'),        # WinPcap-compatible mode
-    (Join-Path $env:WINDIR 'System32\Npcap\wpcap.dll')   # Npcap-only mode
-)
-if ($npcapDll | Where-Object { Test-Path $_ }) {
-    Write-Step 'Npcap already installed (wpcap.dll present)'
-} else {
-    Write-Step 'Installing Npcap (sniffnet dependency)'
-    # No stable "latest" URL on npcap.com -- scrape the homepage for the current
-    # dist/npcap-X.YZ.exe link, fall back to a pinned version if that fails.
-    $npcapVer = '1.88'
-    try {
-        $html = (Invoke-WebRequest -Uri 'https://npcap.com/' -UseBasicParsing).Content
-        $m = [regex]::Match($html, 'dist/npcap-([0-9.]+)\.exe')
-        if ($m.Success) { $npcapVer = $m.Groups[1].Value }
-    } catch {
-        Write-Warn2 "  couldn't reach npcap.com -- using pinned npcap-$npcapVer"
-    }
-    $npcapUrl = "https://npcap.com/dist/npcap-$npcapVer.exe"
-    $npcapExe = Join-Path $env:TEMP "npcap-$npcapVer.exe"
-    try {
-        Invoke-WebRequest -Uri $npcapUrl -OutFile $npcapExe -UseBasicParsing
-        Write-Host '  the GUI installer will open -- keep "WinPcap API-compatible Mode" checked'
-        Start-Process -FilePath $npcapExe -Wait
-        Remove-Item $npcapExe -ErrorAction SilentlyContinue
-        if (-not ($npcapDll | Where-Object { Test-Path $_ })) {
-            Write-Warn2 '  Npcap installer finished but wpcap.dll not found -- re-run and keep WinPcap API-compatible Mode checked'
-        }
-    } catch {
-        Write-Warn2 '  Npcap install failed -- grab it from https://npcap.com (sniffnet needs wpcap.dll)'
-    }
-}
-
-# ---------------------------------------------------------------------------
 # 4d) Visual Studio Build Tools — C++ compiler, MSBuild, CMake, headers.
 #     Needed by: Neovim Telescope FZF Native (requires gcc/cl), Windows
 #     Cargo builds (cc crate), Python native extensions, Windows SDK.
