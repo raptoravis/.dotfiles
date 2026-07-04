@@ -973,6 +973,12 @@ if (Test-Cmd npm) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
         npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill `"*`" -a reasonix -g -y')" }
+
+        Write-Step 'Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)'
+        foreach ($agent in @('claude-code', 'codex', 'opencode', 'reasonix')) {
+            npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills already installed for ${agent} (or install failed)" }
+        }
     }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.

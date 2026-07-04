@@ -600,6 +600,12 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
     npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
       || log "  tunan skills already installed for reasonix (or install failed — run 'npx skills add raptoravis/tunan --skill \"*\" -a reasonix -g -y')"
+
+    log "Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)"
+    for agent in claude-code codex opencode reasonix; do
+      npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
+        || log "  threejs-game-skills already installed for $agent (or install failed)"
+    done
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
