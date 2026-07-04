@@ -723,11 +723,13 @@ if command -v npm >/dev/null 2>&1; then
     CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
+    CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
       log "Registering github + codegraph + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
@@ -737,9 +739,22 @@ if command -v npm >/dev/null 2>&1; then
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
     fi
+    # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
+    # Can't take a remote HTTP url so github stays with its existing stdio server.
+    REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
+    if [ -f "$REASONIX_CFG" ]; then
+      log "Registering context7 + chrome-devtools + fetch MCP with reasonix"
+      REASONIX_CFG="$REASONIX_CFG" node -e '
+        const fs=require("fs"), p=process.env.REASONIX_CFG;
+        const c=JSON.parse(fs.readFileSync(p,"utf8"));
+        c.mcp=Array.isArray(c.mcp)?c.mcp:[];
+        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server"];
+        let changed=false;
+        for(const e of entries){const n=e.split("=")[0];if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith(n+"="))){c.mcp.push(e);changed=true;}}
+        if(changed)fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n");
+      ' || warn "  failed to register MCPs with reasonix"
+    fi
   fi
-  # reasonix: its `mcp` config is a stdio command-string array and can't take a
-  # remote HTTP url, so it keeps its existing stdio github server (PAT-based).
 else
   warn "npm not on PATH -- skipping npm-based CLI installs (apt nodejs may be too old; need Node 18+)"
 fi

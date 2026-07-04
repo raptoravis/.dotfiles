@@ -1093,11 +1093,13 @@ if (Test-Cmd npm) {
         $CgLocalJson = '{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
+        $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
+            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
         }
         if (Test-Cmd mimo) {
             Write-Step 'Registering github + codegraph + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
@@ -1106,9 +1108,34 @@ if (Test-Cmd npm) {
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
         }
+        # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
+        # Can't take a remote HTTP url so github stays with its existing stdio server.
+        $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
+        if (Test-Path $ReasonixCfg) {
+            Write-Step 'Registering context7 + chrome-devtools + fetch MCP with reasonix'
+            try {
+                $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
+                if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
+                    $cfg | Add-Member -NotePropertyName mcp -NotePropertyValue @() -Force
+                }
+                $reasonixMcpEntries = @(
+                    'context7=npx -y @upstash/context7-mcp'
+                    'chrome-devtools=npx -y chrome-devtools-mcp@latest'
+                    'fetch=npx -y mcp-fetch-server'
+                )
+                foreach ($entry in $reasonixMcpEntries) {
+                    $prefix = $entry.Split('=')[0] + '='
+                    $existing = @($cfg.mcp) | Where-Object { $_ -like "$prefix*" }
+                    if (-not $existing) {
+                        $cfg.mcp = @($cfg.mcp) + $entry
+                    }
+                }
+                ($cfg | ConvertTo-Json -Depth 20) | Set-Content $ReasonixCfg -Encoding utf8
+            } catch {
+                Write-Warn2 '  failed to register MCPs with reasonix'
+            }
+        }
     }
-    # reasonix: its `mcp` config is a stdio command-string array and can't take a
-    # remote HTTP url, so it keeps its existing stdio github server (PAT-based).
 } else {
     Write-Warn2 'npm not on PATH -- skipping npm-based CLI installs (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
