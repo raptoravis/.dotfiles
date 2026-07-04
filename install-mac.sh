@@ -547,7 +547,7 @@ if command -v npm >/dev/null 2>&1; then
   fi
   if ! command -v reasonix >/dev/null 2>&1; then
     log "Installing DeepSeek-Reasonix CLI (reasonix)"
-    npm install -g reasonix || warn "  reasonix install failed (requires Node.js >= 22)"
+    npm i -g reasonix@next || warn "  reasonix install failed (requires Node.js >= 22)"
   fi
   # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
   # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
