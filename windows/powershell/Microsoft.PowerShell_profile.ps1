@@ -126,6 +126,7 @@ Set-Alias -Name profile -Value profile_alias
 function reload_alias { & $PROFILE }
 Set-Alias -Name reload -Value reload_alias
 
+Set-Alias reasonix-y "reasonix --yolo"
 # ---------------------------------------------------------------------------
 # Navigation: goto <shortcut>
 # ---------------------------------------------------------------------------
