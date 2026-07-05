@@ -674,6 +674,20 @@ if command -v npm >/dev/null 2>&1; then
       || log "  fetch MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 
+  # Register modelcontextprotocol/server-sequential-thinking (local stdio via npx)
+  # for Claude Code & Codex. Enables step-by-step reasoning for complex tasks.
+  # Idempotent — `mcp add` errors if already registered, which we swallow.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering sequential-thinking MCP for Claude Code (idempotent)"
+    claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking 2>/dev/null \
+      || log "  sequential-thinking MCP already registered for claude (or registration failed — see 'claude mcp list')"
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering sequential-thinking MCP for Codex (idempotent)"
+    codex mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking 2>/dev/null \
+      || log "  sequential-thinking MCP already registered for codex (or registration failed — see 'codex mcp list')"
+  fi
+
   # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
   # does NOT support OAuth dynamic client registration, so clients must auth with a
   # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
@@ -724,31 +738,34 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
+    ST_LOCAL_JSON='{"sequential-thinking":{"type":"local","command":["npx","-y","@modelcontextprotocol/server-sequential-thinking"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 + sequential-thinking MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/opencode/opencode.json" "$ST_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + codegraph + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      log "Registering github + codegraph + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
       command -v codegraph >/dev/null 2>&1 \
         && register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CG_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
+      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$ST_LOCAL_JSON"
     fi
     # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
     # Can't take a remote HTTP url so github stays with its existing stdio server.
     REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
     if [ -f "$REASONIX_CFG" ]; then
-      log "Registering context7 + chrome-devtools + fetch MCP with reasonix"
+      log "Registering context7 + chrome-devtools + fetch + sequential-thinking MCP with reasonix"
       REASONIX_CFG="$REASONIX_CFG" node -e '
         const fs=require("fs"), p=process.env.REASONIX_CFG;
         const c=JSON.parse(fs.readFileSync(p,"utf8"));
         c.mcp=Array.isArray(c.mcp)?c.mcp:[];
-        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server"];
+        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server","sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking"];
         let changed=false;
         for(const e of entries){const n=e.split("=")[0];if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith(n+"="))){c.mcp.push(e);changed=true;}}
         if(changed)fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n");
