@@ -988,10 +988,10 @@ if (Test-Cmd npm) {
 
         Write-Step 'Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)'
         foreach ($agent in @('claude-code', 'codex', 'opencode', 'reasonix')) {
-            npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
+            npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "  threejs-game-skills already installed for ${agent}, updating..."
-                npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
+                npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
                 if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills update for ${agent} failed" }
             }
         }

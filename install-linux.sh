@@ -618,11 +618,11 @@ if command -v npm >/dev/null 2>&1; then
 
     log "Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)"
     for agent in claude-code codex opencode reasonix; do
-      if npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null; then
+      if npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null; then
         log "  threejs-game-skills installed for $agent"
       else
         log "  threejs-game-skills already installed, updating for $agent..."
-        npx skills add majidmanzarpour/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
+        npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
           || warn "  threejs-game-skills update for $agent failed"
       fi
     done
