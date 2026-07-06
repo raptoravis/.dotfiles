@@ -976,7 +976,38 @@ if (Test-Cmd npm) {
         codex plugin marketplace add raptoravis/tunan 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
     }
-    # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+    # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
+    # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering threejs-game-skills native plugin for Claude Code'
+        claude plugins marketplace add 'https://github.com/raptoravis/threejs-game-skills' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for claude (or command failed)" }
+        claude plugins install 'threejs-game-skills@threejs-game-skills' -s user 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already installed, updating...'
+            claude plugins update 'threejs-game-skills@threejs-game-skills' 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for claude failed' }
+        }
+    }
+    # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
+    # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+    if (Test-Cmd opencode) {
+        Write-Step 'Registering threejs-game-skills native plugin for OpenCode'
+        opencode plugin -g 'threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git' 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already registered, updating...'
+            opencode plugin update threejs-game-skills 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for opencode failed' }
+        }
+    }
+    # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
+    # then run `/plugins` inside Codex to install the plugin interactively.
+    if (Test-Cmd codex) {
+        Write-Step 'Registering threejs-game-skills plugin marketplace for Codex'
+        codex plugin marketplace add raptoravis/threejs-game-skills 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
+    }
+    # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
     if (Test-Cmd npx) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
         npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
@@ -986,14 +1017,12 @@ if (Test-Cmd npm) {
             if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
         }
 
-        Write-Step 'Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)'
-        foreach ($agent in @('claude-code', 'codex', 'opencode', 'reasonix')) {
-            npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "  threejs-game-skills already installed for ${agent}, updating..."
-                npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
-                if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills update for ${agent} failed" }
-            }
+        Write-Step 'Installing threejs-game-skills for Reasonix via npx'
+        npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already installed, updating...'
+            npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for reasonix failed' }
         }
     }
 

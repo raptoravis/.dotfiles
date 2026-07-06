@@ -605,7 +605,40 @@ if command -v npm >/dev/null 2>&1; then
     codex plugin marketplace add raptoravis/tunan 2>/dev/null \
       || log "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
   fi
-  # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+  # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
+  # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering threejs-game-skills native plugin for Claude Code"
+    claude plugins marketplace add https://github.com/raptoravis/threejs-game-skills 2>/dev/null \
+      || log "  threejs-game-skills marketplace already registered for claude (or command failed)"
+    if claude plugins install threejs-game-skills@threejs-game-skills -s user 2>/dev/null; then
+      log "  threejs-game-skills installed for claude"
+    else
+      log "  threejs-game-skills already installed, updating for claude..."
+      claude plugins update threejs-game-skills@threejs-game-skills 2>/dev/null \
+        || warn "  threejs-game-skills update for claude failed"
+    fi
+  fi
+  # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
+  # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+  if command -v opencode >/dev/null 2>&1; then
+    log "Registering threejs-game-skills native plugin for OpenCode"
+    if opencode plugin -g threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git 2>/dev/null; then
+      log "  threejs-game-skills registered for opencode"
+    else
+      log "  threejs-game-skills already registered, updating for opencode..."
+      opencode plugin update threejs-game-skills 2>/dev/null \
+        || warn "  threejs-game-skills update for opencode failed"
+    fi
+  fi
+  # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
+  # then run `/plugins` inside Codex to install the plugin interactively.
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering threejs-game-skills plugin marketplace for Codex"
+    codex plugin marketplace add raptoravis/threejs-game-skills 2>/dev/null \
+      || log "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
+  fi
+  # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
   if command -v npx >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
     if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null; then
@@ -616,16 +649,14 @@ if command -v npm >/dev/null 2>&1; then
         || warn "  tunan skills update for reasonix failed"
     fi
 
-    log "Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)"
-    for agent in claude-code codex opencode reasonix; do
-      if npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null; then
-        log "  threejs-game-skills installed for $agent"
-      else
-        log "  threejs-game-skills already installed, updating for $agent..."
-        npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
-          || warn "  threejs-game-skills update for $agent failed"
-      fi
-    done
+    log "Installing threejs-game-skills for Reasonix via npx"
+    if npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>/dev/null; then
+      log "  threejs-game-skills installed for reasonix"
+    else
+      log "  threejs-game-skills already installed, updating for reasonix..."
+      npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>/dev/null \
+        || warn "  threejs-game-skills update for reasonix failed"
+    fi
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
