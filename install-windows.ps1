@@ -1010,18 +1010,18 @@ if (Test-Cmd npm) {
     # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
     if (Test-Cmd npx) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
-        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
+        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Step '  tunan skills already installed, updating...'
-            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
+            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
             if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
         }
 
         Write-Step 'Installing threejs-game-skills for Reasonix via npx'
-        npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>$null
+        npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Step '  threejs-game-skills already installed, updating...'
-            npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>$null
+            npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
             if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for reasonix failed' }
         }
     }

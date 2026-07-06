@@ -641,20 +641,20 @@ if command -v npm >/dev/null 2>&1; then
   # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
   if command -v npx >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
-    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null; then
+    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
       log "  tunan skills installed for reasonix"
     else
       log "  tunan skills already installed, updating for reasonix..."
-      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
+      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
         || warn "  tunan skills update for reasonix failed"
     fi
 
     log "Installing threejs-game-skills for Reasonix via npx"
-    if npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>/dev/null; then
+    if npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
       log "  threejs-game-skills installed for reasonix"
     else
       log "  threejs-game-skills already installed, updating for reasonix..."
-      npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y 2>/dev/null \
+      npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
         || warn "  threejs-game-skills update for reasonix failed"
     fi
   fi
