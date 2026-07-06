@@ -436,6 +436,22 @@ if command -v git >/dev/null 2>&1; then
     fi
   done
 
+  # 6f. raptoravis/threejs-game-skills — install via repo's own install.sh
+  #      (skills are copied, not symlinked, because they reference relative
+  #      scripts/ and references/ paths that would break through symlinks).
+  log "Installing threejs-game-skills (cross-CLI; via repo install.sh)"
+  clone_or_pull https://github.com/raptoravis/threejs-game-skills "$PLUGIN_CACHE/threejs-game-skills"
+  if [[ -x "$PLUGIN_CACHE/threejs-game-skills/install.sh" ]]; then
+    ( cd "$PLUGIN_CACHE/threejs-game-skills" && bash install.sh --codex --claude --opencode --opencode-commands --agents --force )
+    for skill_name in threejs-3d-generator threejs-aaa-graphics-builder threejs-audio-generator \
+                       threejs-debug-profiler threejs-game-director threejs-game-ui-designer \
+                       threejs-gameplay-systems threejs-image-generator threejs-qa-release; do
+      INSTALLED_SKILLS["$skill_name"]=1
+    done
+  else
+    warn "  threejs-game-skills: install.sh not found after clone"
+  fi
+
   # 7. Codex slash-prompts ported from Claude Code commands/
   #    Copies select *.md command files into ~/.codex/prompts/ so they show up
   #    as /handoff-create, /zr-dev, /commit etc. inside Codex (Codex doesn't
@@ -608,24 +624,16 @@ if command -v npm >/dev/null 2>&1; then
   # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
   if command -v npx >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
-    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null; then
-      log "  tunan skills installed for reasonix"
+    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
+      log "  tunan skills synced for reasonix"
     else
       log "  tunan skills already installed, updating for reasonix..."
-      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>/dev/null \
-        || warn "  tunan skills update for reasonix failed"
-    fi
-
-    log "Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)"
-    for agent in claude-code codex opencode reasonix; do
-      if npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null; then
-        log "  threejs-game-skills installed for $agent"
+      if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
+        log "  tunan skills synced for reasonix"
       else
-        log "  threejs-game-skills already installed, updating for $agent..."
-        npx skills add raptoravis/threejs-game-skills --skill '*' -a "$agent" -g -y 2>/dev/null \
-          || warn "  threejs-game-skills update for $agent failed"
+        warn "  tunan skills update for reasonix failed"
       fi
-    done
+    fi
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.

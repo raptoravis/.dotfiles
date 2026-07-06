@@ -752,6 +752,71 @@ if (Test-Cmd git) {
         }
     }
 
+    # 6f. raptoravis/threejs-game-skills — install via PowerShell-native logic
+    #      (skills are copied, not symlinked, because they reference relative
+    #      scripts/ and references/ paths that would break through symlinks).
+    Write-Step 'Installing threejs-game-skills (OpenCode + agents)'
+    $threejsRepo = Join-Path $PluginCache 'threejs-game-skills'
+    CloneOrPull 'https://github.com/raptoravis/threejs-game-skills' $threejsRepo
+    $threejsSrc = Join-Path $threejsRepo 'skills'
+    if (Test-Path $threejsSrc) {
+        # Copy each skill to OpenCode skills dir and .agents/skills (for Reasonix)
+        $threejsSkills = @()
+        Get-ChildItem -Path $threejsSrc -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $skillDir = $_.FullName
+            $skillName = $_.Name
+            if (-not (Test-Path (Join-Path $skillDir 'SKILL.md'))) { return }
+
+            $threejsSkills += $skillName
+            $script:InstalledSkills[$skillName] = $true
+
+            # Copy to OpenCode skills
+            $ocDest = Join-Path $OpenCodeSkills $skillName
+            if (Test-Path $ocDest) { Remove-Item $ocDest -Recurse -Force -ErrorAction SilentlyContinue }
+            Get-ChildItem -Path $skillDir -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+                $relPath = $_.FullName.Substring($skillDir.Length + 1)
+                $destFile = Join-Path $ocDest $relPath
+                $destDir = Split-Path $destFile -Parent
+                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
+                Copy-Item -Path $_.FullName -Destination $destFile -Force -ErrorAction SilentlyContinue
+            }
+
+            # Copy to .agents/skills (for Reasonix)
+            $agDest = Join-Path $AgentSkills $skillName
+            if (Test-Path $agDest) { Remove-Item $agDest -Recurse -Force -ErrorAction SilentlyContinue }
+            Get-ChildItem -Path $skillDir -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+                $relPath = $_.FullName.Substring($skillDir.Length + 1)
+                $destFile = Join-Path $agDest $relPath
+                $destDir = Split-Path $destFile -Parent
+                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
+                Copy-Item -Path $_.FullName -Destination $destFile -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Create OpenCode slash-command files
+        $ocCommandsDir = Join-Path $env:USERPROFILE '.config\opencode\commands'
+        New-Item -ItemType Directory -Force -Path $ocCommandsDir | Out-Null
+        foreach ($skillName in $threejsSkills) {
+            $skillMd = Join-Path $threejsSrc "$skillName\SKILL.md"
+            $description = "Three.js game skill: ${skillName}"
+            if (Test-Path $skillMd) {
+                $firstLine = Get-Content $skillMd -TotalCount 10 | Where-Object { $_ -match '^description:' } | Select-Object -First 1
+                if ($firstLine) {
+                    $d = $firstLine -replace '^description:\s*"?', '' -replace '"$', ''
+                    if ($d) { $description = $d }
+                }
+            }
+            $cmdFile = Join-Path $ocCommandsDir "${skillName}.md"
+            $cmdContent = "---`ndescription: ${description}`n---`n`nLoad the `${skillName}` skill via the `skill` tool, then follow its instructions. " + '${ARGUMENTS}' + "`n"
+            Set-Content -Path $cmdFile -Value $cmdContent -Encoding UTF8
+            $script:InstalledSkills[$skillName] = $true
+        }
+
+        Write-Host "  opencode: $($threejsSkills.Count) skills synced"
+    } else {
+        Write-Warn2 '  threejs-game-skills: skills/ directory not found after clone'
+    }
+
     # 7. Codex slash-prompts ported from Claude Code commands/
     #    Copies select *.md files into ~/.codex/prompts/ so they show up as
     #    /handoff-create, /commit etc. inside Codex.
@@ -979,23 +1044,17 @@ if (Test-Cmd npm) {
     # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
     if (Test-Cmd npx) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
-        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  tunan skills already installed, updating...'
-            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
+        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >$null 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host '  tunan skills synced for reasonix'
+        } else {
+            Write-Host '  tunan skills already installed, updating...'
+            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >$null 2>&1
+            if ($LASTEXITCODE -eq 0) { Write-Host '  tunan skills synced for reasonix' }
+            else { Write-Warn2 '  tunan skills update for reasonix failed' }
         }
 
-        Write-Step 'Installing threejs-game-skills via npx (claude-code / codex / opencode / reasonix)'
-        foreach ($agent in @('claude-code', 'codex', 'opencode', 'reasonix')) {
-            npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "  threejs-game-skills already installed for ${agent}, updating..."
-                npx skills add raptoravis/threejs-game-skills --skill '*' -a $agent -g -y 2>$null
-                if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills update for ${agent} failed" }
-            }
         }
-    }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
