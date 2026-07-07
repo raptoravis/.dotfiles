@@ -32,8 +32,6 @@ dependencies = [
     "install-mise",            # Install mise runtime manager
     "dotfiles",                # Symlink dotfiles
     "install-ai-clis",         # Claude Code / Codex / OpenCode CLIs (npm)
-    "install-codegraph",       # Install codegraph + register with each CLI (user-global)
-    "post-install-hint",       # Print per-project codegraph usage hint
 ]
 
 [tasks.install-ai-clis]
@@ -43,33 +41,6 @@ script = [
     "npm install -g @anthropic-ai/claude-code || echo '  claude-code install failed (need npm on PATH)'",
     "npm install -g @openai/codex             || echo '  codex install failed'",
     "npm install -g opencode-ai               || echo '  opencode install failed'",
-]
-
-[tasks.install-codegraph]
-description = "Install codegraph and register MCP with Claude Code / Codex / OpenCode (user-global, one-time)"
-script = [
-    "echo --- Installing codegraph ---",
-    "npm install -g @colbymchenry/codegraph || echo '  codegraph install failed (need npm on PATH)'",
-    "echo --- Registering codegraph with claude / codex / opencode ---",
-    "codegraph install --target=claude,codex,opencode --yes || echo '  codegraph install failed (run codegraph install interactively)'",
-]
-
-[tasks.post-install-hint]
-description = "Print per-project codegraph activation reminder"
-script = [
-    "echo ''",
-    "echo '============================================================'",
-    "echo ' codegraph: per-project setup'",
-    "echo '============================================================'",
-    "echo ' For each project where you want a knowledge graph, run:'",
-    "echo ''",
-    "echo '   cd <your-project>'",
-    "echo '   codegraph init -i         # interactive: index + register MCP'",
-    "echo '   codegraph sync            # incremental update'",
-    "echo ''",
-    "echo ' Agents call codegraph_search / _context / _explore via MCP.'",
-    "echo ' Output lives in .codegraph/ (gitignored).'",
-    "echo '============================================================'",
 ]
 
 [tasks.install-rust]

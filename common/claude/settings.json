@@ -20,15 +20,6 @@
       "mcp__plugin_context-mode_context-mode__execute",
       "mcp__claude_ai_Context7__resolve-library-id",
       "mcp__claude_ai_Context7__query-docs",
-      "mcp__codegraph__codegraph_search",
-      "mcp__codegraph__codegraph_context",
-      "mcp__codegraph__codegraph_callers",
-      "mcp__codegraph__codegraph_callees",
-      "mcp__codegraph__codegraph_impact",
-      "mcp__codegraph__codegraph_node",
-      "mcp__codegraph__codegraph_explore",
-      "mcp__codegraph__codegraph_files",
-      "mcp__codegraph__codegraph_status"
     ],
     "deny": [
       "Read(**/*.pem)",
