@@ -935,11 +935,6 @@ if (Test-Cmd npm) {
         npm install -g claude-mem
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude-mem install failed' }
     }
-    if (-not (Test-Cmd codegraph)) {
-        Write-Step 'Installing codegraph via npm'
-        npm install -g '@colbymchenry/codegraph'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codegraph install failed' }
-    }
     if (-not (Test-Cmd agent-browser)) {
         Write-Step 'Installing agent-browser (browser automation for AI agents) via npm'
         npm install -g agent-browser
@@ -951,36 +946,6 @@ if (Test-Cmd npm) {
         agent-browser install 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install (Chromium) failed' }
     }
-    if (Test-Cmd codegraph) {
-        # Claude Code is wired separately via `claude mcp add` below (needs the
-        # `claude` binary, installed in the AI-coding-CLIs block).
-        Write-Step 'Registering codegraph with codex / opencode'
-        # NB: quote the whole --target arg — PowerShell treats a bare comma as the
-        # array operator, so `--target=codex,opencode` reaches codegraph as the
-        # single invalid id "codex opencode". Quoting keeps it one literal token.
-        codegraph install '--target=codex,opencode' --yes 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph install failed (run 'codegraph install' interactively)" }
-
-        # reasonix isn't a known codegraph target — register manually in its config.json
-        $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
-        if (Test-Path $ReasonixCfg) {
-            Write-Step 'Registering codegraph MCP with reasonix'
-            try {
-                $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
-                if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
-                    $cfg | Add-Member -NotePropertyName mcp -NotePropertyValue @() -Force
-                }
-                $existing = @($cfg.mcp) | Where-Object { $_ -like 'codegraph=*' }
-                if (-not $existing) {
-                    $cfg.mcp = @($cfg.mcp) + 'codegraph=codegraph serve --mcp'
-                    ($cfg | ConvertTo-Json -Depth 20) | Set-Content $ReasonixCfg -Encoding utf8
-                }
-            } catch {
-                Write-Warn2 '  failed to register codegraph with reasonix'
-            }
-        }
-    }
-
     # AI coding CLIs (Claude Code / Codex / OpenCode)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
@@ -1041,20 +1006,55 @@ if (Test-Cmd npm) {
         codex plugin marketplace add raptoravis/tunan 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
     }
-    # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+    # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
+    # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering threejs-game-skills native plugin for Claude Code'
+        claude plugins marketplace add 'https://github.com/raptoravis/threejs-game-skills' 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for claude (or command failed)" }
+        claude plugins install 'threejs-game-skills@threejs-game-skills' -s user 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already installed, updating...'
+            claude plugins update 'threejs-game-skills@threejs-game-skills' 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for claude failed' }
+        }
+    }
+    # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
+    # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+    if (Test-Cmd opencode) {
+        Write-Step 'Registering threejs-game-skills native plugin for OpenCode'
+        opencode plugin -g 'threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git' 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already registered, updating...'
+            opencode plugin update threejs-game-skills 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for opencode failed' }
+        }
+    }
+    # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
+    # then run `/plugins` inside Codex to install the plugin interactively.
+    if (Test-Cmd codex) {
+        Write-Step 'Registering threejs-game-skills plugin marketplace for Codex'
+        codex plugin marketplace add raptoravis/threejs-game-skills 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
+    }
+    # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
     if (Test-Cmd npx) {
         Write-Step 'Installing tunan skills for Reasonix via npx'
-        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >$null 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host '  tunan skills synced for reasonix'
-        } else {
-            Write-Host '  tunan skills already installed, updating...'
-            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >$null 2>&1
-            if ($LASTEXITCODE -eq 0) { Write-Host '  tunan skills synced for reasonix' }
-            else { Write-Warn2 '  tunan skills update for reasonix failed' }
+        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  tunan skills already installed, updating...'
+            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
         }
 
+        Write-Step 'Installing threejs-game-skills for Reasonix via npx'
+        npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Step '  threejs-game-skills already installed, updating...'
+            npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for reasonix failed' }
         }
+    }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -1062,11 +1062,6 @@ if (Test-Cmd npm) {
         Write-Step 'Registering context7 MCP for Claude Code (idempotent)'
         claude mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
-    }
-    if ((Test-Cmd claude) -and (Test-Cmd codegraph)) {
-        Write-Step 'Registering codegraph MCP for Claude Code (user scope)'
-        $codegraphErr = (codegraph install '--target=claude' --yes 2>&1 | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  codegraph MCP registration for claude FAILED: $codegraphErr" }
     }
     if (Test-Cmd codex) {
         Write-Step 'Registering context7 MCP for Codex (idempotent)'
@@ -1149,8 +1144,7 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  github MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
     # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
-    # config idempotently. MiMo additionally gets codegraph (local) since
-    # `codegraph install` doesn't know the mimocode target.
+    # config idempotently.
     if (Test-Cmd node) {
         function Register-JsonMcp([string]$File, [string]$AddJson) {
             $env:MCP_FILE = $File
@@ -1164,7 +1158,6 @@ if (Test-Cmd npm) {
         } else {
             $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true}}'
         }
-        $CgLocalJson = '{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
@@ -1178,9 +1171,8 @@ if (Test-Cmd npm) {
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $StLocalJson
         }
         if (Test-Cmd mimo) {
-            Write-Step 'Registering github + codegraph + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
-            if (Test-Cmd codegraph) { Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CgLocalJson }
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $StLocalJson
@@ -1456,16 +1448,6 @@ if (Test-Path $WinUtilLauncher) {
 Write-Step 'Done. Open a new terminal to pick up the environment.'
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' codegraph: per-project setup' -ForegroundColor Cyan
-Write-Host '============================================================' -ForegroundColor Cyan
-Write-Host ' For each project where you want a knowledge graph, run:'
-Write-Host ''
-Write-Host '   cd <your-project>'
-Write-Host '   codegraph init -i         # interactive: index + register MCP'
-Write-Host '   codegraph sync            # incremental update'
-Write-Host ''
-Write-Host ' Agents call codegraph_search / _context / _explore via MCP.'
-Write-Host ' Output lives in .codegraph/ (gitignored).'
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
 Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray

@@ -530,10 +530,6 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing claude-mem via npm"
     npm install -g claude-mem || warn "  claude-mem install failed"
   fi
-  if ! command -v codegraph >/dev/null 2>&1; then
-    log "Installing codegraph via npm"
-    npm install -g @colbymchenry/codegraph || warn "  codegraph install failed"
-  fi
   if ! command -v agent-browser >/dev/null 2>&1; then
     log "Installing agent-browser (browser automation for AI agents) via npm"
     npm install -g agent-browser || warn "  agent-browser install failed"
@@ -542,27 +538,6 @@ if command -v npm >/dev/null 2>&1; then
   if command -v agent-browser >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
     agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
-  fi
-  if command -v codegraph >/dev/null 2>&1; then
-    # Claude Code is wired separately via `claude mcp add` below (needs the
-    # `claude` binary, installed in the AI-coding-CLIs block).
-    log "Registering codegraph with codex / opencode"
-    codegraph install --target=codex,opencode --yes >/dev/null 2>&1 \
-      || warn "  codegraph install failed (run 'codegraph install' interactively)"
-    # reasonix isn't a known codegraph target — register manually in its config.json
-    REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
-    if [ -f "$REASONIX_CFG" ] && command -v node >/dev/null 2>&1; then
-      log "Registering codegraph MCP with reasonix"
-      REASONIX_CFG="$REASONIX_CFG" node -e '
-        const fs=require("fs"), p=process.env.REASONIX_CFG;
-        const c=JSON.parse(fs.readFileSync(p,"utf8"));
-        c.mcp=Array.isArray(c.mcp)?c.mcp:[];
-        if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith("codegraph="))){
-          c.mcp.push("codegraph=codegraph serve --mcp");
-          fs.writeFileSync(p, JSON.stringify(c,null,2)+"\n");
-        }
-      ' || warn "  failed to register codegraph with reasonix"
-    fi
   fi
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
@@ -621,19 +596,59 @@ if command -v npm >/dev/null 2>&1; then
     codex plugin marketplace add raptoravis/tunan 2>/dev/null \
       || log "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
   fi
-  # Register tunan skills for Reasonix (no native plugin support; use npx-based skill install).
+  # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
+  # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
+  if command -v claude >/dev/null 2>&1; then
+    log "Registering threejs-game-skills native plugin for Claude Code"
+    claude plugins marketplace add https://github.com/raptoravis/threejs-game-skills 2>/dev/null \
+      || log "  threejs-game-skills marketplace already registered for claude (or command failed)"
+    if claude plugins install threejs-game-skills@threejs-game-skills -s user 2>/dev/null; then
+      log "  threejs-game-skills installed for claude"
+    else
+      log "  threejs-game-skills already installed, updating for claude..."
+      claude plugins update threejs-game-skills@threejs-game-skills 2>/dev/null \
+        || warn "  threejs-game-skills update for claude failed"
+    fi
+  fi
+  # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
+  # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
+  if command -v opencode >/dev/null 2>&1; then
+    log "Registering threejs-game-skills native plugin for OpenCode"
+    if opencode plugin -g threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git 2>/dev/null; then
+      log "  threejs-game-skills registered for opencode"
+    else
+      log "  threejs-game-skills already registered, updating for opencode..."
+      opencode plugin update threejs-game-skills 2>/dev/null \
+        || warn "  threejs-game-skills update for opencode failed"
+    fi
+  fi
+  # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
+  # then run `/plugins` inside Codex to install the plugin interactively.
+  if command -v codex >/dev/null 2>&1; then
+    log "Registering threejs-game-skills plugin marketplace for Codex"
+    codex plugin marketplace add raptoravis/threejs-game-skills 2>/dev/null \
+      || log "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
+  fi
+  # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
   if command -v npx >/dev/null 2>&1; then
     log "Installing tunan skills for Reasonix via npx"
     if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
-      log "  tunan skills synced for reasonix"
+      log "  tunan skills installed for reasonix"
     else
       log "  tunan skills already installed, updating for reasonix..."
-      if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
-        log "  tunan skills synced for reasonix"
-      else
-        warn "  tunan skills update for reasonix failed"
-      fi
+      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
+        || warn "  tunan skills update for reasonix failed"
     fi
+
+    log "Installing threejs-game-skills for Reasonix via npx"
+    if npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
+      log "  threejs-game-skills installed for reasonix"
+    else
+      log "  threejs-game-skills already installed, updating for reasonix..."
+      npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
+        || warn "  threejs-game-skills update for reasonix failed"
+    fi
+  fi
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -642,11 +657,6 @@ if command -v npm >/dev/null 2>&1; then
     log "Registering context7 MCP for Claude Code (idempotent)"
     claude mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
-  fi
-  if command -v claude >/dev/null 2>&1 && command -v codegraph >/dev/null 2>&1; then
-    log "Registering codegraph MCP for Claude Code (user scope)"
-    codegraph install --target=claude --yes 2>/dev/null \
-      || warn "  codegraph MCP registration for claude FAILED — run 'codegraph install' interactively"
   fi
   if command -v codex >/dev/null 2>&1; then
     log "Registering context7 MCP for Codex (idempotent)"
@@ -723,8 +733,7 @@ if command -v npm >/dev/null 2>&1; then
       || log "  github MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
   # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
-  # config idempotently. MiMo additionally gets codegraph (local) since
-  # `codegraph install` doesn't know the mimocode target.
+  # config idempotently.
   if command -v node >/dev/null 2>&1; then
     register_json_mcp() {  # $1=config file  $2=JSON object to merge under .mcp
       MCP_FILE="$1" MCP_ADD="$2" node -e '
@@ -742,7 +751,6 @@ if command -v npm >/dev/null 2>&1; then
     else
       GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
     fi
-    CG_LOCAL_JSON='{"codegraph":{"type":"local","command":["codegraph","serve","--mcp"],"enabled":true}}'
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
@@ -756,10 +764,8 @@ if command -v npm >/dev/null 2>&1; then
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$ST_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + codegraph + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      log "Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
-      command -v codegraph >/dev/null 2>&1 \
-        && register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CG_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$ST_LOCAL_JSON"
@@ -930,15 +936,4 @@ fi
 
 log "Done. Open a new terminal (or 'wsl --shutdown' on WSL) to pick up the environment."
 echo
-echo "============================================================"
-echo " codegraph: per-project setup"
-echo "============================================================"
-echo " For each project where you want a knowledge graph, run:"
-echo
-echo "   cd <your-project>"
-echo "   codegraph init -i         # interactive: index + register MCP"
-echo "   codegraph sync            # incremental update"
-echo
-echo " Agents call codegraph_search / _context / _explore via MCP."
-echo " Output lives in .codegraph/ (gitignored)."
 echo "============================================================"
