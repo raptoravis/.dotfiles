@@ -651,7 +651,7 @@ if command -v npm >/dev/null 2>&1; then
   # Idempotent: `mcp add` errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
     log "Registering context7 MCP for Claude Code (idempotent)"
-    claude mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
+    claude mcp add context7 -s user -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then
@@ -665,7 +665,7 @@ if command -v npm >/dev/null 2>&1; then
   # errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
     log "Registering chrome-devtools MCP for Claude Code (idempotent)"
-    claude mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
+    claude mcp add chrome-devtools -s user -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
       || log "  chrome-devtools MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then
@@ -679,7 +679,7 @@ if command -v npm >/dev/null 2>&1; then
   # Idempotent — `mcp add` errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
     log "Registering fetch MCP for Claude Code (idempotent)"
-    claude mcp add fetch -- npx -y mcp-fetch-server 2>/dev/null \
+    claude mcp add fetch -s user -- npx -y mcp-fetch-server 2>/dev/null \
       || log "  fetch MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then
@@ -693,7 +693,7 @@ if command -v npm >/dev/null 2>&1; then
   # Idempotent — `mcp add` errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
     log "Registering sequential-thinking MCP for Claude Code (idempotent)"
-    claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking 2>/dev/null \
+    claude mcp add sequential-thinking -s user -- npx -y @modelcontextprotocol/server-sequential-thinking 2>/dev/null \
       || log "  sequential-thinking MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then
@@ -706,7 +706,7 @@ if command -v npm >/dev/null 2>&1; then
   # Free Google AI Mode web search — idempotent; `mcp add` errors if already registered.
   if command -v claude >/dev/null 2>&1; then
     log "Registering gemini-search MCP for Claude Code (idempotent)"
-    claude mcp add gemini-search -- gemini-search-mcp 2>/dev/null \
+    claude mcp add gemini-search -s user -- gemini-search-mcp 2>/dev/null \
       || log "  gemini-search MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
   if command -v codex >/dev/null 2>&1; then

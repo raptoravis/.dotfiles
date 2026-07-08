@@ -1072,7 +1072,7 @@ if (Test-Cmd npm) {
     # Idempotent: `mcp add` errors if already registered, which we swallow.
     if (Test-Cmd claude) {
         Write-Step 'Registering context7 MCP for Claude Code (idempotent)'
-        claude mcp add context7 -- npx -y '@upstash/context7-mcp' 2>$null
+        claude mcp add context7 -s user -- npx -y '@upstash/context7-mcp' 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')" }
     }
     if (Test-Cmd codex) {
