@@ -535,6 +535,18 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
+# gemini-search-mcp — Python MCP server for free Google AI Mode web search.
+# Installed via uv from git; the binary `gemini-search-mcp` is the MCP entrypoint.
+if (Test-Cmd uv) {
+    if (-not (Test-Cmd gemini-search-mcp)) {
+        Write-Step 'Installing gemini-search-mcp via uv'
+        uv tool install 'git+https://github.com/Sophomoresty/gemini-search-mcp.git'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  gemini-search-mcp install failed' }
+    } else {
+        Write-Host '  gemini-search-mcp already installed'
+    }
+}
+
 # ---------------------------------------------------------------------------
 # 7b-bis) Cross-CLI agent skills
 #     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
@@ -1117,6 +1129,19 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  sequential-thinking MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
+    # Register Sophomoresty/gemini-search-mcp (local stdio) for Claude Code & Codex.
+    # Free Google AI Mode web search — idempotent; `mcp add` errors if already registered.
+    if (Test-Cmd claude) {
+        Write-Step 'Registering gemini-search MCP for Claude Code (idempotent)'
+        claude mcp add gemini-search -s user -- gemini-search-mcp 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  gemini-search MCP already registered for claude (or registration failed — see 'claude mcp list')" }
+    }
+    if (Test-Cmd codex) {
+        Write-Step 'Registering gemini-search MCP for Codex (idempotent)'
+        codex mcp add gemini-search -- gemini-search-mcp 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Host "  gemini-search MCP already registered for codex (or registration failed — see 'codex mcp list')" }
+    }
+
     # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
     # does NOT support OAuth dynamic client registration, so clients must auth with a
     # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
@@ -1162,26 +1187,29 @@ if (Test-Cmd npm) {
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
         $StLocalJson = '{"sequential-thinking":{"type":"local","command":["npx","-y","@modelcontextprotocol/server-sequential-thinking"],"enabled":true}}'
+        $GsLocalJson = '{"gemini-search":{"type":"local","command":["gemini-search-mcp"],"enabled":true}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch + context7 + sequential-thinking MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 + sequential-thinking + gemini-search MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $StLocalJson
+            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GsLocalJson
         }
         if (Test-Cmd mimo) {
-            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking + gemini-search MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $StLocalJson
+            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GsLocalJson
         }
         # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
         # Can't take a remote HTTP url so github stays with its existing stdio server.
         $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
         if (Test-Path $ReasonixCfg) {
-            Write-Step 'Registering context7 + chrome-devtools + fetch + sequential-thinking MCP with reasonix'
+            Write-Step 'Registering context7 + chrome-devtools + fetch + sequential-thinking + gemini-search MCP with reasonix'
             try {
                 $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
                 if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
@@ -1192,6 +1220,7 @@ if (Test-Cmd npm) {
                     'chrome-devtools=npx -y chrome-devtools-mcp@latest'
                     'fetch=npx -y mcp-fetch-server'
                     'sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking'
+                    'gemini-search=gemini-search-mcp'
                 )
                 foreach ($entry in $reasonixMcpEntries) {
                     $prefix = $entry.Split('=')[0] + '='
