@@ -770,7 +770,7 @@ if (Test-Cmd git) {
     Write-Step 'Installing threejs-game-skills (OpenCode + agents)'
     $threejsRepo = Join-Path $PluginCache 'threejs-game-skills'
     CloneOrPull 'https://github.com/raptoravis/threejs-game-skills' $threejsRepo
-    $threejsSrc = Join-Path $threejsRepo 'skills'
+    $threejsSrc = Join-Path $threejsRepo 'plugins\skills'
     if (Test-Path $threejsSrc) {
         # Copy each skill to OpenCode skills dir and .agents/skills (for Reasonix)
         $threejsSkills = @()
