@@ -6,7 +6,7 @@
 
 ## Goal
 
-在三个 install 脚本（linux / mac / windows）中新增 **chrome-devtools MCP** 的注册，与现有 context7 / codegraph / github MCP 注册保持对称。
+在三个 install 脚本（linux / mac / windows）中新增 **chrome-devtools MCP** 的注册，与现有 context7 / github MCP 注册保持对称。
 
 ## Completed
 
@@ -23,7 +23,7 @@
 
 | Decision | Rationale |
 |----------|-----------|
-| chrome-devtools 走本地 stdio（`npx -y chrome-devtools-mcp@latest`） | 它不是 remote HTTP server，路径与 context7/codegraph 一致，不像 github 走 remote URL |
+| chrome-devtools 走本地 stdio（`npx -y chrome-devtools-mcp@latest`） | 它不是 remote HTTP server，路径与 context7 一致，不像 github 走 remote URL |
 | Claude/Codex 用 CLI `mcp add`；opencode/MiMo 用 JSON 合并 | 沿用脚本既有模式 — opencode/MiMo 没有 `mcp add` CLI，直接写 JSON `mcp` 节点 |
 | 插入位置紧跟 context7 注册块之后 | 保持三脚本结构对称，便于维护 |
 | 复用现有 `register_json_mcp` / `Register-JsonMcp` 辅助函数 | 幂等合并，不重复造轮子 |
