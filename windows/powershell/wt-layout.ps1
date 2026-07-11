@@ -398,7 +398,11 @@ function Capture-WtWindow {
     # Collect all TermControl descendants of a given element.
     $paneCollector = {
         param($element, $panes)
-        $cls = $element.Current.ClassName
+        try {
+            $cls = $element.Current.ClassName
+        } catch {
+            $cls = ''
+        }
         if ($cls -match 'TermControl') {
             $name = $element.Current.Name
             $r = $element.Current.BoundingRectangle
@@ -415,29 +419,56 @@ function Capture-WtWindow {
     }
 
     # Collect all TabItem descendants of a given element.
+    # Match on ControlType (not ClassName) — WT WinUI 3 uses ListViewItem
+    # as the class name while ControlType remains TabItem across versions.
+    # Guard against elements whose ControlType may be null (crashes the walk).
+    # depth tracking helps diagnose structural issues.
     $tabCollector = {
-        param($element, $tabs)
-        $cls = $element.Current.ClassName
-        if ($cls -eq 'TabItem') {
+        param($element, $tabs, $depth = 0)
+        try {
+            $cls = $element.Current.ClassName
+            $ctlType = $element.Current.ControlType
+            $ctlName = if ($null -ne $ctlType) { $ctlType.ProgrammaticName } else { '<null>' }
+            $isTabItem = ($null -ne $ctlType -and $ctlName -eq 'ControlType.TabItem')
+        } catch {
+            $cls = '<error>'
+            $ctlName = '<error>'
+            $isTabItem = $false
+        }
+        if ($depth -le 3) {
+            $script:debugElements.Add("depth=$depth [$cls] $ctlName name='$($element.Current.Name)'")
+        }
+        if ($isTabItem) {
             $tabs.Add([pscustomobject]@{ Title = $element.Current.Name; Element = $element; Panes = [System.Collections.Generic.List[object]]::new() })
         }
         $child = $walker.GetFirstChild($element)
         while ($child) {
-            & $tabCollector $child $tabs
+            & $tabCollector $child $tabs ($depth + 1)
             $child = $walker.GetNextSibling($child)
         }
     }
 
     $tabs = [System.Collections.Generic.List[object]]::new()
+    $script:debugElements = [System.Collections.Generic.List[string]]::new()
     & $tabCollector $Window $tabs
 
     if ($tabs.Count -eq 0) {
+        Write-Host "DEBUG: Walked UIA tree, found no TabItem. Visited elements (depth<=3):"
+        foreach ($d in $script:debugElements) { Write-Host "  $d" }
         throw "No tabs found in the focused Windows Terminal window."
     }
 
-    # Attribute TermControl panes to the tab subtree they live in.
+    # Collect all TermControl panes from the window root.
+    # In WinUI 3 WT, TermControl elements are NOT children of TabItem —
+    # they live at window level and only the active tab's panes are rendered.
+    # Match panes to the tab whose title equals the window title.
+    $allPanes = [System.Collections.Generic.List[object]]::new()
+    & $paneCollector $Window $allPanes
+    $windowTitle = $Window.Current.Name
     foreach ($tab in $tabs) {
-        & $paneCollector $tab.Element $tab.Panes
+        if ($tab.Title -eq $windowTitle) {
+            $tab.Panes = $allPanes
+        }
     }
 
     # Build the ordered capture result.
@@ -488,10 +519,15 @@ function wtsave {
             })
             $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
         }
-        $tree = if ($tab.Panes.Count -eq 1) {
-            New-WtLeaf -PaneIndex 0
+        # Inactive tabs have no TermControl elements in the UIA tree.
+        # Save them with a single default-pane placeholder so restore works.
+        if ($tab.Panes.Count -eq 0) {
+            $panesList.Add([pscustomobject]@{ profile = ''; cwd = '' })
+            $tree = New-WtLeaf -PaneIndex 0
+        } elseif ($tab.Panes.Count -eq 1) {
+            $tree = New-WtLeaf -PaneIndex 0
         } else {
-            ConvertTo-WtSplitTree -Group @($group)
+            $tree = ConvertTo-WtSplitTree -Group @($group)
         }
         $layoutTabs.Add([pscustomobject]@{
             title  = $tab.Title
