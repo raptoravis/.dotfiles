@@ -358,6 +358,122 @@ public class WtWin32 {
 "@ -ErrorAction SilentlyContinue
 }
 
+# P/Invoke helper to read another process's working directory from its PEB.
+# Uses NtQueryInformationProcess to reach the RTL_USER_PROCESS_PARAMETERS,
+# then reads CurrentDirectory.DosPath via NtReadVirtualMemory.
+if (-not ('WtProcCwd' -as [type])) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class WtProcCwd {
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        IntPtr ProcessHandle, int ProcessInformationClass,
+        out PROCESS_BASIC_INFORMATION ProcessInformation,
+        int ProcessInformationLength, out int ReturnLength);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtReadVirtualMemory(
+        IntPtr ProcessHandle, IntPtr BaseAddress,
+        byte[] Buffer, int NumberOfBytesToRead, out int NumberOfBytesRead);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool IsWow64Process(IntPtr hProcess, out bool Wow64Process);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_BASIC_INFORMATION {
+        public IntPtr ExitStatus;
+        public IntPtr PebBaseAddress;
+        public IntPtr AffinityMask;
+        public IntPtr BasePriority;
+        public UIntPtr UniqueProcessId;
+        public IntPtr InheritedFromUniqueProcessId;
+    }
+
+    private const int ProcessBasicInformation = 0;
+    private const uint PROCESS_QUERY_INFORMATION = 0x0400;
+    private const uint PROCESS_VM_READ = 0x0010;
+
+    // Offsets within PEB (stable across Windows 10 / 11):
+    //   x64: ProcessParameters at +0x20
+    //   x86: ProcessParameters at +0x10
+    // Offsets within RTL_USER_PROCESS_PARAMETERS:
+    //   x64: CurrentDirectory (CURDIR) at +0x38; UNICODE_STRING.Buffer at +0x08
+    //   x86: CurrentDirectory (CURDIR) at +0x24; UNICODE_STRING.Buffer at +0x04
+
+    public static string GetCwd(int pid) {
+        IntPtr hProcess = IntPtr.Zero;
+        try {
+            hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
+            if (hProcess == IntPtr.Zero) return "";
+
+            int retLen;
+            PROCESS_BASIC_INFORMATION pbi;
+            if (NtQueryInformationProcess(hProcess, ProcessBasicInformation,
+                out pbi, Marshal.SizeOf<PROCESS_BASIC_INFORMATION>(), out retLen) != 0)
+                return "";
+            if (pbi.PebBaseAddress == IntPtr.Zero) return "";
+
+            // Determine target process bitness (WOW64 check).
+            bool is64;
+            if (!IsWow64Process(hProcess, out is64))
+                is64 = Environment.Is64BitOperatingSystem;
+            else
+                is64 = !is64 && Environment.Is64BitOperatingSystem;
+
+            int ppOffset  = is64 ? 0x20 : 0x10;  // PEB -> ProcessParameters
+            int cdOffset  = is64 ? 0x38 : 0x24;  // ProcParams -> CurrentDirectory (CURDIR)
+            int usBufOff  = is64 ? 8 : 4;        // UNICODE_STRING -> Buffer ptr
+            int ptrSize   = is64 ? 8 : 4;
+
+            long pebAddr = pbi.PebBaseAddress.ToInt64();
+
+            // 1. Read ProcessParameters pointer from PEB.
+            byte[] buf = new byte[ptrSize];
+            if (NtReadVirtualMemory(hProcess, new IntPtr(pebAddr + ppOffset),
+                buf, ptrSize, out retLen) != 0) return "";
+            long ppVal = is64 ? BitConverter.ToInt64(buf, 0) : BitConverter.ToInt32(buf, 0);
+            if (ppVal == 0) return "";
+
+            // 2. Read DosPath.Length from CurrentDirectory UNICODE_STRING.
+            buf = new byte[2];
+            if (NtReadVirtualMemory(hProcess, new IntPtr(ppVal + cdOffset),
+                buf, 2, out retLen) != 0) return "";
+            ushort len = BitConverter.ToUInt16(buf, 0);
+            if (len == 0 || len > 4096) return "";
+
+            // 3. Read DosPath.Buffer pointer.
+            buf = new byte[ptrSize];
+            if (NtReadVirtualMemory(hProcess, new IntPtr(ppVal + cdOffset + usBufOff),
+                buf, ptrSize, out retLen) != 0) return "";
+            long strPtr = is64 ? BitConverter.ToInt64(buf, 0) : BitConverter.ToInt32(buf, 0);
+            if (strPtr == 0) return "";
+
+            // 4. Read the Unicode string.
+            byte[] strBuf = new byte[len];
+            if (NtReadVirtualMemory(hProcess, new IntPtr(strPtr),
+                strBuf, len, out retLen) != 0) return "";
+
+            string cwd = System.Text.Encoding.Unicode.GetString(strBuf, 0, len);
+            // Normalise trailing backslash (PEB stores with trailing \).
+            return cwd.TrimEnd('\\');
+        } catch {
+            return "";
+        } finally {
+            if (hProcess != IntPtr.Zero) CloseHandle(hProcess);
+        }
+    }
+}
+"@ -ErrorAction SilentlyContinue
+}
+
 <#
 .SYNOPSIS
     Find the focused Windows Terminal top-level window element.
@@ -378,7 +494,10 @@ function Get-WtFocusedWindow {
         $name = if ($proc) { $proc.ProcessName } else { 'unknown' }
         throw "The focused window is not Windows Terminal (PID $pidValue, $name). Focus a Windows Terminal window and retry."
     }
-    return [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    return [pscustomobject]@{
+        Window = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+        Pid    = [uint32]$pidValue
+    }
 }
 
 <#
@@ -484,14 +603,133 @@ function Capture-WtWindow {
 
 <#
 .SYNOPSIS
-    Best-effort capture of a pane's working directory.
+    Recursively walk the process tree under a root PID to find shell descendants.
 .DESCRIPTION
-    UIA exposes no cwd property, and mapping a pane to its specific shell
-    process has no reliable public API. Returns an empty string; the layout
-    file's per-pane cwd field is hand-editable (R8) -- the guaranteed path.
+    WindowsTerminal.exe spawns OpenConsole.exe which spawns the actual shell
+    (pwsh.exe, cmd.exe, etc.). A flat parent-child query misses these. This
+    function walks down from the root PID with a depth limit of 4, collecting
+    every process whose name matches a known shell, sorted by CreationDate.
+
+    Returns an array of CIM process objects (ProcessId, Name, CreationDate).
 #>
-function Get-WtPaneCwd {
-    return ''
+function Get-WtShellDescendants {
+    param([Parameter(Mandatory)] [uint32]$RootPid)
+
+    $shellNames = [System.Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
+    @(
+        'pwsh.exe', 'powershell.exe', 'cmd.exe', 'wsl.exe',
+        'bash.exe', 'git-bash.exe', 'zsh.exe', 'fish.exe', 'nu.exe'
+    ) | ForEach-Object { [void]$shellNames.Add($_) }
+
+    $result  = [System.Collections.Generic.List[object]]::new()
+    $visited = [System.Collections.Generic.HashSet[uint32]]::new()
+
+    $recurse = {
+        param([uint32]$Pid, [int]$Depth)
+        if ($Depth -gt 4) { return }
+        if (-not $visited.Add($Pid)) { return }
+
+        $query = "SELECT ProcessId, Name, CreationDate FROM Win32_Process WHERE ParentProcessId = $Pid"
+        $children = Get-CimInstance -Query $query -ErrorAction SilentlyContinue
+        if (-not $children) { return }
+
+        foreach ($child in $children) {
+            if ($shellNames.Contains($child.Name)) {
+                $result.Add($child)
+            }
+            & $recurse -Pid ([uint32]$child.ProcessId) -Depth ($Depth + 1)
+        }
+    }
+
+    & $recurse -Pid $RootPid -Depth 0
+
+    # CreationDate in CIM is YYYYMMDDHHMMSS.micros±UTC — lexicographic sort works.
+    return @($result | Sort-Object CreationDate)
+}
+
+<#
+.SYNOPSIS
+    Best-effort capture of working directories for each pane in the active tab.
+.DESCRIPTION
+    Uses Get-WtShellDescendants to recursively find shell processes under the
+    focused WT window, then matches processes to panes in two tiers:
+
+    Tier 1 — exact count match: when shell process count equals pane count,
+    pair by CreationDate index (oldest first, matching UIA tree order).
+
+    Tier 2 — per-profile queue matching: when counts differ (inactive tabs
+    with visible shell processes), group processes by executable name into
+    FIFO queues and dequeue per pane based on its profile name. Unconsumed
+    processes (from inactive tabs) stay in their queues.
+
+    Returns an array of empty strings when no cwd can be determined.
+#>
+function Get-WtPaneCwds {
+    param(
+        [Parameter(Mandatory)] [int]$PaneCount,
+        [Parameter(Mandatory)] [uint32]$WtPid,
+        [Parameter(Mandatory)] [object[]]$Panes
+    )
+
+    if ($PaneCount -eq 0) { return @() }
+    if (-not ('WtProcCwd' -as [type])) { return @('') * $PaneCount }
+
+    $shellProcs = Get-WtShellDescendants -RootPid $WtPid
+    if ($shellProcs.Count -eq 0) { return @('') * $PaneCount }
+
+    # ---- Tier 1: exact count match (single-tab / all-panes-visible) ----
+    if ($shellProcs.Count -eq $PaneCount) {
+        $cwds = [string[]]::new($PaneCount)
+        for ($i = 0; $i -lt $PaneCount; $i++) {
+            $cwd = [WtProcCwd]::GetCwd([int]$shellProcs[$i].ProcessId)
+            $cwds[$i] = if ($cwd) { $cwd } else { '' }
+        }
+        return $cwds
+    }
+
+    # ---- Tier 2: per-profile queue matching (multi-tab) ----
+    function Get-ExpectedExeNames {
+        param([string]$Profile)
+        $p = $Profile.ToLowerInvariant()
+        if ($p -match 'powershell' -or $p -eq 'pwsh') {
+            return @('pwsh.exe', 'powershell.exe')
+        }
+        if ($p -match 'command.*prompt|^cmd$') {
+            return @('cmd.exe')
+        }
+        # WSL distros, Git Bash, and everything else.
+        return @('wsl.exe', 'bash.exe', 'git-bash.exe', 'zsh.exe', 'fish.exe', 'nu.exe')
+    }
+
+    $queues = @{}
+    foreach ($proc in $shellProcs) {
+        $key = $proc.Name.ToLowerInvariant()
+        if (-not $queues.ContainsKey($key)) {
+            $queues[$key] = [System.Collections.Generic.Queue[object]]::new()
+        }
+        $queues[$key].Enqueue($proc)
+    }
+
+    $cwds = [string[]]::new($PaneCount)
+    for ($i = 0; $i -lt $PaneCount; $i++) {
+        $candidates = Get-ExpectedExeNames -Profile $Panes[$i].Profile
+        $found = $false
+        foreach ($cand in $candidates) {
+            $key = $cand.ToLowerInvariant()
+            if ($queues.ContainsKey($key) -and $queues[$key].Count -gt 0) {
+                $matched = $queues[$key].Dequeue()
+                $cwd = [WtProcCwd]::GetCwd([int]$matched.ProcessId)
+                $cwds[$i] = if ($cwd) { $cwd } else { '' }
+                $found = $true
+                break
+            }
+        }
+        if (-not $found) { $cwds[$i] = '' }
+    }
+
+    return $cwds
 }
 
 # ---------------------------------------------------------------------------
@@ -504,18 +742,19 @@ function Get-WtPaneCwd {
 #>
 function wtsave {
     param([Parameter(Mandatory, Position = 0)] [string]$Name)
-    $window = Get-WtFocusedWindow
-    $tabs = Capture-WtWindow -Window $window
+    $focused = Get-WtFocusedWindow
+    $tabs = Capture-WtWindow -Window $focused.Window
 
     $layoutTabs = [System.Collections.Generic.List[object]]::new()
     foreach ($tab in $tabs) {
         $panesList = [System.Collections.Generic.List[object]]::new()
         $group = [System.Collections.Generic.List[object]]::new()
+        $paneCwds = Get-WtPaneCwds -PaneCount $tab.Panes.Count -WtPid $focused.Pid -Panes $tab.Panes
         for ($i = 0; $i -lt $tab.Panes.Count; $i++) {
             $pane = $tab.Panes[$i]
             $panesList.Add([pscustomobject]@{
                 profile = $pane.Profile
-                cwd     = (Get-WtPaneCwd)
+                cwd     = $paneCwds[$i]
             })
             $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
         }
@@ -555,7 +794,7 @@ function wtrestore {
     $layout = Read-WtLayoutFile -Name $Name
     $cmd = New-WtCommand -Layout $layout
     Write-Host "Restoring layout '$Name'..."
-    Invoke-Expression $cmd
+    cmd /c $cmd
 }
 
 <#
