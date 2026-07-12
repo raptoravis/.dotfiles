@@ -958,6 +958,15 @@ if (Test-Cmd npm) {
         agent-browser install 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install (Chromium) failed' }
     }
+    # puppeteer — browser automation library (includes Chromium)
+    $puppeteerGlobal = Join-Path (npm root -g 2>$null) 'puppeteer'
+    if (-not (Test-Path $puppeteerGlobal)) {
+        Write-Step 'Installing puppeteer (browser automation) via npm'
+        npm install -g puppeteer
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  puppeteer install failed' }
+    } else {
+        Write-Host '  puppeteer already installed'
+    }
     # AI coding CLIs (Claude Code / Codex / OpenCode)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'

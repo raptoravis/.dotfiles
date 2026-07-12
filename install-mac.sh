@@ -535,6 +535,14 @@ if command -v npm >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
     agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
   fi
+  # puppeteer — browser automation library (includes Chromium)
+  if [ ! -d "$(npm root -g 2>/dev/null)/puppeteer" ]; then
+    log "Installing puppeteer (browser automation) via npm"
+    npm install -g puppeteer || warn "  puppeteer install failed"
+  else
+    log "puppeteer already installed"
+  fi
+
   # AI coding CLIs (Claude Code / Codex / OpenCode)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
