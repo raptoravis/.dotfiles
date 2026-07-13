@@ -995,6 +995,12 @@ if (Test-Cmd npm) {
         npm install -g '@mimo-ai/cli'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
     }
+    # pi-pods — CLI tool for managing vLLM deployments on GPU pods. bin: `pi-pods`.
+    if (-not (Test-Cmd pi-pods)) {
+        Write-Step 'Installing pi-pods CLI (@mariozechner/pi)'
+        npm install -g '@mariozechner/pi'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi-pods install failed' }
+    }
 
     # Register tunan as a native plugin for Claude Code (enables slash commands,
     # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
