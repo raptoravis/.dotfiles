@@ -281,8 +281,9 @@ if command -v git >/dev/null 2>&1; then
   CODEX_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills"
   OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
   REASONIX_SKILLS="${REASONIX_HOME:-$HOME/.reasonix}/skills"
+  PI_SKILLS="$HOME/.pi/agent/skills"
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
-  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
+  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PI_SKILLS" "$PLUGIN_CACHE"
 
   # Track what THIS run installs so --clean can diff against on-disk state.
   declare -A INSTALLED_SKILLS=() INSTALLED_PLUGINS=() INSTALLED_PROMPTS=()
@@ -309,6 +310,7 @@ if command -v git >/dev/null 2>&1; then
     ln -sfn "$src" "$CODEX_SKILLS/$name"
     ln -sfn "$src" "$OPENCODE_SKILLS/$name"
     ln -sfn "$src" "$REASONIX_SKILLS/$name"
+    ln -sfn "$src" "$PI_SKILLS/$name"
     INSTALLED_SKILLS["$name"]=1
   }
 
@@ -494,7 +496,7 @@ if command -v git >/dev/null 2>&1; then
     log "Clean mode: removing skills / plugins / codex prompts no longer managed by this script"
 
     # 1) Skill symlinks pointing into $PLUGIN_CACHE that are not in this run's set.
-    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS"; do
+    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PI_SKILLS"; do
       [[ -d "$root" ]] || continue
       for entry in "$root"/*; do
         [[ -L "$entry" ]] || continue
@@ -559,7 +561,7 @@ if command -v npm >/dev/null 2>&1; then
     log "puppeteer already installed"
   fi
 
-  # AI coding CLIs (Claude Code / Codex / OpenCode)
+  # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
     npm install -g @anthropic-ai/claude-code || warn "  claude-code install failed"
@@ -582,10 +584,11 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)"
     npm install -g @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
   fi
-  # pi-pods — CLI tool for managing vLLM deployments on GPU pods. bin: `pi-pods`.
-  if ! command -v pi-pods >/dev/null 2>&1; then
-    log "Installing pi-pods CLI (@mariozechner/pi)"
-    npm install -g @mariozechner/pi || warn "  pi-pods install failed"
+  # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
+  # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
+  if ! command -v pi >/dev/null 2>&1; then
+    log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
+    npm install -g @earendil-works/pi-coding-agent || warn "  pi install failed"
   fi
 
   # Register tunan as a native plugin for Claude Code (enables slash commands,

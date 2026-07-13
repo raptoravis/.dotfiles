@@ -563,8 +563,9 @@ if (Test-Cmd git) {
     $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
     $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
     $ReasonixSkills = Join-Path $ReasonixHome 'skills'
+    $PiSkills = Join-Path $env:USERPROFILE '.pi\agent\skills'
     $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PluginCache | Out-Null
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills, $PluginCache | Out-Null
 
     # Track what THIS run installs so -Clean can diff against on-disk state.
     $InstalledSkills  = @{}
@@ -591,7 +592,7 @@ if (Test-Cmd git) {
     }
 
     function LinkSkillToRoots($src, $name) {
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
             $dest = Join-Path $root $name
             if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
@@ -858,7 +859,7 @@ if (Test-Cmd git) {
         Write-Step 'Clean mode: removing skills / plugins / codex prompts no longer managed by this script'
 
         # 1) Skill symlinks pointing into $PluginCache that are not in this run's set.
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
             if (-not (Test-Path $root)) { continue }
             Get-ChildItem -Force -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
                 if ($_.LinkType -ne 'SymbolicLink' -and $_.LinkType -ne 'Junction') { return }
@@ -967,7 +968,7 @@ if (Test-Cmd npm) {
     } else {
         Write-Host '  puppeteer already installed'
     }
-    # AI coding CLIs (Claude Code / Codex / OpenCode)
+    # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
         npm install -g '@anthropic-ai/claude-code'
@@ -995,11 +996,12 @@ if (Test-Cmd npm) {
         npm install -g '@mimo-ai/cli'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
     }
-    # pi-pods — CLI tool for managing vLLM deployments on GPU pods. bin: `pi-pods`.
-    if (-not (Test-Cmd pi-pods)) {
-        Write-Step 'Installing pi-pods CLI (@mariozechner/pi)'
-        npm install -g '@mariozechner/pi'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi-pods install failed' }
+    # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
+    # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
+    if (-not (Test-Cmd pi)) {
+        Write-Step 'Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)'
+        npm install -g '@earendil-works/pi-coding-agent'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi install failed' }
     }
 
     # Register tunan as a native plugin for Claude Code (enables slash commands,
