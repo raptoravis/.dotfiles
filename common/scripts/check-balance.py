@@ -19,6 +19,13 @@ Usage:
     check-balance --glm-key xxx.yyy # GLM key 直传
     check-balance --glm-window "2026-07-09 22:00"  # 记录 5h 窗口起点
     check-balance --glm-week "2026-07-01"          # 记录周窗口起点
+    check-balance --list             # 显示所有 provider 最近 10 条历史
+    check-balance --list 20          # 显示最近 20 条
+    check-balance --list --ds        # 只显示 DeepSeek 历史
+    check-balance --list --sf        # 只显示 SiliconFlow 历史
+    check-balance --list --el        # 只显示 ElevenLabs 历史
+
+余额数据自动持久化到 ~/.balance.json。
 
 Returns exit code 0 on success, 1 on error.
 """
@@ -104,6 +111,7 @@ UNSUPPORTED = {
 #   3. 基于你提供的窗口起点本地推算 5h/7d reset 倒计时
 GLM_DEFAULT_BASE = "https://open.bigmodel.cn/api/anthropic"
 GLM_STATE_FILE = os.path.expanduser("~/.glm-window.json")
+HISTORY_FILE = os.path.expanduser("~/.balance.json")
 GLM_CN_TZ = timezone(timedelta(hours=8))  # 北京时间，便于和智谱控制台对齐
 
 # 候选的余额/用量查询接口（实测全部 404，保留是为了让用户可复验，
@@ -169,6 +177,37 @@ def api_get(url: str, api_key: str, header_name: str | None = None) -> dict:
         die(f"Network error: {e.reason}")
 
 
+# ── 持久化 ─────────────────────────────────────────────────────────
+
+
+def save_balance(provider: str, infos, available: bool, currency: str) -> None:
+    """将查询结果追加到历史记录文件。"""
+    record = {
+        "timestamp": datetime.now().astimezone().isoformat(),
+        "provider": provider,
+        "currency": currency,
+        "balances": (
+            infos
+            if isinstance(infos, dict)
+            else list(infos) if isinstance(infos, list)
+            else str(infos)
+        ),
+        "available": available,
+    }
+    history: list[dict] = []
+    if os.path.exists(HISTORY_FILE):
+        try:
+            history = json.load(open(HISTORY_FILE, encoding="utf-8"))
+        except Exception:
+            history = []
+    history.append(record)
+    # 只保留最近 1000 条，避免文件过大
+    if len(history) > 1000:
+        history = history[-1000:]
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+
+
 # ── 渲染 ─────────────────────────────────────────────────────────
 
 def check_one(
@@ -176,6 +215,7 @@ def check_one(
     cfg: dict,
     label: str,
     currency_fallback: str = "CNY",
+    provider: str | None = None,
 ) -> None:
     """查一个 provider 并打印结果。"""
     data = api_get(cfg["url"], api_key, cfg.get("header_name"))
@@ -221,6 +261,114 @@ def check_one(
     print(f"│  {sep:<38s} │")
     print(f"│  {icon:<38s} │")
     print(f"╰{'─' * 42}╯")
+
+    if provider:
+        save_balance(provider, infos, available, currency_fallback)
+
+
+def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
+    """显示历史余额记录。
+
+    Args:
+        provider_filter: 可选，只显示指定 provider 的记录（"deepseek"/"siliconflow"/"elevenlabs"）
+        limit: 显示最近 N 条记录，取 0 表示全部。
+    """
+    if not os.path.exists(HISTORY_FILE):
+        print("📭 没有历史记录。先运行 check-balance 查询余额。")
+        return
+
+    try:
+        history = json.load(open(HISTORY_FILE, encoding="utf-8"))
+    except Exception:
+        print("❌ 历史文件损坏。")
+        return
+
+    if not history:
+        print("📭 没有历史记录。")
+        return
+
+    if provider_filter:
+        history = [r for r in history if r.get("provider") == provider_filter]
+        if not history:
+            print(f"📭 没有 {provider_filter} 的历史记录。")
+            return
+
+    # 按时间倒序，取最近 N 条
+    if limit > 0:
+        history = history[-limit:][::-1]
+    else:
+        history = history[::-1]
+
+    # 按 provider 分组
+    from collections import defaultdict
+
+    grouped: dict[str, list] = defaultdict(list)
+    for r in history:
+        grouped[r.get("provider", "unknown")].append(r)
+
+    label_map = {"deepseek": "DeepSeek", "siliconflow": "SiliconFlow", "elevenlabs": "ElevenLabs"}
+
+    for provider, records in grouped.items():
+        label = label_map.get(provider, provider)
+        print(f"\n{'=' * 60}")
+        print(f"  {label}  历史余额  (最近 {len(records)} 条)")
+        print(f"{'=' * 60}")
+
+        prev_balances = None
+        for i, r in enumerate(records):
+            ts = datetime.fromisoformat(r["timestamp"]).strftime("%Y-%m-%d %H:%M")
+            currency = r.get("currency", "CNY")
+            available = r.get("available", False)
+            icon = "✅" if available else "⚠️"
+            balances = r.get("balances", {})
+
+            print(f"\n  [{icon}] {ts}")
+
+            if provider == "deepseek":
+                # DeepSeek balance_infos 是列表（可能多币种），取第一条
+                bal = balances[0] if isinstance(balances, list) and balances else balances
+                if isinstance(bal, dict):
+                    total = str(bal.get("total_balance", "?"))
+                    granted = str(bal.get("granted_balance", "?"))
+                    topped = str(bal.get("topped_up_balance", "?"))
+                    print(f"    Total:     {total:>10s}  {currency}")
+                    print(f"    Granted:   {granted:>10s}  {currency}")
+                    print(f"    Topped up: {topped:>10s}  {currency}")
+                    if prev_balances:
+                        try:
+                            prev_bal = prev_balances[0] if isinstance(prev_balances, list) and prev_balances else prev_balances
+                            prev_total = float(str(prev_bal.get("total_balance", "0")))
+                            cur_total = float(total)
+                            delta = cur_total - prev_total
+                            sign = "+" if delta >= 0 else ""
+                            print(f"    Δ Total:   {sign}{delta:>.2f}  {currency}")
+                        except (ValueError, TypeError):
+                            pass
+                else:
+                    print(f"    {json.dumps(balances, ensure_ascii=False)}")
+            elif provider == "siliconflow":
+                balance = str(balances.get("balance", "?"))
+                charged = str(balances.get("chargeBalance", "?"))
+                total = str(balances.get("totalBalance", "?"))
+                print(f"    Balance:   {balance:>10s}  {currency}")
+                print(f"    Recharged: {charged:>10s}  {currency}")
+                print(f"    Total:     {total:>10s}  {currency}")
+                if prev_balances:
+                    try:
+                        prev_bal = float(str(prev_balances.get("balance", "0")))
+                        cur_bal = float(balance)
+                        delta = cur_bal - prev_bal
+                        sign = "+" if delta >= 0 else ""
+                        print(f"    Δ Balance: {sign}{delta:>.2f}  {currency}")
+                    except (ValueError, TypeError):
+                        pass
+            elif provider == "elevenlabs":
+                for k, v in balances.items():
+                    print(f"    {k}: {v}")
+            else:
+                print(f"    {json.dumps(balances, ensure_ascii=False)}")
+
+            prev_balances = balances
 
 
 def show_unsupported(env_path: Path) -> None:
@@ -516,23 +664,40 @@ def main() -> None:
     parser.add_argument("--glm-week", metavar="DATE",
                         help="GLM: record subscription cycle start (e.g. '2026-07-01')")
     parser.add_argument("--glm-no-probe", action="store_true", help="GLM: skip candidate endpoint probing")
+    parser.add_argument(
+        "--list", "-l", nargs="?", const=10, type=int, metavar="N",
+        help="show balance history (last N entries, default 10; use 0 for all)",
+    )
     args = parser.parse_args()
 
     env_path = Path.home() / ".env"
     glm_mode = args.glm or args.glm_ping or bool(args.glm_window) or bool(args.glm_week)
     check_all = not (args.ds or args.sf or args.el or glm_mode)
 
+    # --list：显示历史余额（单独用只显示历史；搭配 --ds/--sf/--el 则先显示历史再查询）
+    if args.list is not None:
+        provider = None
+        if args.ds:
+            provider = "deepseek"
+        elif args.sf:
+            provider = "siliconflow"
+        elif args.el:
+            provider = "elevenlabs"
+        show_history(provider_filter=provider, limit=args.list)
+        if not (args.ds or args.sf or args.el or glm_mode):
+            return
+
     if check_all or args.ds:
         key = args.key if args.key else read_api_key("DEEPSEEK_API_KEY", env_path)
-        check_one(key, PROVIDERS["deepseek"], "DeepSeek")
+        check_one(key, PROVIDERS["deepseek"], "DeepSeek", provider="deepseek")
 
     if check_all or args.sf:
         key = args.sf_key if args.sf_key else read_api_key("SILICONFLOW_API_KEY", env_path)
-        check_one(key, PROVIDERS["siliconflow"], "SiliconFlow")
+        check_one(key, PROVIDERS["siliconflow"], "SiliconFlow", provider="siliconflow")
 
     if check_all or args.el:
         key = args.el_key if args.el_key else read_api_key("ELEVENLABS_API_KEY", env_path)
-        check_one(key, PROVIDERS["elevenlabs"], "ElevenLabs", currency_fallback="USD")
+        check_one(key, PROVIDERS["elevenlabs"], "ElevenLabs", currency_fallback="USD", provider="elevenlabs")
 
     if glm_mode:
         check_glm(
