@@ -246,17 +246,6 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
-# gemini-search-mcp — Python MCP server for free Google AI Mode web search.
-# Installed via uv from git; the binary `gemini-search-mcp` is the MCP entrypoint.
-if command -v uv >/dev/null 2>&1; then
-  if ! command -v gemini-search-mcp >/dev/null 2>&1; then
-    log "Installing gemini-search-mcp via uv"
-    uv tool install git+https://github.com/Sophomoresty/gemini-search-mcp.git \
-      || warn "  gemini-search-mcp install failed"
-  else
-    log "gemini-search-mcp already installed"
-  fi
-fi
 
 # ---------------------------------------------------------------------------
 # 7a-bis) Cross-CLI agent skills
@@ -718,18 +707,6 @@ if command -v npm >/dev/null 2>&1; then
       || log "  sequential-thinking MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
 
-  # Register Sophomoresty/gemini-search-mcp (local stdio) for Claude Code & Codex.
-  # Free Google AI Mode web search — idempotent; `mcp add` errors if already registered.
-  if command -v claude >/dev/null 2>&1; then
-    log "Registering gemini-search MCP for Claude Code (idempotent)"
-    claude mcp add gemini-search -s user -- gemini-search-mcp 2>/dev/null \
-      || log "  gemini-search MCP already registered for claude (or registration failed — see 'claude mcp list')"
-  fi
-  if command -v codex >/dev/null 2>&1; then
-    log "Registering gemini-search MCP for Codex (idempotent)"
-    codex mcp add gemini-search -- gemini-search-mcp 2>/dev/null \
-      || log "  gemini-search MCP already registered for codex (or registration failed — see 'codex mcp list')"
-  fi
 
   # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
   # does NOT support OAuth dynamic client registration, so clients must auth with a
@@ -780,34 +757,31 @@ if command -v npm >/dev/null 2>&1; then
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
     ST_LOCAL_JSON='{"sequential-thinking":{"type":"local","command":["npx","-y","@modelcontextprotocol/server-sequential-thinking"],"enabled":true}}'
-    GS_LOCAL_JSON='{"gemini-search":{"type":"local","command":["gemini-search-mcp"],"enabled":true}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch + context7 + sequential-thinking + gemini-search MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 + sequential-thinking MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$ST_LOCAL_JSON"
-      register_json_mcp "$HOME/.config/opencode/opencode.json" "$GS_LOCAL_JSON"
     fi
     if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch + sequential-thinking + gemini-search MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
+      log "Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$ST_LOCAL_JSON"
-      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GS_LOCAL_JSON"
     fi
     # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
     # Can't take a remote HTTP url so github stays with its existing stdio server.
     REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
     if [ -f "$REASONIX_CFG" ]; then
-      log "Registering context7 + chrome-devtools + fetch + sequential-thinking + gemini-search MCP with reasonix"
+      log "Registering context7 + chrome-devtools + fetch + sequential-thinking MCP with reasonix"
       REASONIX_CFG="$REASONIX_CFG" node -e '
         const fs=require("fs"), p=process.env.REASONIX_CFG;
         const c=JSON.parse(fs.readFileSync(p,"utf8"));
         c.mcp=Array.isArray(c.mcp)?c.mcp:[];
-        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server","sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking","gemini-search=gemini-search-mcp"];
+        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server","sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking"];
         let changed=false;
         for(const e of entries){const n=e.split("=")[0];if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith(n+"="))){c.mcp.push(e);changed=true;}}
         if(changed)fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n");
