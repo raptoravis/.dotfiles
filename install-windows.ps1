@@ -535,17 +535,7 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
-# gemini-search-mcp — Python MCP server for free Google AI Mode web search.
-# Installed via uv from git; the binary `gemini-search-mcp` is the MCP entrypoint.
-if (Test-Cmd uv) {
-    if (-not (Test-Cmd gemini-search-mcp)) {
-        Write-Step 'Installing gemini-search-mcp via uv'
-        uv tool install 'git+https://github.com/Sophomoresty/gemini-search-mcp.git'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  gemini-search-mcp install failed' }
-    } else {
-        Write-Host '  gemini-search-mcp already installed'
-    }
-}
+
 
 # ---------------------------------------------------------------------------
 # 7b-bis) Cross-CLI agent skills
@@ -563,8 +553,9 @@ if (Test-Cmd git) {
     $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
     $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
     $ReasonixSkills = Join-Path $ReasonixHome 'skills'
+    $PiSkills = Join-Path $env:USERPROFILE '.pi\agent\skills'
     $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PluginCache | Out-Null
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills, $PluginCache | Out-Null
 
     # Track what THIS run installs so -Clean can diff against on-disk state.
     $InstalledSkills  = @{}
@@ -591,7 +582,7 @@ if (Test-Cmd git) {
     }
 
     function LinkSkillToRoots($src, $name) {
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
             $dest = Join-Path $root $name
             if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
             New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
@@ -858,7 +849,7 @@ if (Test-Cmd git) {
         Write-Step 'Clean mode: removing skills / plugins / codex prompts no longer managed by this script'
 
         # 1) Skill symlinks pointing into $PluginCache that are not in this run's set.
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
             if (-not (Test-Path $root)) { continue }
             Get-ChildItem -Force -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
                 if ($_.LinkType -ne 'SymbolicLink' -and $_.LinkType -ne 'Junction') { return }
@@ -967,7 +958,7 @@ if (Test-Cmd npm) {
     } else {
         Write-Host '  puppeteer already installed'
     }
-    # AI coding CLIs (Claude Code / Codex / OpenCode)
+    # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
         npm install -g '@anthropic-ai/claude-code'
@@ -994,6 +985,13 @@ if (Test-Cmd npm) {
         Write-Step 'Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)'
         npm install -g '@mimo-ai/cli'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
+    }
+    # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
+    # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
+    if (-not (Test-Cmd pi)) {
+        Write-Step 'Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)'
+        npm install -g '@earendil-works/pi-coding-agent'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi install failed' }
     }
 
     # Register tunan as a native plugin for Claude Code (enables slash commands,
@@ -1138,18 +1136,6 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  sequential-thinking MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
-    # Register Sophomoresty/gemini-search-mcp (local stdio) for Claude Code & Codex.
-    # Free Google AI Mode web search — idempotent; `mcp add` errors if already registered.
-    if (Test-Cmd claude) {
-        Write-Step 'Registering gemini-search MCP for Claude Code (idempotent)'
-        claude mcp add gemini-search -s user -- gemini-search-mcp 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  gemini-search MCP already registered for claude (or registration failed — see 'claude mcp list')" }
-    }
-    if (Test-Cmd codex) {
-        Write-Step 'Registering gemini-search MCP for Codex (idempotent)'
-        codex mcp add gemini-search -- gemini-search-mcp 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  gemini-search MCP already registered for codex (or registration failed — see 'codex mcp list')" }
-    }
 
     # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
     # does NOT support OAuth dynamic client registration, so clients must auth with a
@@ -1196,29 +1182,26 @@ if (Test-Cmd npm) {
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
         $StLocalJson = '{"sequential-thinking":{"type":"local","command":["npx","-y","@modelcontextprotocol/server-sequential-thinking"],"enabled":true}}'
-        $GsLocalJson = '{"gemini-search":{"type":"local","command":["gemini-search-mcp"],"enabled":true}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch + context7 + sequential-thinking + gemini-search MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 + sequential-thinking MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $StLocalJson
-            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GsLocalJson
         }
         if (Test-Cmd mimo) {
-            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking + gemini-search MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $StLocalJson
-            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GsLocalJson
         }
         # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
         # Can't take a remote HTTP url so github stays with its existing stdio server.
         $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
         if (Test-Path $ReasonixCfg) {
-            Write-Step 'Registering context7 + chrome-devtools + fetch + sequential-thinking + gemini-search MCP with reasonix'
+            Write-Step 'Registering context7 + chrome-devtools + fetch + sequential-thinking MCP with reasonix'
             try {
                 $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
                 if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
@@ -1229,7 +1212,6 @@ if (Test-Cmd npm) {
                     'chrome-devtools=npx -y chrome-devtools-mcp@latest'
                     'fetch=npx -y mcp-fetch-server'
                     'sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking'
-                    'gemini-search=gemini-search-mcp'
                 )
                 foreach ($entry in $reasonixMcpEntries) {
                     $prefix = $entry.Split('=')[0] + '='
