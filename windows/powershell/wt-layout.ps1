@@ -626,12 +626,14 @@ function Get-WtShellDescendants {
     $result  = [System.Collections.Generic.List[object]]::new()
     $visited = [System.Collections.Generic.HashSet[uint32]]::new()
 
+    # NOTE: $Pid is a read-only automatic variable in PowerShell — name the
+    # param $ProcessId instead so the scriptblock can bind to it.
     $recurse = {
-        param([uint32]$Pid, [int]$Depth)
+        param([uint32]$ProcessId, [int]$Depth)
         if ($Depth -gt 4) { return }
-        if (-not $visited.Add($Pid)) { return }
+        if (-not $visited.Add($ProcessId)) { return }
 
-        $query = "SELECT ProcessId, Name, CreationDate FROM Win32_Process WHERE ParentProcessId = $Pid"
+        $query = "SELECT ProcessId, Name, CreationDate FROM Win32_Process WHERE ParentProcessId = $ProcessId"
         $children = Get-CimInstance -Query $query -ErrorAction SilentlyContinue
         if (-not $children) { return }
 
@@ -639,11 +641,11 @@ function Get-WtShellDescendants {
             if ($shellNames.Contains($child.Name)) {
                 $result.Add($child)
             }
-            & $recurse -Pid ([uint32]$child.ProcessId) -Depth ($Depth + 1)
+            & $recurse -ProcessId ([uint32]$child.ProcessId) -Depth ($Depth + 1)
         }
     }
 
-    & $recurse -Pid $RootPid -Depth 0
+    & $recurse -ProcessId $RootPid -Depth 0
 
     # CreationDate in CIM is YYYYMMDDHHMMSS.micros±UTC — lexicographic sort works.
     return @($result | Sort-Object CreationDate)
@@ -749,24 +751,28 @@ function wtsave {
     foreach ($tab in $tabs) {
         $panesList = [System.Collections.Generic.List[object]]::new()
         $group = [System.Collections.Generic.List[object]]::new()
-        $paneCwds = Get-WtPaneCwds -PaneCount $tab.Panes.Count -WtPid $focused.Pid -Panes $tab.Panes
-        for ($i = 0; $i -lt $tab.Panes.Count; $i++) {
-            $pane = $tab.Panes[$i]
-            $panesList.Add([pscustomobject]@{
-                profile = $pane.Profile
-                cwd     = $paneCwds[$i]
-            })
-            $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
-        }
         # Inactive tabs have no TermControl elements in the UIA tree.
         # Save them with a single default-pane placeholder so restore works.
         if ($tab.Panes.Count -eq 0) {
             $panesList.Add([pscustomobject]@{ profile = ''; cwd = '' })
             $tree = New-WtLeaf -PaneIndex 0
-        } elseif ($tab.Panes.Count -eq 1) {
-            $tree = New-WtLeaf -PaneIndex 0
         } else {
-            $tree = ConvertTo-WtSplitTree -Group @($group)
+            # Pane capture only makes sense when there are visible panes; an
+            # empty array would trip Get-WtPaneCwds's mandatory $Panes param.
+            $paneCwds = Get-WtPaneCwds -PaneCount $tab.Panes.Count -WtPid $focused.Pid -Panes $tab.Panes
+            for ($i = 0; $i -lt $tab.Panes.Count; $i++) {
+                $pane = $tab.Panes[$i]
+                $panesList.Add([pscustomobject]@{
+                    profile = $pane.Profile
+                    cwd     = $paneCwds[$i]
+                })
+                $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
+            }
+            if ($tab.Panes.Count -eq 1) {
+                $tree = New-WtLeaf -PaneIndex 0
+            } else {
+                $tree = ConvertTo-WtSplitTree -Group @($group)
+            }
         }
         $layoutTabs.Add([pscustomobject]@{
             title  = $tab.Title
