@@ -82,7 +82,7 @@ PROVIDERS = {
 
 UNSUPPORTED = {
     "DASHSCOPE_API_KEY": "web console only: https://bailian.console.aliyun.com",
-    "BD_API_KEY": "web console only: https://console.volcengine.com/ark (火山方舟 Ark key 仅用于调用模型，余额需账号级 AK/SK 签名查询)",
+    "ARK_API_KEY": "web console only: https://console.volcengine.com/ark (火山方舟 Ark key 仅用于调用模型，余额需账号级 AK/SK 签名查询)",
     "TRIPO_API_KEY": "web console only: https://platform.tripo3d.ai",
     "GEMINI_API_KEY": "web console only: https://aistudio.google.com/billing",
 }
