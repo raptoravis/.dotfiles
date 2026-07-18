@@ -623,29 +623,46 @@ function Get-WtShellDescendants {
         'bash.exe', 'git-bash.exe', 'zsh.exe', 'fish.exe', 'nu.exe'
     ) | ForEach-Object { [void]$shellNames.Add($_) }
 
-    $result  = [System.Collections.Generic.List[object]]::new()
-    $visited = [System.Collections.Generic.HashSet[uint32]]::new()
+    # Fetch ALL processes in a single WMI call, then build the parent→children
+    # map in memory. The old approach made one Get-CimInstance call per process
+    # level (recursive), which cost 100-500ms per call on Windows.
+    $allProcs = Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId, Name, CreationDate -ErrorAction SilentlyContinue
+    if (-not $allProcs) { return @() }
 
-    # NOTE: $Pid is a read-only automatic variable in PowerShell — name the
-    # param $ProcessId instead so the scriptblock can bind to it.
-    $recurse = {
-        param([uint32]$ProcessId, [int]$Depth)
-        if ($Depth -gt 4) { return }
-        if (-not $visited.Add($ProcessId)) { return }
-
-        $query = "SELECT ProcessId, Name, CreationDate FROM Win32_Process WHERE ParentProcessId = $ProcessId"
-        $children = Get-CimInstance -Query $query -ErrorAction SilentlyContinue
-        if (-not $children) { return }
-
-        foreach ($child in $children) {
-            if ($shellNames.Contains($child.Name)) {
-                $result.Add($child)
-            }
-            & $recurse -ProcessId ([uint32]$child.ProcessId) -Depth ($Depth + 1)
+    $childrenByParent = @{}
+    foreach ($proc in $allProcs) {
+        $ppid = [uint32]$proc.ParentProcessId
+        if (-not $childrenByParent.ContainsKey($ppid)) {
+            $childrenByParent[$ppid] = [System.Collections.Generic.List[object]]::new()
         }
+        $childrenByParent[$ppid].Add($proc)
     }
 
-    & $recurse -ProcessId $RootPid -Depth 0
+    $result  = [System.Collections.Generic.List[object]]::new()
+    $visited = [System.Collections.Generic.HashSet[uint32]]::new()
+    $queue   = [System.Collections.Generic.Queue[uint32]]::new()
+    $queue.Enqueue($RootPid)
+    $depth   = 0
+
+    # BFS walk of the process tree, depth-limited to 4.
+    while ($queue.Count -gt 0 -and $depth -le 4) {
+        $levelCount = $queue.Count
+        for ($i = 0; $i -lt $levelCount; $i++) {
+            $procId = $queue.Dequeue()
+            if (-not $visited.Add($procId)) { continue }
+
+            $children = $childrenByParent[$procId]
+            if (-not $children) { continue }
+
+            foreach ($child in $children) {
+                if ($shellNames.Contains($child.Name)) {
+                    $result.Add($child)
+                }
+                $queue.Enqueue([uint32]$child.ProcessId)
+            }
+        }
+        $depth++
+    }
 
     # CreationDate in CIM is YYYYMMDDHHMMSS.micros±UTC — lexicographic sort works.
     return @($result | Sort-Object CreationDate)
