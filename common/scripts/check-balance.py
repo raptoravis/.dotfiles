@@ -2,19 +2,17 @@
 """
 查 LLM/SaaS 账户余额，密钥从 ~/.env 读取。
 
-Supported providers: DeepSeek, SiliconFlow, ElevenLabs.
+Supported providers: DeepSeek, ElevenLabs.
 GLM (智谱): 无公开余额 API，做 key 自检 + 网关 ping + reset 倒计时推算。
-(DashScope / Tripo3D / Gemini have no programmatic balance API.)
+(DashScope / Volcengine Ark (字节豆包) / Tripo3D / Gemini have no programmatic balance API.)
 
 Usage:
     check-balance                    # 查全部（含 GLM 自检）
     check-balance --ds              # 只查 DeepSeek
-    check-balance --sf              # 只查 SiliconFlow
     check-balance --el              # 只查 ElevenLabs
     check-balance --glm             # 只做 GLM 自检 + reset 推算
     check-balance --glm-ping        # GLM 只 ping 网关验 key
     check-balance --key sk-xxx      # DeepSeek 密钥直传
-    check-balance --sf-key sf-xxx   # SiliconFlow 密钥直传
     check-balance --el-key el-xxx   # ElevenLabs 密钥直传
     check-balance --glm-key xxx.yyy # GLM key 直传
     check-balance --glm-window "2026-07-09 22:00"  # 记录 5h 窗口起点
@@ -22,7 +20,6 @@ Usage:
     check-balance --list             # 显示所有 provider 最近 10 条历史
     check-balance --list 20          # 显示最近 20 条
     check-balance --list --ds        # 只显示 DeepSeek 历史
-    check-balance --list --sf        # 只显示 SiliconFlow 历史
     check-balance --list --el        # 只显示 ElevenLabs 历史
 
 余额数据自动持久化到 ~/.balance.json。
@@ -66,19 +63,6 @@ PROVIDERS = {
             f"  Topped up   {infos.get('topped_up_balance', '0.00'):>12s}  {cur}"
         ),
     },
-    "siliconflow": {
-        "env_key": "SILICONFLOW_API_KEY",
-        "url": "https://api.siliconflow.cn/v1/user/info",
-        "parse": lambda d: (
-            d.get("data", {}),
-            d.get("status", False) and d.get("data", {}).get("balance", "0") != "0",
-        ),
-        "fmt_infos": lambda infos, cur: (
-            f"  Balance      {infos.get('balance', '0.00'):>12s}  {cur}\n"
-            f"  Recharged    {infos.get('chargeBalance', '0.00'):>12s}  {cur}\n"
-            f"  Total        {infos.get('totalBalance', '0.00'):>12s}  {cur}"
-        ),
-    },
     "elevenlabs": {
         "env_key": "ELEVENLABS_API_KEY",
         "url": "https://api.elevenlabs.io/v1/user",
@@ -98,6 +82,7 @@ PROVIDERS = {
 
 UNSUPPORTED = {
     "DASHSCOPE_API_KEY": "web console only: https://bailian.console.aliyun.com",
+    "BD_API_KEY": "web console only: https://console.volcengine.com/ark (火山方舟 Ark key 仅用于调用模型，余额需账号级 AK/SK 签名查询)",
     "TRIPO_API_KEY": "web console only: https://platform.tripo3d.ai",
     "GEMINI_API_KEY": "web console only: https://aistudio.google.com/billing",
 }
@@ -270,7 +255,7 @@ def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
     """显示历史余额记录。
 
     Args:
-        provider_filter: 可选，只显示指定 provider 的记录（"deepseek"/"siliconflow"/"elevenlabs"）
+        provider_filter: 可选，只显示指定 provider 的记录（"deepseek"/"elevenlabs"）
         limit: 显示最近 N 条记录，取 0 表示全部。
     """
     if not os.path.exists(HISTORY_FILE):
@@ -306,7 +291,7 @@ def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
     for r in history:
         grouped[r.get("provider", "unknown")].append(r)
 
-    label_map = {"deepseek": "DeepSeek", "siliconflow": "SiliconFlow", "elevenlabs": "ElevenLabs"}
+    label_map = {"deepseek": "DeepSeek", "elevenlabs": "ElevenLabs"}
 
     for provider, records in grouped.items():
         label = label_map.get(provider, provider)
@@ -346,22 +331,6 @@ def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
                             pass
                 else:
                     print(f"    {json.dumps(balances, ensure_ascii=False)}")
-            elif provider == "siliconflow":
-                balance = str(balances.get("balance", "?"))
-                charged = str(balances.get("chargeBalance", "?"))
-                total = str(balances.get("totalBalance", "?"))
-                print(f"    Balance:   {balance:>10s}  {currency}")
-                print(f"    Recharged: {charged:>10s}  {currency}")
-                print(f"    Total:     {total:>10s}  {currency}")
-                if prev_balances:
-                    try:
-                        prev_bal = float(str(prev_balances.get("balance", "0")))
-                        cur_bal = float(balance)
-                        delta = cur_bal - prev_bal
-                        sign = "+" if delta >= 0 else ""
-                        print(f"    Δ Balance: {sign}{delta:>.2f}  {currency}")
-                    except (ValueError, TypeError):
-                        pass
             elif provider == "elevenlabs":
                 for k, v in balances.items():
                     print(f"    {k}: {v}")
@@ -648,14 +617,12 @@ def check_glm(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Check LLM/SaaS account balance (DeepSeek, SiliconFlow, ElevenLabs, GLM)"
+        description="Check LLM/SaaS account balance (DeepSeek, ElevenLabs, GLM)"
     )
     parser.add_argument("--ds", action="store_true", help="only check DeepSeek")
-    parser.add_argument("--sf", action="store_true", help="only check SiliconFlow")
     parser.add_argument("--el", action="store_true", help="only check ElevenLabs")
     parser.add_argument("--glm", action="store_true", help="only do GLM (智谱) self-check")
     parser.add_argument("--key", "-k", help="DeepSeek DEEPSEEK_API_KEY directly")
-    parser.add_argument("--sf-key", help="SiliconFlow API key directly")
     parser.add_argument("--el-key", help="ElevenLabs API key directly")
     parser.add_argument("--glm-key", help="GLM (智谱) API key (id.secret) directly")
     parser.add_argument("--glm-ping", action="store_true", help="GLM: only ping gateway to verify key")
@@ -672,28 +639,22 @@ def main() -> None:
 
     env_path = Path.home() / ".env"
     glm_mode = args.glm or args.glm_ping or bool(args.glm_window) or bool(args.glm_week)
-    check_all = not (args.ds or args.sf or args.el or glm_mode)
+    check_all = not (args.ds or args.el or glm_mode)
 
-    # --list：显示历史余额（单独用只显示历史；搭配 --ds/--sf/--el 则先显示历史再查询）
+    # --list：显示历史余额（单独用只显示历史；搭配 --ds/--el 则先显示历史再查询）
     if args.list is not None:
         provider = None
         if args.ds:
             provider = "deepseek"
-        elif args.sf:
-            provider = "siliconflow"
         elif args.el:
             provider = "elevenlabs"
         show_history(provider_filter=provider, limit=args.list)
-        if not (args.ds or args.sf or args.el or glm_mode):
+        if not (args.ds or args.el or glm_mode):
             return
 
     if check_all or args.ds:
         key = args.key if args.key else read_api_key("DEEPSEEK_API_KEY", env_path)
         check_one(key, PROVIDERS["deepseek"], "DeepSeek", provider="deepseek")
-
-    if check_all or args.sf:
-        key = args.sf_key if args.sf_key else read_api_key("SILICONFLOW_API_KEY", env_path)
-        check_one(key, PROVIDERS["siliconflow"], "SiliconFlow", provider="siliconflow")
 
     if check_all or args.el:
         key = args.el_key if args.el_key else read_api_key("ELEVENLABS_API_KEY", env_path)
