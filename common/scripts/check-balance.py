@@ -120,6 +120,21 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
+def has_env_key(env_key: str, env_path: Path) -> bool:
+    """检查 ~/.env 或环境变量中是否存在指定 key（不报错）。"""
+    if os.environ.get(env_key):
+        return True
+    if not env_path.exists():
+        return False
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith(f"{env_key}="):
+            val = line.removeprefix(f"{env_key}=").strip("\"'")
+            if val:
+                return True
+    return False
+
+
 def read_api_key(env_key: str, env_path: Path) -> str:
     """读 ~/.env 或环境变量中的密钥，优先级：环境变量 > ~/.env。"""
     key = os.environ.get(env_key)
@@ -272,17 +287,24 @@ def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
         print("📭 没有历史记录。")
         return
 
+    # 过滤掉已从 PROVIDERS 移除的 provider（如 siliconflow）的旧记录
+    history = [r for r in history if r.get("provider") in PROVIDERS]
+
+    if not history:
+        print("📭 没有历史记录。")
+        return
+
     if provider_filter:
         history = [r for r in history if r.get("provider") == provider_filter]
         if not history:
             print(f"📭 没有 {provider_filter} 的历史记录。")
             return
 
-    # 按时间倒序，取最近 N 条
+    # 按时间正序（旧的在上，新的在下），取最近 N 条
     if limit > 0:
-        history = history[-limit:][::-1]
+        history = history[-limit:]
     else:
-        history = history[::-1]
+        history = history[:]
 
     # 按 provider 分组
     from collections import defaultdict
@@ -326,7 +348,8 @@ def show_history(provider_filter: str | None = None, limit: int = 10) -> None:
                             cur_total = float(total)
                             delta = cur_total - prev_total
                             sign = "+" if delta >= 0 else ""
-                            print(f"    Δ Total:   {sign}{delta:>.2f}  {currency}")
+                            diff_str = f"{sign}{delta:.2f}"
+                            print(f"    diff:      {diff_str:>10s}  {currency}")
                         except (ValueError, TypeError):
                             pass
                 else:
@@ -653,12 +676,18 @@ def main() -> None:
             return
 
     if check_all or args.ds:
-        key = args.key if args.key else read_api_key("DEEPSEEK_API_KEY", env_path)
-        check_one(key, PROVIDERS["deepseek"], "DeepSeek", provider="deepseek")
+        if check_all and not has_env_key("DEEPSEEK_API_KEY", env_path):
+            print("⏭️  DeepSeek: DEEPSEEK_API_KEY not found in ~/.env, skipping")
+        else:
+            key = args.key if args.key else read_api_key("DEEPSEEK_API_KEY", env_path)
+            check_one(key, PROVIDERS["deepseek"], "DeepSeek", provider="deepseek")
 
     if check_all or args.el:
-        key = args.el_key if args.el_key else read_api_key("ELEVENLABS_API_KEY", env_path)
-        check_one(key, PROVIDERS["elevenlabs"], "ElevenLabs", currency_fallback="USD", provider="elevenlabs")
+        if check_all and not has_env_key("ELEVENLABS_API_KEY", env_path):
+            print("⏭️  ElevenLabs: ELEVENLABS_API_KEY not found in ~/.env, skipping")
+        else:
+            key = args.el_key if args.el_key else read_api_key("ELEVENLABS_API_KEY", env_path)
+            check_one(key, PROVIDERS["elevenlabs"], "ElevenLabs", currency_fallback="USD", provider="elevenlabs")
 
     if glm_mode:
         check_glm(
