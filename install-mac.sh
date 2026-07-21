@@ -10,21 +10,58 @@
 
 set -uo pipefail
 
-CLEAN=0
+UNINSTALL_AGENTS=0
 for arg in "$@"; do
   case "$arg" in
-    --clean) CLEAN=1 ;;
+    --uninstallagents) UNINSTALL_AGENTS=1 ;;
     -h|--help)
       cat <<EOF
-Usage: $0 [--clean]
-  --clean  After install, remove agent-skill links / plugin-cache dirs /
-           codex prompts that this script no longer manages.
+Usage: $0 [--uninstallagents]
+  --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode,
+                     Reasonix, MiMo Code, Pi) and remove their config dirs.
 EOF
       exit 0
       ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+if (( UNINSTALL_AGENTS )); then
+  log "Uninstalling AI agent CLIs and cleaning config directories"
+
+  # 1) npm global uninstall
+  if command -v npm >/dev/null 2>&1; then
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "reasonix" "@mimo-ai/cli" "@earendil-works/pi-coding-agent"; do
+      log "  npm uninstall -g $pkg"
+      npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
+    done
+  else
+    warn "npm not on PATH — skipping npm uninstall step"
+  fi
+
+  # 2) Remove agent config directories
+  AGENT_DIRS=(
+    "$HOME/.claude"
+    "${CODEX_HOME:-$HOME/.codex}"
+    "$HOME/.config/opencode"
+    "${REASONIX_HOME:-$HOME/.reasonix}"
+    "$HOME/.config/mimocode"
+    "$HOME/.pi"
+    "$HOME/.agents"
+    "$HOME/.cache/dotfiles/agent-plugins"
+  )
+  for d in "${AGENT_DIRS[@]}"; do
+    if [[ -d "$d" || -L "$d" ]]; then
+      log "  rm -rf $d"
+      rm -rf "$d"
+    else
+      log "  skip (not found): $d"
+    fi
+  done
+
+  log "Agent uninstall complete."
+  exit 0
+fi
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 ZSH_CUSTOM_DIR="${ZSH:-$HOME/.config/zsh/ohmyzsh}"
@@ -246,265 +283,6 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
   done < "$DOTFILES_DIR/uv-tools.txt"
 fi
 
-
-# ---------------------------------------------------------------------------
-# 7a-bis) Cross-CLI agent skills
-#     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
-#     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills
-#     Claude-Code-specific bits (slash /commands, hooks/hooks.json) are not
-#     ported — they only run inside Claude Code.
-# ---------------------------------------------------------------------------
-if command -v git >/dev/null 2>&1; then
-  AGENT_SKILLS="$HOME/.agents/skills"
-  CLAUDE_SKILLS="$HOME/.claude/skills"
-  CODEX_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills"
-  OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
-  REASONIX_SKILLS="${REASONIX_HOME:-$HOME/.reasonix}/skills"
-  PI_SKILLS="$HOME/.pi/agent/skills"
-  PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
-  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PI_SKILLS" "$PLUGIN_CACHE"
-
-  INSTALLED_SKILLS="|" INSTALLED_PLUGINS="|" INSTALLED_PROMPTS="|"
-
-  clone_or_pull() {
-    local url="$1" dir="$2"
-    if [[ -d "$dir/.git" ]]; then
-      if ! git -C "$dir" pull --quiet --ff-only 2>/dev/null; then
-        # upstream may have rewritten history (force-push/squash) — hard-reset
-        # this throwaway mirror to the remote instead of staying diverged.
-        git -C "$dir" fetch --quiet 2>/dev/null
-        git -C "$dir" reset --hard --quiet '@{u}' 2>/dev/null || warn "  pull failed: $dir"
-      fi
-    else
-      git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
-    fi
-    INSTALLED_PLUGINS="${INSTALLED_PLUGINS}$(basename "$dir")|"
-  }
-
-  link_skill() {
-    local src="$1" name="$2"
-    ln -sfn "$src" "$AGENT_SKILLS/$name"
-    ln -sfn "$src" "$CLAUDE_SKILLS/$name"
-    ln -sfn "$src" "$CODEX_SKILLS/$name"
-    ln -sfn "$src" "$OPENCODE_SKILLS/$name"
-    ln -sfn "$src" "$REASONIX_SKILLS/$name"
-    ln -sfn "$src" "$PI_SKILLS/$name"
-    INSTALLED_SKILLS="${INSTALLED_SKILLS}$name|"
-  }
-
-  link_skills_from() {
-    local repo="$1"
-    find "$repo" -maxdepth 4 -name SKILL.md 2>/dev/null | while read -r f; do
-      local src; src="$(dirname "$f")"
-      local name; name="$(basename "$src")"
-      link_skill "$src" "$name"
-    done
-  }
-
-  log "Installing handoff skill (cross-CLI)"
-  clone_or_pull https://github.com/willseltzer/claude-handoff "$PLUGIN_CACHE/claude-handoff"
-  link_skills_from "$PLUGIN_CACHE/claude-handoff"
-
-  log "Installing andrej-karpathy-skills (cross-CLI)"
-  clone_or_pull https://github.com/forrestchang/andrej-karpathy-skills "$PLUGIN_CACHE/karpathy-skills"
-  link_skills_from "$PLUGIN_CACHE/karpathy-skills"
-  KARPATHY_WRAPPER="$PLUGIN_CACHE/karpathy-guidelines-skill"
-  KARPATHY_UPSTREAM_SKILL="$PLUGIN_CACHE/karpathy-skills/skills/karpathy-guidelines/SKILL.md"
-  if [[ ! -f "$KARPATHY_UPSTREAM_SKILL" && -f "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md" && ! -e "$KARPATHY_WRAPPER/SKILL.md" ]]; then
-    mkdir -p "$KARPATHY_WRAPPER"
-    {
-      printf -- '---\nname: karpathy-guidelines\ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes\n---\n\n'
-      cat "$PLUGIN_CACHE/karpathy-skills/CLAUDE.md"
-    } > "$KARPATHY_WRAPPER/SKILL.md"
-  fi
-  if [[ ! -f "$KARPATHY_UPSTREAM_SKILL" && -e "$KARPATHY_WRAPPER/SKILL.md" ]]; then
-    link_skill "$KARPATHY_WRAPPER" karpathy-guidelines
-  fi
-
-  log "Installing excalidraw-diagram skill for claude / codex / opencode"
-  clone_or_pull https://github.com/coleam00/excalidraw-diagram-skill "$PLUGIN_CACHE/excalidraw-diagram-skill"
-  if [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/SKILL.md" ]]; then
-    link_skill "$PLUGIN_CACHE/excalidraw-diagram-skill" excalidraw-diagram
-    if command -v uv >/dev/null 2>&1 && [[ -f "$PLUGIN_CACHE/excalidraw-diagram-skill/references/pyproject.toml" ]]; then
-      log "  excalidraw-diagram: uv sync + playwright chromium (one-time)"
-      # Clear UV_INDEX_URL so uv.toml's aliyun mirror takes effect — the user's
-      # shell may have a stale/broken mirror env var (e.g. tsinghua 403).
-      sync_err=$(cd "$PLUGIN_CACHE/excalidraw-diagram-skill/references" && UV_INDEX_URL='' uv sync 2>&1)
-      if [[ $? -eq 0 ]]; then
-        if compgen -G "$HOME/Library/Caches/ms-playwright/chromium-"* >/dev/null 2>&1; then
-          log "  excalidraw-diagram: playwright chromium already cached, skipping download"
-        else
-          UV_INDEX_URL='' uv run --quiet playwright install chromium 2>/dev/null \
-            || warn "  excalidraw-diagram: playwright chromium install failed (run 'uv run playwright install chromium' in $PLUGIN_CACHE/excalidraw-diagram-skill/references)"
-        fi
-      else
-        warn "  excalidraw-diagram: uv sync failed: $(echo "$sync_err" | tail -n5)"
-      fi
-    else
-      warn "  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred"
-    fi
-  else
-    warn "  excalidraw-diagram-skill: SKILL.md missing after clone"
-  fi
-
-  log "Installing html-ppt skill for claude / codex / opencode"
-  clone_or_pull https://github.com/lewislulu/html-ppt-skill "$PLUGIN_CACHE/html-ppt-skill"
-  if [[ -f "$PLUGIN_CACHE/html-ppt-skill/SKILL.md" ]]; then
-    link_skill "$PLUGIN_CACHE/html-ppt-skill" html-ppt
-  else
-    warn "  html-ppt-skill: SKILL.md missing after clone"
-  fi
-
-  # 3c. anysearch-skill (single SKILL.md at repo root, no build step)
-  #     https://anysearch.com/install/skill-install.md
-  log "Installing anysearch skill for claude / codex / opencode"
-  clone_or_pull https://github.com/anysearch-ai/anysearch-skill "$PLUGIN_CACHE/anysearch-skill"
-  if [[ -f "$PLUGIN_CACHE/anysearch-skill/SKILL.md" ]]; then
-    link_skill "$PLUGIN_CACHE/anysearch-skill" anysearch
-  else
-    warn "  anysearch-skill: SKILL.md missing after clone"
-  fi
-
-  # 5. anthropics/claude-plugins-official monorepo — pick portable subsets
-  #    (frontend-design skill + commit-commands prompts). Other plugins in this
-  #    monorepo are LSP wrappers / Claude-Code-only and skipped.
-  log "Installing frontend-design skill (cross-CLI)"
-  clone_or_pull https://github.com/anthropics/claude-plugins-official "$PLUGIN_CACHE/claude-plugins-official"
-  CPO_PLUGINS="$PLUGIN_CACHE/claude-plugins-official/plugins"
-  if [[ -f "$CPO_PLUGINS/frontend-design/skills/frontend-design/SKILL.md" ]]; then
-    link_skill "$CPO_PLUGINS/frontend-design/skills/frontend-design" frontend-design
-  else
-    warn "  frontend-design: SKILL.md not found in upstream"
-  fi
-
-  # 6a. nextlevelbuilder/ui-ux-pro-max-skill — multi-skill plugin monorepo
-  #     (banner-design, brand, design-system, design, slides, ui-styling, ui-ux-pro-max)
-  log "Installing ui-ux-pro-max skills (cross-CLI)"
-  clone_or_pull https://github.com/nextlevelbuilder/ui-ux-pro-max-skill "$PLUGIN_CACHE/ui-ux-pro-max-skill"
-  link_skills_from "$PLUGIN_CACHE/ui-ux-pro-max-skill"
-
-  # 6b. vercel-labs/agent-skills — pick web-design-guidelines only
-  log "Installing web-design-guidelines skill (cross-CLI)"
-  clone_or_pull https://github.com/vercel-labs/agent-skills "$PLUGIN_CACHE/vercel-agent-skills"
-  if [[ -f "$PLUGIN_CACHE/vercel-agent-skills/skills/web-design-guidelines/SKILL.md" ]]; then
-    link_skill "$PLUGIN_CACHE/vercel-agent-skills/skills/web-design-guidelines" web-design-guidelines
-  else
-    warn "  web-design-guidelines: SKILL.md not found in upstream"
-  fi
-
-  # 6c. anthropics/skills — official skills monorepo; pick skill-creator, mcp-builder, webapp-testing
-  log "Installing anthropics/skills subset (skill-creator / mcp-builder / webapp-testing)"
-  clone_or_pull https://github.com/anthropics/skills "$PLUGIN_CACHE/anthropics-skills"
-  for s in skill-creator mcp-builder webapp-testing; do
-    if [[ -f "$PLUGIN_CACHE/anthropics-skills/skills/$s/SKILL.md" ]]; then
-      link_skill "$PLUGIN_CACHE/anthropics-skills/skills/$s" "$s"
-    else
-      warn "  anthropics/skills/$s: SKILL.md not found"
-    fi
-  done
-
-  # 6d. upstash/context7 — primarily an MCP server; also ships a find-docs SKILL.md.
-  #     MCP registration happens after the claude CLI install (further down).
-  log "Installing context7 find-docs skill (cross-CLI)"
-  clone_or_pull https://github.com/upstash/context7 "$PLUGIN_CACHE/context7"
-  if [[ -f "$PLUGIN_CACHE/context7/skills/find-docs/SKILL.md" ]]; then
-    link_skill "$PLUGIN_CACHE/context7/skills/find-docs" find-docs
-  else
-    warn "  context7/find-docs: SKILL.md not found in upstream"
-  fi
-
-  # 6e. leonxlnx/taste-skill — anti-slop frontend design monorepo; pick
-  #     design-taste-frontend, redesign-existing-projects, image-to-code.
-  log "Installing taste-skill subset (design-taste-frontend / redesign-existing-projects / image-to-code)"
-  clone_or_pull https://github.com/leonxlnx/taste-skill "$PLUGIN_CACHE/taste-skill"
-  for entry in "taste-skill:design-taste-frontend" \
-               "redesign-skill:redesign-existing-projects" \
-               "image-to-code-skill:image-to-code"; do
-    src_dir="${entry%%:*}"; link_name="${entry##*:}"
-    if [[ -f "$PLUGIN_CACHE/taste-skill/skills/$src_dir/SKILL.md" ]]; then
-      link_skill "$PLUGIN_CACHE/taste-skill/skills/$src_dir" "$link_name"
-    else
-      warn "  taste-skill/$src_dir: SKILL.md not found in upstream"
-    fi
-  done
-
-  # 6f. raptoravis/threejs-game-skills — install via repo's own install.sh
-  #      (skills are copied, not symlinked, because they reference relative
-  #      scripts/ and references/ paths that would break through symlinks).
-  log "Installing threejs-game-skills (cross-CLI; via repo install.sh)"
-  clone_or_pull https://github.com/raptoravis/threejs-game-skills "$PLUGIN_CACHE/threejs-game-skills"
-  if [[ -x "$PLUGIN_CACHE/threejs-game-skills/install.sh" ]]; then
-    ( cd "$PLUGIN_CACHE/threejs-game-skills" && bash install.sh --codex --claude --opencode --opencode-commands --agents --force )
-    for skill_name in threejs-3d-generator threejs-aaa-graphics-builder threejs-audio-generator \
-                       threejs-debug-profiler threejs-game-director threejs-game-ui-designer \
-                       threejs-gameplay-systems threejs-image-generator threejs-qa-release; do
-      INSTALLED_SKILLS["$skill_name"]=1
-    done
-  else
-    warn "  threejs-game-skills: install.sh not found after clone"
-  fi
-
-  # 7. Codex slash-prompts ported from Claude Code commands/
-  #    Copies select *.md command files into ~/.codex/prompts/ so they show up
-  #    as /handoff-create, /commit etc. inside Codex (Codex doesn't
-  #    auto-load Claude commands/, but does scan ~/.codex/prompts/).
-  log "Installing Codex prompts (handoff / commit-commands)"
-  CODEX_PROMPTS="${CODEX_HOME:-$HOME/.codex}/prompts"
-  mkdir -p "$CODEX_PROMPTS"
-  copy_prompt() {
-    [[ -f "$1" ]] || return 0
-    cp -f "$1" "$CODEX_PROMPTS/$2"
-    INSTALLED_PROMPTS="${INSTALLED_PROMPTS}$2|"
-  }
-  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/create.md"        handoff-create.md
-  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/quick.md"         handoff-quick.md
-  copy_prompt "$PLUGIN_CACHE/claude-handoff/commands/resume.md"        handoff-resume.md
-  copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit.md"         commit.md
-  copy_prompt "$CPO_PLUGINS/commit-commands/commands/commit-push-pr.md" commit-push-pr.md
-  copy_prompt "$CPO_PLUGINS/commit-commands/commands/clean_gone.md"     clean-gone.md
-
-  # See install-linux.sh for rationale; keep this list symmetric across the
-  # three install scripts.
-  KNOWN_CODEX_PROMPTS=(handoff-create.md handoff-quick.md handoff-resume.md commit.md commit-push-pr.md clean-gone.md)
-
-  if (( CLEAN )); then
-    log "Clean mode: removing skills / plugins / codex prompts no longer managed by this script"
-
-    for root in "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PI_SKILLS"; do
-      [[ -d "$root" ]] || continue
-      for entry in "$root"/*; do
-        [[ -L "$entry" ]] || continue
-        target="$(readlink "$entry")"
-        case "$target" in "$PLUGIN_CACHE"/*) ;; *) continue ;; esac
-        name="$(basename "$entry")"
-        if [[ "${INSTALLED_SKILLS}" != *"|${name}|"* ]]; then
-          log "  rm stale skill link: $entry"
-          rm -f "$entry"
-        fi
-      done
-    done
-
-    for entry in "$PLUGIN_CACHE"/*; do
-      [[ -d "$entry" ]] || continue
-      name="$(basename "$entry")"
-      if [[ "${INSTALLED_PLUGINS}" != *"|${name}|"* ]]; then
-        log "  rm stale plugin cache: $entry"
-        rm -rf "$entry"
-      fi
-    done
-
-    for p in "${KNOWN_CODEX_PROMPTS[@]}"; do
-      if [[ -e "$CODEX_PROMPTS/$p" && "${INSTALLED_PROMPTS}" != *"|${p}|"* ]]; then
-        log "  rm stale codex prompt: $p"
-        rm -f "$CODEX_PROMPTS/$p"
-      fi
-    done
-  fi
-else
-  warn "git not on PATH -- skipping cross-CLI agent-skill setup"
-fi
-
 # ---------------------------------------------------------------------------
 # 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
@@ -562,94 +340,6 @@ if command -v npm >/dev/null 2>&1; then
   if ! command -v pi >/dev/null 2>&1; then
     log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
     npm install -g @earendil-works/pi-coding-agent || warn "  pi install failed"
-  fi
-
-  # Register tunan as a native plugin for Claude Code (enables slash commands,
-  # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
-  if command -v claude >/dev/null 2>&1; then
-    log "Registering tunan native plugin for Claude Code"
-    claude plugins marketplace add https://github.com/raptoravis/tunan 2>/dev/null \
-      || log "  tunan marketplace already registered for claude (or command failed)"
-    if claude plugins install tunan@tunan -s user 2>/dev/null; then
-      log "  tunan installed for claude"
-    else
-      log "  tunan already installed, updating for claude..."
-      claude plugins update tunan@tunan 2>/dev/null \
-        || warn "  tunan update for claude failed"
-    fi
-  fi
-  # Register tunan as a native plugin for OpenCode (enables slash commands,
-  # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
-  if command -v opencode >/dev/null 2>&1; then
-    log "Registering tunan native plugin for OpenCode"
-    if opencode plugin -g tunan@git+https://github.com/raptoravis/tunan.git 2>/dev/null; then
-      log "  tunan registered for opencode"
-    else
-      log "  tunan already registered, updating for opencode..."
-      opencode plugin update tunan 2>/dev/null \
-        || warn "  tunan update for opencode failed"
-    fi
-  fi
-  # Register tunan as a plugin marketplace source for Codex. The user must
-  # then run `/plugins` inside Codex to install the plugin interactively.
-  if command -v codex >/dev/null 2>&1; then
-    log "Registering tunan plugin marketplace for Codex"
-    codex plugin marketplace add raptoravis/tunan 2>/dev/null \
-      || log "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
-  fi
-  # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
-  # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
-  if command -v claude >/dev/null 2>&1; then
-    log "Registering threejs-game-skills native plugin for Claude Code"
-    claude plugins marketplace add https://github.com/raptoravis/threejs-game-skills 2>/dev/null \
-      || log "  threejs-game-skills marketplace already registered for claude (or command failed)"
-    if claude plugins install threejs-game-skills@threejs-game-skills -s user 2>/dev/null; then
-      log "  threejs-game-skills installed for claude"
-    else
-      log "  threejs-game-skills already installed, updating for claude..."
-      claude plugins update threejs-game-skills@threejs-game-skills 2>/dev/null \
-        || warn "  threejs-game-skills update for claude failed"
-    fi
-  fi
-  # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
-  # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
-  if command -v opencode >/dev/null 2>&1; then
-    log "Registering threejs-game-skills native plugin for OpenCode"
-    if opencode plugin -g threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git 2>/dev/null; then
-      log "  threejs-game-skills registered for opencode"
-    else
-      log "  threejs-game-skills already registered, updating for opencode..."
-      opencode plugin update threejs-game-skills 2>/dev/null \
-        || warn "  threejs-game-skills update for opencode failed"
-    fi
-  fi
-  # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
-  # then run `/plugins` inside Codex to install the plugin interactively.
-  if command -v codex >/dev/null 2>&1; then
-    log "Registering threejs-game-skills plugin marketplace for Codex"
-    codex plugin marketplace add raptoravis/threejs-game-skills 2>/dev/null \
-      || log "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')"
-  fi
-  # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
-  if command -v npx >/dev/null 2>&1; then
-    log "Installing tunan skills for Reasonix via npx"
-    if npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
-      log "  tunan skills installed for reasonix"
-    else
-      log "  tunan skills already installed, updating for reasonix..."
-      npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
-        || warn "  tunan skills update for reasonix failed"
-    fi
-
-    log "Installing threejs-game-skills for Reasonix via npx"
-    if npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1; then
-      log "  threejs-game-skills installed for reasonix"
-    else
-      log "  threejs-game-skills already installed, updating for reasonix..."
-      npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y >/dev/null 2>&1 \
-        || warn "  threejs-game-skills update for reasonix failed"
-    fi
-    fi
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.

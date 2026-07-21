@@ -16,9 +16,9 @@ param(
     # tools launched outside pwsh (vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
-    # When set, after install removes agent-skill links / plugin-cache dirs /
-    # codex prompts that this script no longer manages.
-    [switch]$Clean
+    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Reasonix,
+    # MiMo Code, Pi) and remove their config directories.
+    [switch]$UninstallAgents
 )
 
 if (-not $DotfilesDir) {
@@ -35,6 +35,57 @@ function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 function Test-Admin {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+if ($UninstallAgents) {
+    Write-Step 'Uninstalling AI agent CLIs and cleaning config directories'
+
+    # 1) npm global uninstall
+    if (Test-Cmd npm) {
+        $AgentPackages = @(
+            '@anthropic-ai/claude-code',
+            '@openai/codex',
+            'opencode-ai',
+            'reasonix',
+            '@mimo-ai/cli',
+            '@earendil-works/pi-coding-agent'
+        )
+        foreach ($pkg in $AgentPackages) {
+            Write-Step "  npm uninstall -g $pkg"
+            npm uninstall -g $pkg 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn2 "  $pkg was not installed globally (or uninstall failed)"
+            }
+        }
+    } else {
+        Write-Warn2 'npm not on PATH -- skipping npm uninstall step'
+    }
+
+    # 2) Remove agent config directories
+    $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
+
+    $AgentDirs = @(
+        (Join-Path $env:USERPROFILE '.claude'),
+        $CodexHome,
+        (Join-Path $env:USERPROFILE '.config\opencode'),
+        $ReasonixHome,
+        (Join-Path $env:USERPROFILE '.config\mimocode'),
+        (Join-Path $env:USERPROFILE '.pi'),
+        (Join-Path $env:USERPROFILE '.agents'),
+        (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins')
+    )
+    foreach ($d in $AgentDirs) {
+        if (Test-Path $d) {
+            Write-Step "  rm -r -fo $d"
+            Remove-Item -Recurse -Force -LiteralPath $d -ErrorAction SilentlyContinue
+        } else {
+            Write-Step "  skip (not found): $d"
+        }
+    }
+
+    Write-Step 'Agent uninstall complete.'
+    return
 }
 
 function Install-Scoop {
@@ -535,356 +586,6 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
     }
 }
 
-
-
-# ---------------------------------------------------------------------------
-# 7b-bis) Cross-CLI agent skills
-#     Keep Claude, Codex native/shared, and OpenCode skill installs in sync.
-#     Mirrors the Claude Code marketplace plugins that are platform-neutral:
-#       handoff, andrej-karpathy-skills
-#     Claude-Code-specific bits (slash /commands, hooks/hooks.json) only run
-#     inside Claude Code and are not ported here.
-# ---------------------------------------------------------------------------
-if (Test-Cmd git) {
-    $AgentSkills = Join-Path $env:USERPROFILE '.agents\skills'
-    $ClaudeSkills = Join-Path $env:USERPROFILE '.claude\skills'
-    $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-    $CodexSkills = Join-Path $CodexHome 'skills'
-    $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
-    $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
-    $ReasonixSkills = Join-Path $ReasonixHome 'skills'
-    $PiSkills = Join-Path $env:USERPROFILE '.pi\agent\skills'
-    $PluginCache = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills, $PluginCache | Out-Null
-
-    # Track what THIS run installs so -Clean can diff against on-disk state.
-    $InstalledSkills  = @{}
-    $InstalledPlugins = @{}
-    $InstalledPrompts = @{}
-
-    function CloneOrPull($url, $dir) {
-        if (Test-Path (Join-Path $dir '.git')) {
-            Push-Location $dir
-            git pull --quiet --ff-only 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                # Upstream may have rewritten history (force-push/squash). This is a
-                # throwaway mirror, so hard-reset to the remote instead of failing.
-                git fetch --quiet 2>$null
-                git reset --hard --quiet '@{u}' 2>$null
-                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
-            }
-            Pop-Location
-        } else {
-            git clone --depth=1 --quiet $url $dir
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clone failed: $url" }
-        }
-        $script:InstalledPlugins[(Split-Path -Leaf $dir)] = $true
-    }
-
-    function LinkSkillToRoots($src, $name) {
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
-            $dest = Join-Path $root $name
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
-        }
-        $script:InstalledSkills[$name] = $true
-    }
-
-    function LinkSkillsFrom($repo) {
-        # Symlink every directory containing a SKILL.md into every CLI skill root.
-        # Requires Developer Mode (enabled earlier in this script) for non-admin symlinks.
-        Get-ChildItem -Path $repo -Recurse -Depth 4 -Filter SKILL.md -ErrorAction SilentlyContinue | ForEach-Object {
-            $src = $_.Directory.FullName
-            $name = $_.Directory.Name
-            LinkSkillToRoots $src $name
-        }
-    }
-
-    # 1. handoff
-    Write-Step 'Installing handoff skill (cross-CLI)'
-    CloneOrPull 'https://github.com/willseltzer/claude-handoff' (Join-Path $PluginCache 'claude-handoff')
-    LinkSkillsFrom (Join-Path $PluginCache 'claude-handoff')
-
-    # 2. andrej-karpathy-skills (single CLAUDE.md — wrap into SKILL.md if no SKILL.md exists)
-    Write-Step 'Installing andrej-karpathy-skills (cross-CLI)'
-    CloneOrPull 'https://github.com/forrestchang/andrej-karpathy-skills' (Join-Path $PluginCache 'karpathy-skills')
-    LinkSkillsFrom (Join-Path $PluginCache 'karpathy-skills')
-    $karpClaude = Join-Path $PluginCache 'karpathy-skills\CLAUDE.md'
-    $karpUpstreamSkill = Join-Path $PluginCache 'karpathy-skills\skills\karpathy-guidelines\SKILL.md'
-    $karpDestDir = Join-Path $PluginCache 'karpathy-guidelines-skill'
-    $karpDest   = Join-Path $karpDestDir 'SKILL.md'
-    if ((-not (Test-Path $karpUpstreamSkill)) -and (Test-Path $karpClaude) -and -not (Test-Path $karpDest)) {
-        New-Item -ItemType Directory -Force -Path $karpDestDir | Out-Null
-        $front = "---`nname: karpathy-guidelines`ndescription: Behavioral guidelines (Andrej Karpathy) to reduce common LLM coding mistakes`n---`n`n"
-        $front + (Get-Content $karpClaude -Raw) | Set-Content -Path $karpDest -Encoding utf8
-    }
-    if ((-not (Test-Path $karpUpstreamSkill)) -and (Test-Path $karpDest)) {
-        LinkSkillToRoots $karpDestDir 'karpathy-guidelines'
-    }
-
-    # 3a. excalidraw-diagram-skill (single SKILL.md at repo root — link for claude/codex/opencode)
-    Write-Step 'Installing excalidraw-diagram skill for claude / codex / opencode'
-    $excaliRepo = Join-Path $PluginCache 'excalidraw-diagram-skill'
-    CloneOrPull 'https://github.com/coleam00/excalidraw-diagram-skill' $excaliRepo
-    if (Test-Path (Join-Path $excaliRepo 'SKILL.md')) {
-        LinkSkillToRoots $excaliRepo 'excalidraw-diagram'
-        # Pre-install renderer deps (uv + playwright chromium) so the skill works on first run
-        $excaliRefs = Join-Path $excaliRepo 'references'
-        if ((Test-Cmd uv) -and (Test-Path (Join-Path $excaliRefs 'pyproject.toml'))) {
-            Write-Step '  excalidraw-diagram: uv sync + playwright chromium (one-time)'
-            Push-Location $excaliRefs
-            # Clear UV_INDEX_URL so uv.toml's aliyun mirror takes effect — the
-            # user's shell may have a stale/broken mirror env var (e.g. tsinghua
-            # returning 403 on some wheels).
-            $oldUvIndex = $env:UV_INDEX_URL
-            $env:UV_INDEX_URL = ''
-            try {
-                $syncOutput = uv sync 2>&1 | Out-String
-                $syncExit = $LASTEXITCODE
-                if ($syncExit -eq 0) {
-                    uv run --quiet playwright install chromium 2>$null
-                    if ($LASTEXITCODE -ne 0) { Write-Warn2 "  excalidraw-diagram: playwright chromium install failed (run uv run playwright install chromium in $excaliRefs)" }
-                } else {
-                    $syncTrimmed = ($syncOutput -split "`n" | Select-Object -Last 5) -join "`n"
-                    Write-Warn2 "  excalidraw-diagram: uv sync failed (exit $syncExit): $syncTrimmed"
-                }
-            } finally {
-                $env:UV_INDEX_URL = $oldUvIndex
-            }
-            Pop-Location
-        } else {
-            Write-Warn2 '  excalidraw-diagram: uv missing -- skill installed but renderer deps deferred'
-        }
-    } else {
-        Write-Warn2 '  excalidraw-diagram-skill: SKILL.md missing after clone'
-    }
-
-    # 3b. html-ppt-skill (single SKILL.md at repo root, no build step)
-    Write-Step 'Installing html-ppt skill for claude / codex / opencode'
-    $htmlPptRepo = Join-Path $PluginCache 'html-ppt-skill'
-    CloneOrPull 'https://github.com/lewislulu/html-ppt-skill' $htmlPptRepo
-    if (Test-Path (Join-Path $htmlPptRepo 'SKILL.md')) {
-        LinkSkillToRoots $htmlPptRepo 'html-ppt'
-    } else {
-        Write-Warn2 '  html-ppt-skill: SKILL.md missing after clone'
-    }
-
-    # 3c. anysearch-skill (single SKILL.md at repo root, no build step)
-    #     https://anysearch.com/install/skill-install.md
-    Write-Step 'Installing anysearch skill for claude / codex / opencode'
-    $anysearchRepo = Join-Path $PluginCache 'anysearch-skill'
-    CloneOrPull 'https://github.com/anysearch-ai/anysearch-skill' $anysearchRepo
-    if (Test-Path (Join-Path $anysearchRepo 'SKILL.md')) {
-        LinkSkillToRoots $anysearchRepo 'anysearch'
-    } else {
-        Write-Warn2 '  anysearch-skill: SKILL.md missing after clone'
-    }
-
-    # 5. anthropics/claude-plugins-official monorepo — pick portable subsets
-    #    (frontend-design skill + commit-commands prompts). Other plugins in
-    #    this monorepo are LSP wrappers / Claude-Code-only and skipped.
-    Write-Step 'Installing frontend-design skill (cross-CLI)'
-    $cpoRepo = Join-Path $PluginCache 'claude-plugins-official'
-    CloneOrPull 'https://github.com/anthropics/claude-plugins-official' $cpoRepo
-    $cpoPlugins = Join-Path $cpoRepo 'plugins'
-    $fdSrc = Join-Path $cpoPlugins 'frontend-design\skills\frontend-design'
-    if (Test-Path (Join-Path $fdSrc 'SKILL.md')) {
-        LinkSkillToRoots $fdSrc 'frontend-design'
-    } else {
-        Write-Warn2 '  frontend-design: SKILL.md not found in upstream'
-    }
-
-    # 6a. nextlevelbuilder/ui-ux-pro-max-skill — multi-skill plugin monorepo
-    Write-Step 'Installing ui-ux-pro-max skills (cross-CLI)'
-    $uiUxRepo = Join-Path $PluginCache 'ui-ux-pro-max-skill'
-    CloneOrPull 'https://github.com/nextlevelbuilder/ui-ux-pro-max-skill' $uiUxRepo
-    LinkSkillsFrom $uiUxRepo
-
-    # 6b. vercel-labs/agent-skills — pick web-design-guidelines only
-    Write-Step 'Installing web-design-guidelines skill (cross-CLI)'
-    $vercelRepo = Join-Path $PluginCache 'vercel-agent-skills'
-    CloneOrPull 'https://github.com/vercel-labs/agent-skills' $vercelRepo
-    $wdgSrc = Join-Path $vercelRepo 'skills\web-design-guidelines'
-    if (Test-Path (Join-Path $wdgSrc 'SKILL.md')) {
-        LinkSkillToRoots $wdgSrc 'web-design-guidelines'
-    } else {
-        Write-Warn2 '  web-design-guidelines: SKILL.md not found in upstream'
-    }
-
-    # 6c. anthropics/skills — official monorepo; pick skill-creator, mcp-builder, webapp-testing
-    Write-Step 'Installing anthropics/skills subset (skill-creator / mcp-builder / webapp-testing)'
-    $anthroRepo = Join-Path $PluginCache 'anthropics-skills'
-    CloneOrPull 'https://github.com/anthropics/skills' $anthroRepo
-    foreach ($s in @('skill-creator', 'mcp-builder', 'webapp-testing')) {
-        $src = Join-Path $anthroRepo "skills\$s"
-        if (Test-Path (Join-Path $src 'SKILL.md')) {
-            LinkSkillToRoots $src $s
-        } else {
-            Write-Warn2 "  anthropics/skills/${s}: SKILL.md not found"
-        }
-    }
-
-    # 6d. upstash/context7 — primarily an MCP server; also ships a find-docs SKILL.md.
-    #     MCP registration happens after the claude/codex CLI install (further down).
-    Write-Step 'Installing context7 find-docs skill (cross-CLI)'
-    $ctx7Repo = Join-Path $PluginCache 'context7'
-    CloneOrPull 'https://github.com/upstash/context7' $ctx7Repo
-    $ctx7Skill = Join-Path $ctx7Repo 'skills\find-docs'
-    if (Test-Path (Join-Path $ctx7Skill 'SKILL.md')) {
-        LinkSkillToRoots $ctx7Skill 'find-docs'
-    } else {
-        Write-Warn2 '  context7/find-docs: SKILL.md not found in upstream'
-    }
-
-    # 6e. leonxlnx/taste-skill — anti-slop frontend design monorepo; pick
-    #     design-taste-frontend, redesign-existing-projects, image-to-code.
-    Write-Step 'Installing taste-skill subset (design-taste-frontend / redesign-existing-projects / image-to-code)'
-    $tasteRepo = Join-Path $PluginCache 'taste-skill'
-    CloneOrPull 'https://github.com/leonxlnx/taste-skill' $tasteRepo
-    $tasteSkills = @{
-        'taste-skill'         = 'design-taste-frontend'
-        'redesign-skill'      = 'redesign-existing-projects'
-        'image-to-code-skill' = 'image-to-code'
-    }
-    foreach ($srcDir in $tasteSkills.Keys) {
-        $src = Join-Path $tasteRepo "skills\$srcDir"
-        if (Test-Path (Join-Path $src 'SKILL.md')) {
-            LinkSkillToRoots $src $tasteSkills[$srcDir]
-        } else {
-            Write-Warn2 "  taste-skill/${srcDir}: SKILL.md not found in upstream"
-        }
-    }
-
-    # 6f. raptoravis/threejs-game-skills — install via PowerShell-native logic
-    #      (skills are copied, not symlinked, because they reference relative
-    #      scripts/ and references/ paths that would break through symlinks).
-    Write-Step 'Installing threejs-game-skills (OpenCode + agents)'
-    $threejsRepo = Join-Path $PluginCache 'threejs-game-skills'
-    CloneOrPull 'https://github.com/raptoravis/threejs-game-skills' $threejsRepo
-    $threejsSrc = Join-Path $threejsRepo 'plugins\skills'
-    if (Test-Path $threejsSrc) {
-        # Copy each skill to OpenCode skills dir and .agents/skills (for Reasonix)
-        $threejsSkills = @()
-        Get-ChildItem -Path $threejsSrc -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-            $skillDir = $_.FullName
-            $skillName = $_.Name
-            if (-not (Test-Path (Join-Path $skillDir 'SKILL.md'))) { return }
-
-            $threejsSkills += $skillName
-            $script:InstalledSkills[$skillName] = $true
-
-            # Copy to OpenCode skills
-            $ocDest = Join-Path $OpenCodeSkills $skillName
-            if (Test-Path $ocDest) { Remove-Item $ocDest -Recurse -Force -ErrorAction SilentlyContinue }
-            Get-ChildItem -Path $skillDir -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-                $relPath = $_.FullName.Substring($skillDir.Length + 1)
-                $destFile = Join-Path $ocDest $relPath
-                $destDir = Split-Path $destFile -Parent
-                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
-                Copy-Item -Path $_.FullName -Destination $destFile -Force -ErrorAction SilentlyContinue
-            }
-
-            # Copy to .agents/skills (for Reasonix)
-            $agDest = Join-Path $AgentSkills $skillName
-            if (Test-Path $agDest) { Remove-Item $agDest -Recurse -Force -ErrorAction SilentlyContinue }
-            Get-ChildItem -Path $skillDir -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-                $relPath = $_.FullName.Substring($skillDir.Length + 1)
-                $destFile = Join-Path $agDest $relPath
-                $destDir = Split-Path $destFile -Parent
-                if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Force -Path $destDir | Out-Null }
-                Copy-Item -Path $_.FullName -Destination $destFile -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        # Create OpenCode slash-command files
-        $ocCommandsDir = Join-Path $env:USERPROFILE '.config\opencode\commands'
-        New-Item -ItemType Directory -Force -Path $ocCommandsDir | Out-Null
-        foreach ($skillName in $threejsSkills) {
-            $skillMd = Join-Path $threejsSrc "$skillName\SKILL.md"
-            $description = "Three.js game skill: ${skillName}"
-            if (Test-Path $skillMd) {
-                $firstLine = Get-Content $skillMd -TotalCount 10 | Where-Object { $_ -match '^description:' } | Select-Object -First 1
-                if ($firstLine) {
-                    $d = $firstLine -replace '^description:\s*"?', '' -replace '"$', ''
-                    if ($d) { $description = $d }
-                }
-            }
-            $cmdFile = Join-Path $ocCommandsDir "${skillName}.md"
-            $cmdContent = "---`ndescription: ${description}`n---`n`nLoad the `${skillName}` skill via the `skill` tool, then follow its instructions. " + '${ARGUMENTS}' + "`n"
-            Set-Content -Path $cmdFile -Value $cmdContent -Encoding UTF8
-            $script:InstalledSkills[$skillName] = $true
-        }
-
-        Write-Host "  opencode: $($threejsSkills.Count) skills synced"
-    } else {
-        Write-Warn2 '  threejs-game-skills: skills/ directory not found after clone'
-    }
-
-    # 7. Codex slash-prompts ported from Claude Code commands/
-    #    Copies select *.md files into ~/.codex/prompts/ so they show up as
-    #    /handoff-create, /commit etc. inside Codex.
-    Write-Step 'Installing Codex prompts (handoff / commit-commands)'
-    $CodexPrompts = Join-Path $CodexHome 'prompts'
-    New-Item -ItemType Directory -Force -Path $CodexPrompts | Out-Null
-    function CopyPrompt($src, $name) {
-        if (-not (Test-Path $src)) { return }
-        Copy-Item -Force $src (Join-Path $CodexPrompts $name)
-        $script:InstalledPrompts[$name] = $true
-    }
-    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\create.md') 'handoff-create.md'
-    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\quick.md')  'handoff-quick.md'
-    CopyPrompt (Join-Path $PluginCache 'claude-handoff\commands\resume.md') 'handoff-resume.md'
-    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit.md')         'commit.md'
-    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\commit-push-pr.md') 'commit-push-pr.md'
-    CopyPrompt (Join-Path $cpoPlugins 'commit-commands\commands\clean_gone.md')     'clean-gone.md'
-
-    # See install-linux.sh for rationale; keep this list symmetric across the
-    # three install scripts.
-    $KnownCodexPrompts = @(
-        'handoff-create.md', 'handoff-quick.md', 'handoff-resume.md',
-        'commit.md', 'commit-push-pr.md', 'clean-gone.md'
-    )
-
-    if ($Clean) {
-        Write-Step 'Clean mode: removing skills / plugins / codex prompts no longer managed by this script'
-
-        # 1) Skill symlinks pointing into $PluginCache that are not in this run's set.
-        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PiSkills)) {
-            if (-not (Test-Path $root)) { continue }
-            Get-ChildItem -Force -LiteralPath $root -ErrorAction SilentlyContinue | ForEach-Object {
-                if ($_.LinkType -ne 'SymbolicLink' -and $_.LinkType -ne 'Junction') { return }
-                $target = $_.Target
-                if ($target -is [array]) { $target = $target[0] }
-                if (-not $target) { return }
-                if (-not $target.StartsWith($PluginCache, [System.StringComparison]::OrdinalIgnoreCase)) { return }
-                if (-not $InstalledSkills.ContainsKey($_.Name)) {
-                    Write-Step "  rm stale skill link: $($_.FullName)"
-                    Remove-Item -Force -LiteralPath $_.FullName -ErrorAction SilentlyContinue
-                }
-            }
-        }
-
-        # 2) Plugin-cache subdirs that are no longer cloned by this script.
-        Get-ChildItem -Directory -Force -LiteralPath $PluginCache -ErrorAction SilentlyContinue | ForEach-Object {
-            if (-not $InstalledPlugins.ContainsKey($_.Name)) {
-                Write-Step "  rm stale plugin cache: $($_.FullName)"
-                Remove-Item -Recurse -Force -LiteralPath $_.FullName -ErrorAction SilentlyContinue
-            }
-        }
-
-        # 3) Codex prompts in the known-managed set that this run did not ship.
-        foreach ($p in $KnownCodexPrompts) {
-            $path = Join-Path $CodexPrompts $p
-            if ((Test-Path $path) -and (-not $InstalledPrompts.ContainsKey($p))) {
-                Write-Step "  rm stale codex prompt: $p"
-                Remove-Item -Force -LiteralPath $path -ErrorAction SilentlyContinue
-            }
-        }
-    }
-} else {
-    Write-Warn2 'git not on PATH -- skipping cross-CLI agent-skill setup'
-}
-
 # ---------------------------------------------------------------------------
 # 7a-bis) Claude Code: defaultShell -> PowerShell (Windows only)
 #     Windows-specific shell selection goes into settings.local.json (Claude
@@ -992,87 +693,6 @@ if (Test-Cmd npm) {
         Write-Step 'Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)'
         npm install -g '@earendil-works/pi-coding-agent'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi install failed' }
-    }
-
-    # Register tunan as a native plugin for Claude Code (enables slash commands,
-    # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
-    if (Test-Cmd claude) {
-        Write-Step 'Registering tunan native plugin for Claude Code'
-        claude plugins marketplace add 'https://github.com/raptoravis/tunan' 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for claude (or command failed)" }
-        claude plugins install 'tunan@tunan' -s user 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  tunan already installed, updating...'
-            claude plugins update 'tunan@tunan' 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan update for claude failed' }
-        }
-    }
-    # Register tunan as a native plugin for OpenCode (enables slash commands,
-    # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
-    if (Test-Cmd opencode) {
-        Write-Step 'Registering tunan native plugin for OpenCode'
-        opencode plugin -g 'tunan@git+https://github.com/raptoravis/tunan.git' 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  tunan already registered, updating...'
-            opencode plugin update tunan 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan update for opencode failed' }
-        }
-    }
-    # Register tunan as a plugin marketplace source for Codex. The user must
-    # then run `/plugins` inside Codex to install the plugin interactively.
-    if (Test-Cmd codex) {
-        Write-Step 'Registering tunan plugin marketplace for Codex'
-        codex plugin marketplace add raptoravis/tunan 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  tunan marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
-    }
-    # Register threejs-game-skills as a native plugin for Claude Code (enables slash commands,
-    # MCP auto-load, agents, and hooks). Add marketplace source then install or update.
-    if (Test-Cmd claude) {
-        Write-Step 'Registering threejs-game-skills native plugin for Claude Code'
-        claude plugins marketplace add 'https://github.com/raptoravis/threejs-game-skills' 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for claude (or command failed)" }
-        claude plugins install 'threejs-game-skills@threejs-game-skills' -s user 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  threejs-game-skills already installed, updating...'
-            claude plugins update 'threejs-game-skills@threejs-game-skills' 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for claude failed' }
-        }
-    }
-    # Register threejs-game-skills as a native plugin for OpenCode (enables slash commands,
-    # MCP auto-load, and agents). Idempotent — `plugin -g` no-ops if already installed.
-    if (Test-Cmd opencode) {
-        Write-Step 'Registering threejs-game-skills native plugin for OpenCode'
-        opencode plugin -g 'threejs-game-skills@git+https://github.com/raptoravis/threejs-game-skills.git' 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  threejs-game-skills already registered, updating...'
-            opencode plugin update threejs-game-skills 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for opencode failed' }
-        }
-    }
-    # Register threejs-game-skills as a plugin marketplace source for Codex. The user must
-    # then run `/plugins` inside Codex to install the plugin interactively.
-    if (Test-Cmd codex) {
-        Write-Step 'Registering threejs-game-skills plugin marketplace for Codex'
-        codex plugin marketplace add raptoravis/threejs-game-skills 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  threejs-game-skills marketplace already registered for codex (or command failed — see 'codex plugin marketplace list')" }
-    }
-    # Register tunan and threejs-game-skills skills for Reasonix (no native plugin support; use npx-based skill install).
-    if (Test-Cmd npx) {
-        Write-Step 'Installing tunan skills for Reasonix via npx'
-        npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  tunan skills already installed, updating...'
-            npx skills add raptoravis/tunan --skill '*' -a reasonix -g -y *>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tunan skills update for reasonix failed' }
-        }
-
-        Write-Step 'Installing threejs-game-skills for Reasonix via npx'
-        npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Step '  threejs-game-skills already installed, updating...'
-            npx skills add raptoravis/threejs-game-skills --skill '*' -a reasonix -g -y *>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  threejs-game-skills update for reasonix failed' }
-        }
     }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
