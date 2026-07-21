@@ -37,6 +37,9 @@ function Test-Admin {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+$CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+$ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
+
 if ($UninstallAgents) {
     Write-Step 'Uninstalling AI agent CLIs and cleaning config directories'
 
@@ -62,8 +65,6 @@ if ($UninstallAgents) {
     }
 
     # 2) Remove agent config directories
-    $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-    $ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
 
     $AgentDirs = @(
         (Join-Path $env:USERPROFILE '.claude'),
