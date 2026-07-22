@@ -742,22 +742,6 @@ if (Test-Cmd npm) {
         if ($LASTEXITCODE -ne 0) { Write-Host "  fetch MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
 
-    # Register modelcontextprotocol/server-sequential-thinking (local stdio via npx)
-    # for Claude Code & Codex. Enables step-by-step reasoning for complex tasks.
-    # Same `cmd /c npx` wrapper as above; idempotent — `mcp add` errors if already
-    # registered, which we swallow.
-    if (Test-Cmd claude) {
-        Write-Step 'Registering sequential-thinking MCP for Claude Code (idempotent)'
-        claude mcp add sequential-thinking -s user -- cmd /c npx -y '@modelcontextprotocol/server-sequential-thinking' 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  sequential-thinking MCP already registered for claude (or registration failed — see 'claude mcp list')" }
-    }
-    if (Test-Cmd codex) {
-        Write-Step 'Registering sequential-thinking MCP for Codex (idempotent)'
-        codex mcp add sequential-thinking -- cmd /c npx -y '@modelcontextprotocol/server-sequential-thinking' 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Host "  sequential-thinking MCP already registered for codex (or registration failed — see 'codex mcp list')" }
-    }
-
-
     # Register GitHub's official remote MCP server (streamable HTTP). The endpoint
     # does NOT support OAuth dynamic client registration, so clients must auth with a
     # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
@@ -802,27 +786,24 @@ if (Test-Cmd npm) {
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
-        $StLocalJson = '{"sequential-thinking":{"type":"local","command":["npx","-y","@modelcontextprotocol/server-sequential-thinking"],"enabled":true}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch + context7 + sequential-thinking MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
-            Register-JsonMcp "$HOME\.config\opencode\opencode.json" $StLocalJson
         }
         if (Test-Cmd mimo) {
-            Write-Step 'Registering github + chrome-devtools + fetch + sequential-thinking MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
-            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $StLocalJson
         }
         # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
         # Can't take a remote HTTP url so github stays with its existing stdio server.
         $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
         if (Test-Path $ReasonixCfg) {
-            Write-Step 'Registering context7 + chrome-devtools + fetch + sequential-thinking MCP with reasonix'
+            Write-Step 'Registering context7 + chrome-devtools + fetch MCP with reasonix'
             try {
                 $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
                 if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
@@ -832,7 +813,6 @@ if (Test-Cmd npm) {
                     'context7=npx -y @upstash/context7-mcp'
                     'chrome-devtools=npx -y chrome-devtools-mcp@latest'
                     'fetch=npx -y mcp-fetch-server'
-                    'sequential-thinking=npx -y @modelcontextprotocol/server-sequential-thinking'
                 )
                 foreach ($entry in $reasonixMcpEntries) {
                     $prefix = $entry.Split('=')[0] + '='
