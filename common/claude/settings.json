@@ -106,24 +106,15 @@
   },
   "enabledPlugins": {
     "claude-hud@claude-hud": true,
-    "handoff@handoff-marketplace": true,
     "codex@openai-codex": true,
     "claude-code-setup@anthropics-official": true,
-    "code-simplifier@anthropics-official": true,
-    "tunan@tunan": true
+    "agent-skills@addy-agent-skills": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
       "source": {
         "source": "github",
         "repo": "jarrodwatts/claude-hud"
-      },
-      "autoUpdate": true
-    },
-    "handoff-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "willseltzer/claude-handoff"
       },
       "autoUpdate": true
     },
@@ -141,11 +132,12 @@
       },
       "autoUpdate": true
     },
-    "tunan": {
+    "addy-agent-skills": {
       "source": {
         "source": "github",
-        "repo": "raptoravis/tunan"
-      }
+        "repo": "addyosmani/agent-skills"
+      },
+      "autoUpdate": true
     }
   },
   "alwaysThinkingEnabled": true,
