@@ -74,7 +74,12 @@ if ($UninstallAgents) {
         (Join-Path $env:USERPROFILE '.config\mimocode'),
         (Join-Path $env:USERPROFILE '.pi'),
         (Join-Path $env:USERPROFILE '.agents'),
-        (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins')
+        (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'),
+        (Join-Path $env:USERPROFILE '.cache\opencode'),
+        (Join-Path $env:USERPROFILE '.cache\claude'),
+        (Join-Path $env:USERPROFILE '.cache\codex'),
+        (Join-Path $env:USERPROFILE '.cache\mimocode'),
+        (Join-Path $env:USERPROFILE '.cache\reasonix')
     )
     foreach ($d in $AgentDirs) {
         if (Test-Path $d) {

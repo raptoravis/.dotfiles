@@ -49,6 +49,11 @@ if (( UNINSTALL_AGENTS )); then
     "$HOME/.pi"
     "$HOME/.agents"
     "$HOME/.cache/dotfiles/agent-plugins"
+    "$HOME/.cache/opencode"
+    "$HOME/.cache/claude"
+    "$HOME/.cache/codex"
+    "$HOME/.cache/mimocode"
+    "$HOME/.cache/reasonix"
   )
   for d in "${AGENT_DIRS[@]}"; do
     if [[ -d "$d" || -L "$d" ]]; then
