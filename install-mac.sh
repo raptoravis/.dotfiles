@@ -481,6 +481,61 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7d) Cross-CLI agent skills — addyosmani/agent-skills
+#     Clone once into PLUGIN_CACHE, then symlink each skill folder into every
+#     CLI's skills/ root so Claude, Codex, OpenCode and Reasonix all see the
+#     same set. Each skill is a <name>/SKILL.md folder under skills/; see
+#     https://github.com/addyosmani/agent-skills.
+# ---------------------------------------------------------------------------
+if command -v git >/dev/null 2>&1; then
+  AGENT_SKILLS="$HOME/.agents/skills"
+  CLAUDE_SKILLS="$HOME/.claude/skills"
+  CODEX_SKILLS="${CODEX_HOME:-$HOME/.codex}/skills"
+  OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
+  REASONIX_SKILLS="${REASONIX_HOME:-$HOME/.reasonix}/skills"
+  PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
+  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
+
+  clone_or_pull() {
+    local url="$1" dir="$2"
+    if [[ -d "$dir/.git" ]]; then
+      if ! git -C "$dir" pull --quiet --ff-only 2>/dev/null; then
+        # upstream may have rewritten history (force-push/squash) — hard-reset
+        # this throwaway mirror to the remote instead of staying diverged.
+        git -C "$dir" fetch --quiet 2>/dev/null
+        git -C "$dir" reset --hard --quiet '@{u}' 2>/dev/null || warn "  pull failed: $dir"
+      fi
+    else
+      git clone --depth=1 --quiet "$url" "$dir" || warn "  clone failed: $url"
+    fi
+  }
+
+  link_skill() {
+    local src="$1" name="$2"
+    ln -sfn "$src" "$AGENT_SKILLS/$name"
+    ln -sfn "$src" "$CLAUDE_SKILLS/$name"
+    ln -sfn "$src" "$CODEX_SKILLS/$name"
+    ln -sfn "$src" "$OPENCODE_SKILLS/$name"
+    ln -sfn "$src" "$REASONIX_SKILLS/$name"
+  }
+
+  link_skills_from() {
+    local repo="$1"
+    find "$repo" -maxdepth 4 -name SKILL.md 2>/dev/null | while read -r f; do
+      local src; src="$(dirname "$f")"
+      local name; name="$(basename "$src")"
+      link_skill "$src" "$name"
+    done
+  }
+
+  log "Installing addyosmani/agent-skills (cross-CLI: claude/codex/opencode/reasonix)"
+  clone_or_pull https://github.com/addyosmani/agent-skills "$PLUGIN_CACHE/addyosmani-agent-skills"
+  link_skills_from "$PLUGIN_CACHE/addyosmani-agent-skills/skills"
+else
+  warn "git not on PATH -- skipping cross-CLI agent skills install"
+fi
+
+# ---------------------------------------------------------------------------
 # 8) mise — install runtimes declared in mise config (if any)
 # ---------------------------------------------------------------------------
 if command -v mise >/dev/null 2>&1; then

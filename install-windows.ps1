@@ -993,6 +993,63 @@ if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
 }
 
 # ---------------------------------------------------------------------------
+# 8c) Cross-CLI agent skills — addyosmani/agent-skills
+#     Clone once into PLUGIN_CACHE, then symlink each skill folder into every
+#     CLI's skills/ root so Claude, Codex, OpenCode and Reasonix all see the
+#     same set. Each skill is a <name>/SKILL.md folder under skills/; see
+#     https://github.com/addyosmani/agent-skills. Requires Developer Mode
+#     (enabled above in 8b) or an admin shell for non-admin symlink creation.
+# ---------------------------------------------------------------------------
+if (Test-Cmd git) {
+    $AgentSkills    = Join-Path $env:USERPROFILE '.agents\skills'
+    $ClaudeSkills   = Join-Path $env:USERPROFILE '.claude\skills'
+    $CodexSkills    = Join-Path $CodexHome 'skills'
+    $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
+    $ReasonixSkills = Join-Path $ReasonixHome 'skills'
+    $PluginCache    = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
+    New-Item -ItemType Directory -Force -Path $AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills, $PluginCache | Out-Null
+
+    function CloneOrPull($url, $dir) {
+        if (Test-Path (Join-Path $dir '.git')) {
+            Push-Location $dir
+            git pull --quiet --ff-only 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                # Upstream may have rewritten history (force-push/squash). This is a
+                # throwaway mirror, so hard-reset to the remote instead of failing.
+                git fetch --quiet 2>$null
+                git reset --hard --quiet '@{u}' 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
+            }
+            Pop-Location
+        } else {
+            git clone --depth=1 --quiet $url $dir
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clone failed: $url" }
+        }
+    }
+
+    function LinkSkillToRoots($src, $name) {
+        foreach ($root in @($AgentSkills, $ClaudeSkills, $CodexSkills, $OpenCodeSkills, $ReasonixSkills)) {
+            $dest = Join-Path $root $name
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    function LinkSkillsFrom($repo) {
+        # Symlink every directory containing a SKILL.md into every CLI skill root.
+        Get-ChildItem -Path $repo -Recurse -Depth 4 -Filter SKILL.md -ErrorAction SilentlyContinue | ForEach-Object {
+            LinkSkillToRoots $_.Directory.FullName $_.Directory.Name
+        }
+    }
+
+    Write-Step 'Installing addyosmani/agent-skills (cross-CLI: claude/codex/opencode/reasonix)'
+    CloneOrPull 'https://github.com/addyosmani/agent-skills' (Join-Path $PluginCache 'addyosmani-agent-skills')
+    LinkSkillsFrom (Join-Path $PluginCache 'addyosmani-agent-skills\skills')
+} else {
+    Write-Warn2 'git not on PATH -- skipping cross-CLI agent skills install'
+}
+
+# ---------------------------------------------------------------------------
 # 9) Ensure .dotter/local.toml exists (gitignored, machine-local)
 #    Tells dotter which package set to apply without needing a hostname file.
 # ---------------------------------------------------------------------------
