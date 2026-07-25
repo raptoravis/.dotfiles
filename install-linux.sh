@@ -499,12 +499,25 @@ fi
 
 # ---------------------------------------------------------------------------
 # 8d) Yunxing plugin (raptoravis/yunxing)
-#     Claude Code — wired via common/claude/settings.json (extraKnownMarketplaces
-#     + enabledPlugins), not here.
+#     Claude Code — marketplace name "yunxing" (derived from
+#     .claude-plugin/marketplace.json), plugin selector "yunxing@yunxing".
+#     Also redundantly declared in common/claude/settings.json (enabledPlugins)
+#     for fresh dotter-only setups.
 #     Codex — marketplace name "yunxing", plugin selector "yunxing@yunxing"
 #     (derived from .codex-plugin/plugin.json).
 #     OpenCode — native plugin module via git URL.
 # ---------------------------------------------------------------------------
+# Claude Code — `claude plugin` CLI (declarative settings.json is the fallback).
+if command -v claude >/dev/null 2>&1; then
+  log "Installing yunxing Claude Code plugin (marketplace: yunxing)"
+  claude plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
+    || warn "  claude marketplace add failed (may already be registered)"
+  claude plugin install yunxing@yunxing >/dev/null 2>&1 \
+    || warn "  claude plugin install failed (may already be enabled)"
+else
+  warn "claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)"
+fi
+
 if command -v codex >/dev/null 2>&1; then
   log "Installing yunxing Codex plugin (marketplace: yunxing)"
   codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \

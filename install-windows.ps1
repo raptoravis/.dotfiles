@@ -851,12 +851,25 @@ if (Test-Cmd corepack) {
 
 # ---------------------------------------------------------------------------
 # 7d) Yunxing plugin (raptoravis/yunxing)
-#     Claude Code — wired via common/claude/settings.json (extraKnownMarketplaces
-#     + enabledPlugins), not here.
+#     Claude Code — marketplace name "yunxing" (derived from
+#     .claude-plugin/marketplace.json), plugin selector "yunxing@yunxing".
+#     Also redundantly declared in common/claude/settings.json (enabledPlugins)
+#     for fresh dotter-only setups.
 #     Codex — marketplace name "yunxing", plugin selector "yunxing@yunxing"
 #     (derived from .codex-plugin/plugin.json).
 #     OpenCode — native plugin module via git URL.
 # ---------------------------------------------------------------------------
+# Claude Code — `claude plugin` CLI (declarative settings.json is the fallback).
+if (Test-Cmd claude) {
+    Write-Step 'Installing yunxing Claude Code plugin (marketplace: yunxing)'
+    claude plugin marketplace add raptoravis/yunxing 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude marketplace add failed (may already be registered)' }
+    claude plugin install yunxing@yunxing 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude plugin install failed (may already be enabled)' }
+} else {
+    Write-Warn2 'claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)'
+}
+
 if (Test-Cmd codex) {
     Write-Step 'Installing yunxing Codex plugin (marketplace: yunxing)'
     codex plugin marketplace add raptoravis/yunxing 2>$null
