@@ -108,7 +108,7 @@
     "claude-hud@claude-hud": true,
     "codex@openai-codex": true,
     "claude-code-setup@anthropics-official": true,
-    "compound-engineering@compound-engineering-plugin": true
+    "yunxing@yunxing": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -132,10 +132,10 @@
       },
       "autoUpdate": true
     },
-    "compound-engineering-plugin": {
+    "yunxing": {
       "source": {
         "source": "github",
-        "repo": "raptoravis/compound-engineering-plugin"
+        "repo": "raptoravis/yunxing"
       },
       "autoUpdate": true
     }

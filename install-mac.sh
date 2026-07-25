@@ -481,28 +481,27 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7d) Compound Engineering plugin for Codex (raptoravis/compound-engineering-plugin)
-#     Native Codex plugin — marketplace name "compound-engineering-plugin",
-#     plugin selector "compound-engineering@compound-engineering-plugin"
-#     (both derived from the repo's .agents/plugins/marketplace.json).
-#     The Claude side is wired via common/claude/settings.json
-#     (extraKnownMarketplaces + enabledPlugins), not here. Idempotent.
+# 7d) Yunxing plugin (raptoravis/yunxing)
+#     Claude Code — wired via common/claude/settings.json (extraKnownMarketplaces
+#     + enabledPlugins), not here.
+#     Codex — marketplace name "yunxing", plugin selector "yunxing@yunxing"
+#     (derived from .codex-plugin/plugin.json).
+#     OpenCode — native plugin module via git URL.
 # ---------------------------------------------------------------------------
 if command -v codex >/dev/null 2>&1; then
-  log "Installing compound-engineering Codex plugin (marketplace: compound-engineering-plugin)"
-  codex plugin marketplace add raptoravis/compound-engineering-plugin >/dev/null 2>&1 \
+  log "Installing yunxing Codex plugin (marketplace: yunxing)"
+  codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
     || warn "  codex marketplace add failed"
-  codex plugin add compound-engineering@compound-engineering-plugin >/dev/null 2>&1 \
+  codex plugin add yunxing@yunxing >/dev/null 2>&1 \
     || warn "  codex plugin add failed"
 else
   warn "codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)"
 fi
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
-# Module = package alias + git URL, per the repo's .opencode/INSTALL.md.
 if command -v opencode >/dev/null 2>&1; then
-  log "Installing compound-engineering OpenCode plugin"
-  opencode plugin --force -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' >/dev/null 2>&1 \
+  log "Installing yunxing OpenCode plugin"
+  opencode plugin --force -g 'yunxing@git+https://github.com/raptoravis/yunxing.git' >/dev/null 2>&1 \
     || warn "  opencode plugin install failed"
 else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
