@@ -85,17 +85,21 @@ stylua --check common/nvim/                            # lua (config: common/lin
 
 ## Cross-CLI agent skills (non-obvious — read before adding skills)
 
-`install-{mac,linux,windows}` install a curated set of portable skills (handoff, karpathy, excalidraw-diagram, html-ppt, frontend-design) and link each into **all four** CLI roots:
+`install-{mac,linux,windows}` install **addyosmani/agent-skills** — a single multi-CLI plugin repo (ships `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/marketplace.json`). Different CLIs consume it via different mechanisms:
 
-- `~/.agents/skills/`
-- `~/.claude/skills/`
-- `~/.codex/skills/` (honors `$CODEX_HOME`)
-- `~/.config/opencode/skills/`
+- **Claude** — native marketplace plugin, enabled in `common/claude/settings.json` (`extraKnownMarketplaces.addy-agent-skills` + `enabledPlugins."agent-skills@addy-agent-skills"`). **Not symlinked**; wired by dotter.
+- **Codex** — native plugin, installed at bootstrap via `codex plugin marketplace add addyosmani/agent-skills` + `codex plugin add agent-skills@agent-skills` (marketplace name and selector both derive from the repo's `.agents/plugins/marketplace.json`). **Not symlinked**. Daily refresh: `common/codex/update-codex-plugins.{sh,ps1}` (mirrors `common/claude/update-claude-plugins.*`).
+- **`.agents` / `.opencode` / `.reasonix`** — no equivalent plugin system, so each skill folder is symlinked into the CLI's `skills/` root by `link_skill` / `LinkSkillToRoots`:
+  - `~/.agents/skills/`
+  - `~/.config/opencode/skills/`
+  - `~/.reasonix/skills/` (honors `$REASONIX_HOME`)
 
-The three install scripts must stay symmetric. To add a new skill, edit all three scripts:
+Because Claude/Codex moved to plugins, the install scripts also run `prune_stale_skill_links` / `Prune-StaleSkillLinks` to remove any earlier agent-skills symlinks left in `~/.claude/skills/` and `~/.codex/skills/` (only links whose target is under `$PLUGIN_CACHE`).
+
+The three install scripts must stay symmetric. To add a new symlink-delivered skill (for the `.agents/.opencode/.reasonix` set), edit all three:
 
 1. `clone_or_pull` / `CloneOrPull` the upstream repo into `$PLUGIN_CACHE` (`~/.cache/dotfiles/agent-plugins`).
-2. `link_skill` / `LinkSkillToRoots` to fan it out to all four roots in one call.
+2. `link_skill` / `LinkSkillToRoots` to fan it out to the three symlink roots in one call.
 3. If the skill ships slash-command markdown that Codex can use as `/foo`, copy it into `~/.codex/prompts/` in the "Codex prompts" block.
 
 Claude-Code-only marketplace plugins (those that need `hooks/hooks.json`, `commands/`, etc.) are not portable — they live in `common/claude/settings.json` instead and are wired by dotter.

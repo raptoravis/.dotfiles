@@ -482,10 +482,11 @@ fi
 
 # ---------------------------------------------------------------------------
 # 7d) Cross-CLI agent skills — addyosmani/agent-skills
-#     Clone once into PLUGIN_CACHE, then symlink each skill folder into every
-#     CLI's skills/ root so Claude, Codex, OpenCode and Reasonix all see the
-#     same set. Each skill is a <name>/SKILL.md folder under skills/; see
-#     https://github.com/addyosmani/agent-skills.
+#     Claude & Codex 改用各自原生 plugin 机制安装（Codex 见下方 codex 块；
+#     Claude 走 common/claude/settings.json 的 marketplace）。其余 CLI
+#     （.agents / .opencode / .reasonix）无等价 plugin 系统，仍把每个 skill
+#     文件夹符号链接到各自 skills/ 根。每个 skill 是 skills/<name>/SKILL.md；
+#     见 https://github.com/addyosmani/agent-skills。
 # ---------------------------------------------------------------------------
 if command -v git >/dev/null 2>&1; then
   AGENT_SKILLS="$HOME/.agents/skills"
@@ -494,7 +495,7 @@ if command -v git >/dev/null 2>&1; then
   OPENCODE_SKILLS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
   REASONIX_SKILLS="${REASONIX_HOME:-$HOME/.reasonix}/skills"
   PLUGIN_CACHE="$HOME/.cache/dotfiles/agent-plugins"
-  mkdir -p "$AGENT_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
+  mkdir -p "$AGENT_SKILLS" "$OPENCODE_SKILLS" "$REASONIX_SKILLS" "$PLUGIN_CACHE"
 
   clone_or_pull() {
     local url="$1" dir="$2"
@@ -510,11 +511,12 @@ if command -v git >/dev/null 2>&1; then
     fi
   }
 
+  # Only .agents / .opencode / .reasonix consume skill symlinks. Claude & Codex
+  # use their native plugin systems (codex block below + settings.json), so they
+  # are deliberately excluded from this fan-out.
   link_skill() {
     local src="$1" name="$2"
     ln -sfn "$src" "$AGENT_SKILLS/$name"
-    ln -sfn "$src" "$CLAUDE_SKILLS/$name"
-    ln -sfn "$src" "$CODEX_SKILLS/$name"
     ln -sfn "$src" "$OPENCODE_SKILLS/$name"
     ln -sfn "$src" "$REASONIX_SKILLS/$name"
   }
@@ -528,9 +530,39 @@ if command -v git >/dev/null 2>&1; then
     done
   }
 
-  log "Installing addyosmani/agent-skills (cross-CLI: claude/codex/opencode/reasonix)"
+  # Remove agent-skills symlinks previously created in the Claude/Codex skill
+  # roots — those CLIs now install via their native plugin systems. Only touches
+  # links whose target lives under PLUGIN_CACHE (user's other skills are safe).
+  prune_stale_skill_links() {
+    local root="$1"
+    [ -d "$root" ] || return 0
+    for entry in "$root"/*; do
+      [ -L "$entry" ] || continue
+      local tgt; tgt="$(readlink -f "$entry" 2>/dev/null)" || continue
+      case "$tgt" in
+        "$PLUGIN_CACHE"/*) rm -f "$entry" ;;
+      esac
+    done
+  }
+
+  log "Installing addyosmani/agent-skills (symlink: .agents/.opencode/.reasonix)"
   clone_or_pull https://github.com/addyosmani/agent-skills "$PLUGIN_CACHE/addyosmani-agent-skills"
   link_skills_from "$PLUGIN_CACHE/addyosmani-agent-skills/skills"
+  prune_stale_skill_links "$CLAUDE_SKILLS"
+  prune_stale_skill_links "$CODEX_SKILLS"
+
+  # Codex — install agent-skills as a native Codex plugin (marketplace name is
+  # "agent-skills", plugin selector "agent-skills@agent-skills", both derived
+  # from the repo's .agents/plugins/marketplace.json). Commands are idempotent.
+  if command -v codex >/dev/null 2>&1; then
+    log "Installing agent-skills as Codex plugin (marketplace: agent-skills)"
+    codex plugin marketplace add addyosmani/agent-skills >/dev/null 2>&1 \
+      || warn "  codex marketplace add failed"
+    codex plugin add agent-skills@agent-skills >/dev/null 2>&1 \
+      || warn "  codex plugin add failed"
+  else
+    warn "codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)"
+  fi
 else
   warn "git not on PATH -- skipping cross-CLI agent skills install"
 fi
