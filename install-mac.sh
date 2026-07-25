@@ -502,8 +502,8 @@ fi
 # Module = package alias + git URL, per the repo's .opencode/INSTALL.md.
 if command -v opencode >/dev/null 2>&1; then
   log "Installing compound-engineering OpenCode plugin"
-  opencode plugin -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' >/dev/null 2>&1 \
-    || warn "  opencode plugin install failed (already installed?)"
+  opencode plugin --force -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' >/dev/null 2>&1 \
+    || warn "  opencode plugin install failed"
 else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi

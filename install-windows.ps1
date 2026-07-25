@@ -871,8 +871,8 @@ if (Test-Cmd codex) {
 # Module = package alias + git URL, per the repo's .opencode/INSTALL.md.
 if (Test-Cmd opencode) {
     Write-Step 'Installing compound-engineering OpenCode plugin'
-    opencode plugin -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed (already installed?)' }
+    opencode plugin --force -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed' }
 } else {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
