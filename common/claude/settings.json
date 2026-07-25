@@ -108,7 +108,7 @@
     "claude-hud@claude-hud": true,
     "codex@openai-codex": true,
     "claude-code-setup@anthropics-official": true,
-    "agent-skills@addy-agent-skills": true
+    "compound-engineering@compound-engineering-plugin": true
   },
   "extraKnownMarketplaces": {
     "claude-hud": {
@@ -132,10 +132,10 @@
       },
       "autoUpdate": true
     },
-    "addy-agent-skills": {
+    "compound-engineering-plugin": {
       "source": {
         "source": "github",
-        "repo": "addyosmani/agent-skills"
+        "repo": "raptoravis/compound-engineering-plugin"
       },
       "autoUpdate": true
     }

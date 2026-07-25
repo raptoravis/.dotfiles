@@ -47,7 +47,7 @@ Dotter picks packages by reading `.dotter/<hostname>.toml` first; if absent it f
 
 ### Bootstrap (preferred — does more than `cargo make init`)
 
-The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of truth for first-time setup. They install OS packages, Rust/Cargo tools, npm CLIs, agent skills, and finally run `dotter -v`.
+The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of truth for first-time setup. They install OS packages, Rust/Cargo tools, npm CLIs, and finally run `dotter -v`.
 
 ```bash
 # macOS
@@ -60,7 +60,7 @@ The top-level `install-{mac,linux,windows}.{sh,ps1}` scripts are the source of t
 powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
-`cargo make init` is the older path — it still works for the package-install steps but does not handle agent skills or npm CLIs.
+`cargo make init` is the older path — it still works for the package-install steps but does not handle npm CLIs.
 
 ### Daily
 
@@ -83,26 +83,7 @@ ruff check . && ruff format --check .                  # python (config: common/
 stylua --check common/nvim/                            # lua (config: common/linters/stylua.toml)
 ```
 
-## Cross-CLI agent skills (non-obvious — read before adding skills)
-
-`install-{mac,linux,windows}` install **addyosmani/agent-skills** — a single multi-CLI plugin repo (ships `.claude-plugin/`, `.codex-plugin/`, `.agents/plugins/marketplace.json`). Different CLIs consume it via different mechanisms:
-
-- **Claude** — native marketplace plugin, enabled in `common/claude/settings.json` (`extraKnownMarketplaces.addy-agent-skills` + `enabledPlugins."agent-skills@addy-agent-skills"`). **Not symlinked**; wired by dotter.
-- **Codex** — native plugin, installed at bootstrap via `codex plugin marketplace add addyosmani/agent-skills` + `codex plugin add agent-skills@agent-skills` (marketplace name and selector both derive from the repo's `.agents/plugins/marketplace.json`). **Not symlinked**. Daily refresh: `common/codex/update-codex-plugins.{sh,ps1}` (mirrors `common/claude/update-claude-plugins.*`).
-- **`.agents` / `.opencode` / `.reasonix`** — no equivalent plugin system, so each skill folder is symlinked into the CLI's `skills/` root by `link_skill` / `LinkSkillToRoots`:
-  - `~/.agents/skills/`
-  - `~/.config/opencode/skills/`
-  - `~/.reasonix/skills/` (honors `$REASONIX_HOME`)
-
-Because Claude/Codex moved to plugins, the install scripts also run `prune_stale_skill_links` / `Prune-StaleSkillLinks` to remove any earlier agent-skills symlinks left in `~/.claude/skills/` and `~/.codex/skills/` (only links whose target is under `$PLUGIN_CACHE`).
-
-The three install scripts must stay symmetric. To add a new symlink-delivered skill (for the `.agents/.opencode/.reasonix` set), edit all three:
-
-1. `clone_or_pull` / `CloneOrPull` the upstream repo into `$PLUGIN_CACHE` (`~/.cache/dotfiles/agent-plugins`).
-2. `link_skill` / `LinkSkillToRoots` to fan it out to the three symlink roots in one call.
-3. If the skill ships slash-command markdown that Codex can use as `/foo`, copy it into `~/.codex/prompts/` in the "Codex prompts" block.
-
-Claude-Code-only marketplace plugins (those that need `hooks/hooks.json`, `commands/`, etc.) are not portable — they live in `common/claude/settings.json` instead and are wired by dotter.
+Claude-Code-only marketplace plugins (those that need `hooks/hooks.json`, `commands/`, etc.) are declared in `common/claude/settings.json` (`extraKnownMarketplaces` + `enabledPlugins`) and wired by dotter. Daily refresh: `common/claude/update-claude-plugins.{sh,ps1}`.
 
 ## Key files
 
@@ -112,7 +93,7 @@ Claude-Code-only marketplace plugins (those that need `hooks/hooks.json`, `comma
 | `.dotter/local.toml` | Machine-local `packages = [...]` selection (gitignored) |
 | `Makefile.toml` | Cargo-make setup/install tasks (legacy bootstrap path) |
 | `Makefile.utils.toml` | Daily utility tasks (pkg mgmt, backup, doctor) |
-| `install-{mac,linux,windows}.{sh,ps1}` | Authoritative bootstrap — keep cross-CLI skill blocks symmetric |
+| `install-{mac,linux,windows}.{sh,ps1}` | Authoritative bootstrap (OS pkgs, Rust/cargo tools, npm CLIs, dotter) |
 | `common/zsh/platform.zsh` | Platform detection — sourced first by `.zshrc` |
 | `common/zsh/.zshrc` | Main zsh config (platform-gated PATH, brew, fzf, oh-my-zsh) |
 | `common/zsh/aliases.zsh` | Aliases with `_clip` / `open` abstractions |

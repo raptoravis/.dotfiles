@@ -850,6 +850,34 @@ if (Test-Cmd corepack) {
 }
 
 # ---------------------------------------------------------------------------
+# 7d) Compound Engineering plugin for Codex (raptoravis/compound-engineering-plugin)
+#     Native Codex plugin — marketplace name "compound-engineering-plugin",
+#     plugin selector "compound-engineering@compound-engineering-plugin"
+#     (both derived from the repo's .agents/plugins/marketplace.json).
+#     The Claude side is wired via common/claude/settings.json
+#     (extraKnownMarketplaces + enabledPlugins), not here. Idempotent.
+# ---------------------------------------------------------------------------
+if (Test-Cmd codex) {
+    Write-Step 'Installing compound-engineering Codex plugin (marketplace: compound-engineering-plugin)'
+    codex plugin marketplace add raptoravis/compound-engineering-plugin 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
+    codex plugin add compound-engineering@compound-engineering-plugin 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex plugin add failed' }
+} else {
+    Write-Warn2 'codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)'
+}
+
+# OpenCode — native plugin module (one-step; no marketplace concept).
+# Module = package alias + git URL, per the repo's .opencode/INSTALL.md.
+if (Test-Cmd opencode) {
+    Write-Step 'Installing compound-engineering OpenCode plugin'
+    opencode plugin -g 'compound-engineering@git+https://github.com/raptoravis/compound-engineering-plugin.git' 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed (already installed?)' }
+} else {
+    Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
+}
+
+# ---------------------------------------------------------------------------
 # 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME, PATH)
 # ---------------------------------------------------------------------------
 Write-Step 'Setting user environment variables'
@@ -990,96 +1018,6 @@ if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
         Write-Warn2 '  To enable: re-run this script in an admin PowerShell, or toggle'
         Write-Warn2 '  Settings -> Privacy & security -> For developers -> Developer Mode'
     }
-}
-
-# ---------------------------------------------------------------------------
-# 8c) Cross-CLI agent skills — addyosmani/agent-skills
-#     Claude & Codex 改用各自原生 plugin 机制安装（Codex 见下方 codex 块；
-#     Claude 走 common/claude/settings.json 的 marketplace）。其余 CLI
-#     （.agents / .opencode / .reasonix）无等价 plugin 系统，仍把每个 skill
-#     文件夹符号链接到各自 skills/ 根。每个 skill 是 skills/<name>/SKILL.md；
-#     见 https://github.com/addyosmani/agent-skills。Requires Developer Mode
-#     (enabled above in 8b) or an admin shell for non-admin symlink creation.
-# ---------------------------------------------------------------------------
-if (Test-Cmd git) {
-    $AgentSkills    = Join-Path $env:USERPROFILE '.agents\skills'
-    $ClaudeSkills   = Join-Path $env:USERPROFILE '.claude\skills'
-    $CodexSkills    = Join-Path $CodexHome 'skills'
-    $OpenCodeSkills = Join-Path $env:USERPROFILE '.config\opencode\skills'
-    $ReasonixSkills = Join-Path $ReasonixHome 'skills'
-    $PluginCache    = Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'
-    New-Item -ItemType Directory -Force -Path $AgentSkills, $OpenCodeSkills, $ReasonixSkills, $PluginCache | Out-Null
-
-    function CloneOrPull($url, $dir) {
-        if (Test-Path (Join-Path $dir '.git')) {
-            Push-Location $dir
-            git pull --quiet --ff-only 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                # Upstream may have rewritten history (force-push/squash). This is a
-                # throwaway mirror, so hard-reset to the remote instead of failing.
-                git fetch --quiet 2>$null
-                git reset --hard --quiet '@{u}' 2>$null
-                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  pull failed: $dir" }
-            }
-            Pop-Location
-        } else {
-            git clone --depth=1 --quiet $url $dir
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clone failed: $url" }
-        }
-    }
-
-    # Only .agents / .opencode / .reasonix consume skill symlinks. Claude & Codex
-    # use their native plugin systems (codex block below + settings.json), so they
-    # are deliberately excluded from this fan-out.
-    function LinkSkillToRoots($src, $name) {
-        foreach ($root in @($AgentSkills, $OpenCodeSkills, $ReasonixSkills)) {
-            $dest = Join-Path $root $name
-            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue }
-            New-Item -ItemType SymbolicLink -Path $dest -Target $src -Force -ErrorAction SilentlyContinue | Out-Null
-        }
-    }
-
-    function LinkSkillsFrom($repo) {
-        # Symlink every directory containing a SKILL.md into every CLI skill root.
-        Get-ChildItem -Path $repo -Recurse -Depth 4 -Filter SKILL.md -ErrorAction SilentlyContinue | ForEach-Object {
-            LinkSkillToRoots $_.Directory.FullName $_.Directory.Name
-        }
-    }
-
-    # Remove agent-skills symlinks previously created in the Claude/Codex skill
-    # roots — those CLIs now install via their native plugin systems. Only touches
-    # links whose target lives under $PluginCache (user's other skills are safe).
-    function Prune-StaleSkillLinks($root) {
-        if (-not (Test-Path $root)) { return }
-        Get-ChildItem $root -Force -ErrorAction SilentlyContinue | ForEach-Object {
-            if ($_.LinkType -ne 'SymbolicLink') { return }
-            $tgt = [string]$_.Target
-            if ($tgt -and $tgt.StartsWith($PluginCache, [System.StringComparison]::OrdinalIgnoreCase)) {
-                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-            }
-        }
-    }
-
-    Write-Step 'Installing addyosmani/agent-skills (symlink: .agents/.opencode/.reasonix)'
-    CloneOrPull 'https://github.com/addyosmani/agent-skills' (Join-Path $PluginCache 'addyosmani-agent-skills')
-    LinkSkillsFrom (Join-Path $PluginCache 'addyosmani-agent-skills\skills')
-    Prune-StaleSkillLinks $ClaudeSkills
-    Prune-StaleSkillLinks $CodexSkills
-
-    # Codex — install agent-skills as a native Codex plugin (marketplace name is
-    # "agent-skills", plugin selector "agent-skills@agent-skills", both derived
-    # from the repo's .agents/plugins/marketplace.json). Commands are idempotent.
-    if (Test-Cmd codex) {
-        Write-Step 'Installing agent-skills as Codex plugin (marketplace: agent-skills)'
-        codex plugin marketplace add addyosmani/agent-skills 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
-        codex plugin add agent-skills@agent-skills 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex plugin add failed' }
-    } else {
-        Write-Warn2 'codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)'
-    }
-} else {
-    Write-Warn2 'git not on PATH -- skipping cross-CLI agent skills install'
 }
 
 # ---------------------------------------------------------------------------
