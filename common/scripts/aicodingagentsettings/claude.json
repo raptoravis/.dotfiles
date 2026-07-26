@@ -1,0 +1,88 @@
+{
+  "env": {
+    "API_TIMEOUT_MS": "3000000",
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1",
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+  },
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(git:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(make:*)"
+    ],
+    "deny": [
+      "Read(**/*.pem)",
+      "Read(**/*id_rsa*)",
+      "Bash(sudo *)",
+      "Bash(rm -rf /*)",
+      "Bash(kubectl delete *)"
+    ],
+    "defaultMode": "bypassPermissions",
+    "skipDangerousModePermissionPrompt": true
+  },
+  "hooks": {},
+  "defaultShell": "powershell",
+  "statusLine": {
+    "type": "command",
+    "command": "node \"$HOME/.claude/statusline.mjs\""
+  },
+  "enabledPlugins": {
+    "claude-code-setup@anthropics-official": true,
+    "claude-hud@claude-hud": true,
+    "codex@openai-codex": true,
+    "threejs-game-skills@threejs-game-skills": true,
+    "yunxing@yunxing": true
+  },
+  "extraKnownMarketplaces": {
+    "anthropics-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      },
+      "autoUpdate": true
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      },
+      "autoUpdate": true
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      },
+      "autoUpdate": true
+    },
+    "threejs-game-skills": {
+      "source": {
+        "source": "github",
+        "repo": "raptoravis/threejs-game-skills"
+      }
+    },
+    "yunxing": {
+      "source": {
+        "source": "github",
+        "repo": "raptoravis/yunxing"
+      }
+    }
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "medium",
+  "tui": "default",
+  "autoMemoryEnabled": true,
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
+  "verbose": true
+}

@@ -1,0 +1,59 @@
+model_reasoning_effort = "medium"
+disable_response_storage = true
+personality = "pragmatic"
+approvals_reviewer = "user"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+notify = [ "$(home)/AppData/Local/OpenAI/Codex/runtimes/cua_node/f8d2abcb7481383b/bin/node_modules/@oai/sky/bin/windows/codex-computer-use.exe", "turn-ended" ]
+
+[tui]
+status_line = [ "model-with-reasoning", "context-remaining", "current-dir", "model", "project-name", "git-branch", "pull-request-number" ]
+status_line_use_colors = true
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+"gpt-5.6-sol" = 2
+
+[windows]
+sandbox = "elevated"
+
+[notice]
+hide_full_access_warning = true
+
+[marketplaces.yunxing]
+last_updated = "2026-07-25T13:12:55Z"
+last_revision = "6bddcb949bfd35c0e8c76749c4ecbe7ae3d71058"
+source_type = "git"
+source = "https://github.com/raptoravis/yunxing.git"
+
+[marketplaces.openai-bundled]
+last_updated = "2026-07-25T13:03:33Z"
+source_type = "local"
+source = '$(home)/.codex/.tmp/bundled-marketplaces/openai-bundled'
+
+[desktop]
+followUpQueueMode = "queue"
+localeOverride = "en-US"
+appearanceTheme = "dark"
+conversationDetailMode = "STEPS_COMMANDS"
+
+[plugins."sites@openai-bundled"]
+enabled = true
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."visualize@openai-bundled"]
+enabled = true
+
+[plugins."yunxing@yunxing"]
+enabled = true
+
+[features]
+js_repl = false
+
+[shell_environment_policy.set]
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "7ed52dae165c3bc22b6d24f282e2c1fbc87f6949fbbe037767a7418d8f517f01,e13fd947e846d3d306e9249dd3c73d14931b6494803dbafb16cef85e6add9506"
+NODE_REPL_TRUSTED_CODE_PATHS = '$(home)/.codex'
