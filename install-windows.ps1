@@ -632,7 +632,18 @@ if ($shellPath) {
 }
 
 # ---------------------------------------------------------------------------
-# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# 7b) Grok Build
+# ---------------------------------------------------------------------------
+if (-not (Test-Cmd grok)) {
+    Write-Step 'Installing Grok Build'
+    irm 'https://x.ai/cli/install.ps1' | iex
+    if (-not (Test-Cmd grok)) { Write-Warn2 '  Grok Build install failed or grok is not yet on PATH' }
+} else {
+    Write-Host '  Grok Build already installed'
+}
+
+# ---------------------------------------------------------------------------
+# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if (Test-Cmd npm) {
     if (-not (Test-Cmd hostc)) {

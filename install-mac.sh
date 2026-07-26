@@ -289,7 +289,17 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7b) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
+# 7b) Grok Build
+# ---------------------------------------------------------------------------
+if ! command -v grok >/dev/null 2>&1; then
+  log "Installing Grok Build"
+  curl -fsSL https://x.ai/cli/install.sh | bash || warn "  Grok Build install failed"
+else
+  log "Grok Build already installed"
+fi
+
+# ---------------------------------------------------------------------------
+# 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
   if ! command -v hostc >/dev/null 2>&1; then
