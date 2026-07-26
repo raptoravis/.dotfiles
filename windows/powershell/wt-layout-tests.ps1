@@ -188,6 +188,64 @@ $threw = $false
 try { Read-WtLayoutFile -Name 'definitely-nonexistent-xyz' } catch { $threw = $true }
 Assert-True $threw "missing layout throws"
 
+# Multi-tab cwd capture must match the flattened pane list once. Matching each
+# tab independently restarts the process queue and assigns the first tab's cwd
+# to every later PowerShell tab.
+$script:capturedLayout = $null
+$script:cwdCalls = [System.Collections.Generic.List[object]]::new()
+function Get-WtFocusedWindow { [pscustomobject]@{ Window = 'fake-window'; Pid = [uint32]42 } }
+function Capture-WtWindow {
+    @(
+        [pscustomobject]@{
+            Title = 'dotfiles'
+            Panes = @([pscustomobject]@{ Profile = 'PowerShell'; Rect = New-Rect 0 0 100 100 })
+        },
+        [pscustomobject]@{
+            Title = 'yunxing'
+            Panes = @([pscustomobject]@{ Profile = 'PowerShell'; Rect = New-Rect 0 0 100 100 })
+        },
+        [pscustomobject]@{
+            Title = 'yusuda'
+            Panes = @(
+                [pscustomobject]@{ Profile = 'PowerShell'; Rect = New-Rect 0 0 50 100 },
+                [pscustomobject]@{ Profile = 'PowerShell'; Rect = New-Rect 50 0 50 50 },
+                [pscustomobject]@{ Profile = 'PowerShell'; Rect = New-Rect 50 50 50 50 }
+            )
+        }
+    )
+}
+function Get-WtPaneCwds {
+    param([int]$PaneCount, [uint32]$WtPid, [object[]]$Panes)
+    $script:cwdCalls.Add([pscustomobject]@{ PaneCount = $PaneCount; Panes = $Panes })
+    @('D:\dev\.dotfiles', 'D:\dev\yunxing.git', 'D:\dev\yusuda.git', 'D:\dev\yusuda.git', 'D:\dev\yusuda.git')
+}
+function Save-WtLayoutFile {
+    param([string]$Name, $Layout)
+    $script:capturedLayout = $Layout
+}
+function Get-WtLayoutPath { param([string]$Name) "mock:\$Name.json" }
+
+wtsave 'multi-tab-cwd'
+Assert-Equal $script:cwdCalls.Count 1 "multi-tab cwd matching runs once"
+Assert-Equal $script:cwdCalls[0].PaneCount 5 "multi-tab cwd matching sees all panes"
+Assert-Equal $script:capturedLayout.tabs[0].panes[0].cwd 'D:\dev\.dotfiles' "tab 1 cwd assigned"
+Assert-Equal $script:capturedLayout.tabs[1].panes[0].cwd 'D:\dev\yunxing.git' "tab 2 cwd assigned"
+Assert-Equal $script:capturedLayout.tabs[2].panes[2].cwd 'D:\dev\yusuda.git' "tab 3 pane cwd assigned"
+
+# A shell launched inside a pane is not another pane. Stop descending that
+# process-tree branch after finding its root shell.
+function Get-CimInstance {
+    @(
+        [pscustomobject]@{ ProcessId = 100; ParentProcessId = 42; Name = 'pwsh.exe'; CreationDate = '20260726140000' },
+        [pscustomobject]@{ ProcessId = 101; ParentProcessId = 100; Name = 'cmd.exe'; CreationDate = '20260726140100' },
+        [pscustomobject]@{ ProcessId = 200; ParentProcessId = 42; Name = 'OpenConsole.exe'; CreationDate = '20260726140200' },
+        [pscustomobject]@{ ProcessId = 201; ParentProcessId = 200; Name = 'pwsh.exe'; CreationDate = '20260726140300' }
+    )
+}
+$paneShells = @(Get-WtShellDescendants -RootPid 42)
+Assert-Equal $paneShells.Count 2 "nested shell is not counted as another pane"
+Assert-Equal (($paneShells.ProcessId | Sort-Object) -join ',') '100,201' "pane root shells retained"
+
 # ---- cleanup ----
 Remove-Item "$dir\roundtrip1.json" -ErrorAction SilentlyContinue
 Remove-Item "$dir\roundtrip2.json" -ErrorAction SilentlyContinue

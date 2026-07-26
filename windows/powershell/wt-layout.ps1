@@ -504,8 +504,10 @@ function Get-WtFocusedWindow {
 .SYNOPSIS
     Walk a WT window's UIA tree and collect tabs with their panes.
 .DESCRIPTION
-    Finds TabItem elements (each carrying a title) and, within each tab, the
-    TermControl elements (each carrying a BoundingRectangle and profile Name).
+    Finds TabItem elements (each carrying a title), activates them one at a
+    time, and collects the currently rendered TermControl elements (each
+    carrying a BoundingRectangle and profile Name). Restores the originally
+    selected tab before returning.
     Returns an ordered list of PSCustomObjects:
     @{ Title; Panes = @( @{ Rect; Profile } ) }.
 #>
@@ -577,16 +579,57 @@ function Capture-WtWindow {
         throw "No tabs found in the focused Windows Terminal window."
     }
 
-    # Collect all TermControl panes from the window root.
-    # In WinUI 3 WT, TermControl elements are NOT children of TabItem —
-    # they live at window level and only the active tab's panes are rendered.
-    # Match panes to the tab whose title equals the window title.
-    $allPanes = [System.Collections.Generic.List[object]]::new()
-    & $paneCollector $Window $allPanes
-    $windowTitle = $Window.Current.Name
+    # In WinUI 3 WT, TermControl elements are NOT children of TabItem. They
+    # live at window level, and only the active tab's panes are rendered.
+    # Activate every tab in turn so inactive tabs are captured as well.
+    $originalTab = $null
     foreach ($tab in $tabs) {
-        if ($tab.Title -eq $windowTitle) {
-            $tab.Panes = $allPanes
+        try {
+            $selection = $tab.Element.GetCurrentPattern(
+                [System.Windows.Automation.SelectionItemPattern]::Pattern
+            )
+            if ($selection.Current.IsSelected) {
+                $originalTab = $tab
+                break
+            }
+        } catch {
+            # Report the unsupported tab below when attempting to select it.
+        }
+    }
+
+    try {
+        foreach ($tab in $tabs) {
+            try {
+                $selection = $tab.Element.GetCurrentPattern(
+                    [System.Windows.Automation.SelectionItemPattern]::Pattern
+                )
+                if (-not $selection.Current.IsSelected) {
+                    $selection.Select()
+                    # Selection is asynchronous relative to the TermControl
+                    # subtree refresh. A short wait avoids reading the previous
+                    # tab's panes immediately after Select().
+                    Start-Sleep -Milliseconds 150
+                }
+            } catch {
+                throw "Could not activate Windows Terminal tab '$($tab.Title)' while capturing its panes: $($_.Exception.Message)"
+            }
+
+            $visiblePanes = [System.Collections.Generic.List[object]]::new()
+            & $paneCollector $Window $visiblePanes
+            $tab.Panes = $visiblePanes
+        }
+    } finally {
+        if ($null -ne $originalTab) {
+            try {
+                $originalSelection = $originalTab.Element.GetCurrentPattern(
+                    [System.Windows.Automation.SelectionItemPattern]::Pattern
+                )
+                if (-not $originalSelection.Current.IsSelected) {
+                    $originalSelection.Select()
+                }
+            } catch {
+                Write-Warning "Could not restore the originally selected Windows Terminal tab."
+            }
         }
     }
 
@@ -608,7 +651,9 @@ function Capture-WtWindow {
     WindowsTerminal.exe spawns OpenConsole.exe which spawns the actual shell
     (pwsh.exe, cmd.exe, etc.). A flat parent-child query misses these. This
     function walks down from the root PID with a depth limit of 4, collecting
-    every process whose name matches a known shell, sorted by CreationDate.
+    the first known shell on each process-tree branch, sorted by CreationDate.
+    It does not descend below a matched shell because commands launched inside
+    that pane are not additional panes.
 
     Returns an array of CIM process objects (ProcessId, Name, CreationDate).
 #>
@@ -657,6 +702,7 @@ function Get-WtShellDescendants {
             foreach ($child in $children) {
                 if ($shellNames.Contains($child.Name)) {
                     $result.Add($child)
+                    continue
                 }
                 $queue.Enqueue([uint32]$child.ProcessId)
             }
@@ -764,6 +810,22 @@ function wtsave {
     $focused = Get-WtFocusedWindow
     $tabs = Capture-WtWindow -Window $focused.Window
 
+    # Match shell processes to the complete pane sequence once. Doing this per
+    # tab restarts the process queue, causing later tabs with the same profile
+    # to reuse the first tab's working directory.
+    $allPanes = [System.Collections.Generic.List[object]]::new()
+    foreach ($tab in $tabs) {
+        foreach ($pane in $tab.Panes) {
+            $allPanes.Add($pane)
+        }
+    }
+    $paneCwds = if ($allPanes.Count -gt 0) {
+        Get-WtPaneCwds -PaneCount $allPanes.Count -WtPid $focused.Pid -Panes @($allPanes)
+    } else {
+        @()
+    }
+    $cwdIndex = 0
+
     $layoutTabs = [System.Collections.Generic.List[object]]::new()
     foreach ($tab in $tabs) {
         $panesList = [System.Collections.Generic.List[object]]::new()
@@ -774,16 +836,14 @@ function wtsave {
             $panesList.Add([pscustomobject]@{ profile = ''; cwd = '' })
             $tree = New-WtLeaf -PaneIndex 0
         } else {
-            # Pane capture only makes sense when there are visible panes; an
-            # empty array would trip Get-WtPaneCwds's mandatory $Panes param.
-            $paneCwds = Get-WtPaneCwds -PaneCount $tab.Panes.Count -WtPid $focused.Pid -Panes $tab.Panes
             for ($i = 0; $i -lt $tab.Panes.Count; $i++) {
                 $pane = $tab.Panes[$i]
                 $panesList.Add([pscustomobject]@{
                     profile = $pane.Profile
-                    cwd     = $paneCwds[$i]
+                    cwd     = $paneCwds[$cwdIndex]
                 })
                 $group.Add([pscustomobject]@{ Index = $i; Rect = $pane.Rect })
+                $cwdIndex++
             }
             if ($tab.Panes.Count -eq 1) {
                 $tree = New-WtLeaf -PaneIndex 0
