@@ -27,6 +27,11 @@ last_revision = "6bddcb949bfd35c0e8c76749c4ecbe7ae3d71058"
 source_type = "git"
 source = "https://github.com/raptoravis/yunxing.git"
 
+[marketplaces.threejs-game-skills]
+last_updated = "2026-07-27T12:59:28Z"
+source_type = "git"
+source = "https://github.com/raptoravis/threejs-game-skills.git"
+
 [marketplaces.openai-bundled]
 last_updated = "2026-07-25T13:03:33Z"
 source_type = "local"
@@ -48,6 +53,9 @@ enabled = true
 enabled = true
 
 [plugins."yunxing@yunxing"]
+enabled = true
+
+[plugins."threejs-game-skills@threejs-game-skills"]
 enabled = true
 
 [features]
