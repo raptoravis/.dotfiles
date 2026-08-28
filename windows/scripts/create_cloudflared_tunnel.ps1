@@ -6,7 +6,8 @@
     stale state and installs the Windows service.
 
 .PARAMETER Preset
-    Preset bundle (TunnelName + Routes). One of: com, home.
+    Required. Which tunnel to manage: com or home.
+    Preset bundle (TunnelName + Routes).
     Passing -TunnelName / -Routes overrides the corresponding preset field.
 
 .PARAMETER TunnelName
@@ -55,8 +56,9 @@
 #>
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)]
     [ValidateSet('com', 'home')]
-    [string]$Preset = 'com',
+    [string]$Preset,
 
     [string]$TunnelName,
 
