@@ -235,36 +235,93 @@ if (-not (Test-Path $credsFile)) {
     throw "Credentials file missing: $credsFile (tunnel create may have failed)"
 }
 
-# ----- DNS routes -----
+# ----- DNS routes (Cloudflare API) -----
+# Every hostname is its own zone apex (no ccwu.cc parent zone). `cloudflared tunnel
+# route dns` mis-routes to the wrong zone in this topology, so drive the CF API
+# directly: upsert a proxied CNAME at each zone's apex -> <uuid>.cfargotunnel.com.
+$cfToken = $env:CLOUDFLARE_API_TOKEN
+if (-not $cfToken) {
+    throw 'CLOUDFLARE_API_TOKEN env var not set. Create a token with Zone.Zone:Read + Zone.DNS:Edit.'
+}
+$cfHeaders = @{ Authorization = "Bearer $cfToken" }
+$cfApi = 'https://api.cloudflare.com/client/v4'
+
+# Single wrapper so every CF call surfaces its error JSON instead of a generic 4xx.
+function Invoke-Cf {
+    param([string]$Uri, [string]$Method = 'Get', [string]$Body)
+    $params = @{ Uri = $Uri; Headers = $cfHeaders; TimeoutSec = 15; Method = $Method }
+    if ($Body) { $params.Body = $Body }
+    try {
+        $resp = Invoke-RestMethod @params
+    } catch {
+        $msg = $_.ErrorDetails.Message
+        if (-not $msg) { $msg = $_.Exception.Message }
+        throw "Cloudflare API $Method $Uri failed: $msg"
+    }
+    if (-not $resp.success) {
+        throw "Cloudflare API $Method $Uri returned errors: $($resp.errors | ConvertTo-Json -Compress)"
+    }
+    return $resp
+}
+
+function Get-CfZones {
+    $zones = @()
+    $page = 1
+    do {
+        $resp = Invoke-Cf -Uri "$cfApi/zones?per_page=50&page=$page"
+        $zones += @($resp.result)
+        $page++
+    } while ($resp.result_info.total_pages -ge $page)
+    return $zones
+}
+
+# Longest-suffix zone match: exact zone name, else deepest parent zone.
+function Find-CfZone([string]$hostname, [object[]]$zones) {
+    $best = $null
+    foreach ($z in $zones) {
+        if ($hostname -eq $z.name -or $hostname -like "*.$($z.name)") {
+            if (-not $best -or $z.name.Length -gt $best.name.Length) { $best = $z }
+        }
+    }
+    return $best
+}
+
+# Upsert a proxied CNAME in a zone. Returns 'skip' | 'update' | 'create'.
+function Set-CfCname([object]$zone, [string]$hostname, [string]$target) {
+    $zid = $zone.id
+    $esc = [uri]::EscapeDataString($hostname)
+    $list = Invoke-Cf -Uri "$cfApi/zones/$zid/dns_records?type=CNAME&name=$esc"
+    $body = @{ type = 'CNAME'; name = $hostname; content = $target; proxied = $true; ttl = 1 } | ConvertTo-Json
+    if ($list.result.Count -gt 0) {
+        $rec = $list.result[0]
+        if ($rec.content -eq $target -and $rec.proxied) { return 'skip' }
+        Invoke-Cf -Method Put -Uri "$cfApi/zones/$zid/dns_records/$($rec.id)" -Body $body | Out-Null
+        return 'update'
+    }
+    Invoke-Cf -Method Post -Uri "$cfApi/zones/$zid/dns_records" -Body $body | Out-Null
+    return 'create'
+}
+
 Write-Host '== Configuring DNS routes ==' -ForegroundColor Cyan
+$zones = Get-CfZones
+$target = "$uuid.cfargotunnel.com"
 $dnsMissing  = @()  # no A record at all
 $dnsNotProxy = @()  # has A records but not Cloudflare anycast (not proxied / not pointing to tunnel)
-$dnsZombies  = @()  # cloudflared mis-routed to the wrong zone (creates a literal "x.y.z.wrongzone" record)
 $tlsFail     = @()  # DNS is fine but CF edge has no SSL cert yet (separate sub-zone, Universal SSL pending)
 foreach ($hostname in $Routes.Keys) {
     Write-Host "  -> $hostname"
 
-    # Capture cloudflared output so we can detect wrong-zone messages like
-    # `Added CNAME yunxing.ccwu.cc.haishan.ccwu.cc which will route...`
-    # cmd /c merges stderr (where cloudflared writes INF logs) into stdout, so
-    # PowerShell never sees the stderr stream and doesn't treat the lines as errors.
-    $cfExe = (Get-Command cloudflared).Source
-    $routeOut = cmd /c "`"$cfExe`" tunnel route dns $TunnelName $hostname 2>&1" | Out-String
-    Write-Host $routeOut.TrimEnd()
+    $zone = Find-CfZone $hostname $zones
+    if (-not $zone) {
+        Write-Warning "No Cloudflare zone matches $hostname — skipping DNS for it."
+        continue
+    }
 
-    # Detect wrong-zone bug: when the user's CF account has a parent zone (e.g.
-    # haishan.ccwu.cc) registered separately, cloudflared may treat the requested
-    # hostname as relative and append the zone, producing "<host>.<zone>".
-    foreach ($line in ($routeOut -split "`n")) {
-        if ($line -match '\b([a-z0-9.-]+)\s+(?:which will route|is already configured)') {
-            $reportedHost = $matches[1]
-            if ($reportedHost -ne $hostname) {
-                $dnsZombies += [pscustomobject]@{
-                    Requested = $hostname
-                    Created   = $reportedHost
-                }
-            }
-        }
+    $action = Set-CfCname $zone $hostname $target
+    switch ($action) {
+        'create' { Write-Host "    created CNAME $hostname -> $target (proxied)" }
+        'update' { Write-Host "    updated CNAME $hostname -> $target (proxied)" }
+        'skip'   { Write-Host "    CNAME already correct ($hostname -> $target)" }
     }
 
     Start-Sleep -Seconds 2
@@ -294,17 +351,19 @@ foreach ($hostname in $Routes.Keys) {
     }
 }
 
-if ($dnsMissing.Count + $dnsNotProxy.Count + $dnsZombies.Count + $tlsFail.Count -gt 0) {
+if ($dnsMissing.Count + $dnsNotProxy.Count + $tlsFail.Count -gt 0) {
     Write-Warning ''
     Write-Warning '=== DNS verification problems ==='
 }
 
 if ($dnsMissing.Count -gt 0) {
     Write-Warning ''
-    Write-Warning 'No DNS record found (cloudflared may have falsely reported "already configured"):'
+    Write-Warning 'API wrote the CNAME but DoH still returns no A record (propagation/cache lag):'
     $dnsMissing | ForEach-Object { Write-Warning "    $_" }
-    Write-Warning 'Fix: dashboard -> the correct zone -> DNS -> Records -> add CNAME:'
-    Write-Warning "    Type=CNAME  Name=<subdomain>  Target=$uuid.cfargotunnel.com  Proxy=Proxied (orange cloud)"
+    Write-Warning 'Usually clears in a few minutes. Re-check with:'
+    Write-Warning "    Invoke-RestMethod 'https://1.1.1.1/dns-query?name=<host>&type=A' -Headers @{accept='application/dns-json'}"
+    Write-Warning 'If it persists, confirm the record in the zone: Type=CNAME'
+    Write-Warning "    Name=<subdomain>  Target=$uuid.cfargotunnel.com  Proxied (orange cloud)"
 }
 
 if ($dnsNotProxy.Count -gt 0) {
@@ -314,21 +373,6 @@ if ($dnsNotProxy.Count -gt 0) {
     Write-Warning 'Fix: dashboard -> the zone -> DNS -> Records -> click the cloud icon'
     Write-Warning '     to switch from "DNS only" (gray) to "Proxied" (orange).'
     Write-Warning '     Or delete + re-add as CNAME pointing to ' + "$uuid.cfargotunnel.com"
-}
-
-if ($dnsZombies.Count -gt 0) {
-    Write-Warning ''
-    Write-Warning 'cloudflared wrote into the WRONG zone, creating zombie records:'
-    foreach ($z in $dnsZombies) {
-        Write-Warning ("    requested {0,-30} but created {1}" -f $z.Requested, $z.Created)
-    }
-    Write-Warning 'Cause: your CF account has both `ccwu.cc` and a sub-zone (e.g. `haishan.ccwu.cc`)'
-    Write-Warning '       registered as separate zones. cloudflared picks the wrong one.'
-    Write-Warning 'Fix:'
-    Write-Warning '  1) dashboard -> the WRONG zone -> DNS -> Records -> delete the zombie name'
-    Write-Warning '  2) dashboard -> the correct parent zone (e.g. ccwu.cc) -> DNS -> Records'
-    Write-Warning "     -> add CNAME  Name=<subdomain>  Target=$uuid.cfargotunnel.com  Proxied"
-    Write-Warning '  3) Or remove the sub-zone from your account if you do not need it as a separate zone.'
 }
 
 if ($tlsFail.Count -gt 0) {
