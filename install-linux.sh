@@ -127,8 +127,23 @@ EOF
   fi
 fi
 
+# apt 走 7890 代理（Clash 混合端口）：TUN 模式对 https(443) 会超时，导致
+# `apt update` 卡在等待响应头。走 7890 由 Clash 规则分流（国内直连 / 海外
+# 走节点）秒通。与上面换国内源配合使用。
+if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+  exec 3>&- 3<&- 2>/dev/null || true
+  APT_PROXY_CONF="/etc/apt/apt.conf.d/01proxy"
+  if [[ ! -f "$APT_PROXY_CONF" ]] || ! grep -q '127.0.0.1:7890' "$APT_PROXY_CONF" 2>/dev/null; then
+    log "配置 apt 走 7890 代理 (Clash 分流)"
+    sudo tee "$APT_PROXY_CONF" >/dev/null <<'EOF'
+Acquire::http::Proxy "http://127.0.0.1:7890";
+Acquire::https::Proxy "http://127.0.0.1:7890";
+EOF
+  fi
+fi
+
 log "Updating apt and installing base packages"
-sudo -E apt-get update -qq
+sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
 APT_PKGS=(
   zsh fzf ripgrep fd-find bat neovim cmake curl git
   build-essential pkg-config libssl-dev fastfetch tmux mosh
@@ -136,8 +151,8 @@ APT_PKGS=(
   nodejs npm
   jq ffmpeg
 )
-sudo -E apt-get install -y -qq "${APT_PKGS[@]}"
-(( IS_WSL )) && sudo -E apt-get install -y -qq wslu 2>/dev/null || true
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${APT_PKGS[@]}"
+(( IS_WSL )) && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
 
 # Ensure node/npm are on PATH after apt install.
 # On Debian/Ubuntu the 'nodejs' package provides /usr/bin/nodejs (not /usr/bin/node).
@@ -167,8 +182,8 @@ if (( ! IS_WSL )) && ! command -v wezterm >/dev/null 2>&1; then
     | sudo gpg --yes --dearmor -o /etc/apt/keyrings/wezterm-fury.gpg
   echo 'deb [signed-by=/etc/apt/keyrings/wezterm-fury.gpg] https://apt.fury.io/wez/ * *' \
     | sudo tee /etc/apt/sources.list.d/wezterm.list >/dev/null
-  sudo -E apt-get update -qq
-  sudo -E apt-get install -y -qq wezterm || warn "  wezterm install failed"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wezterm || warn "  wezterm install failed"
 fi
 
 # VS Code — only on bare Linux (WSL2 uses the Windows host's VS Code via code
@@ -180,8 +195,8 @@ if (( ! IS_WSL )) && ! command -v code >/dev/null 2>&1; then
     | sudo gpg --yes --dearmor -o /etc/apt/keyrings/packages.microsoft.gpg
   echo 'deb [signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' \
     | sudo tee /etc/apt/sources.list.d/vscode.list >/dev/null
-  sudo -E apt-get update -qq
-  sudo -E apt-get install -y -qq code || warn "  VS Code install failed"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq code || warn "  VS Code install failed"
 elif (( IS_WSL )); then
   log "  WSL2 detected — VS Code available via Windows host (code .)"
 fi
@@ -196,8 +211,8 @@ if ! command -v gh >/dev/null 2>&1; then
   sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
     | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-  sudo -E apt-get update -qq
-  sudo -E apt-get install -y -qq gh || warn "  gh install failed"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gh || warn "  gh install failed"
 fi
 
 # cloudflared — Cloudflare Tunnel client (内网穿透). Use Cloudflare's apt repo
@@ -210,8 +225,8 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   CF_CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}")"
   echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared ${CF_CODENAME} main" \
     | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
-  sudo -E apt-get update -qq
-  sudo -E apt-get install -y -qq cloudflared || warn "  cloudflared install failed"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cloudflared || warn "  cloudflared install failed"
 fi
 
 # witr — "why is this running?" CLI. Not packaged in apt; use upstream
@@ -276,7 +291,7 @@ fi
 # ---------------------------------------------------------------------------
 if ! command -v go >/dev/null 2>&1; then
   log "Installing Go via apt"
-  sudo -E apt-get install -y -qq golang-go
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq golang-go
 fi
 if command -v go >/dev/null 2>&1; then
   log "Installing lazygit + lazydocker via go install"
@@ -535,7 +550,7 @@ fi
 # ---------------------------------------------------------------------------
 if ! command -v corepack >/dev/null 2>&1; then
   log "corepack not on PATH -- installing"
-  sudo -E apt-get install -y -qq corepack 2>/dev/null \
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq corepack 2>/dev/null \
     || (command -v npm >/dev/null 2>&1 && sudo npm install -g corepack 2>/dev/null) \
     || warn "  corepack install failed (apt + npm both unable)"
 fi
