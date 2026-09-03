@@ -279,17 +279,23 @@ rustup component add clippy rustfmt 2>/dev/null || true
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
 CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop silicon ast-grep)
+# 完整输出落临时文件：成功静默；失败时 tail 出关键报错（如缺 cc/gcc 的
+# ToolNotFound），避免 `cargo install | tail -n1` 把根因吞成只剩一行。
+CARGO_LOG="$(mktemp)"
+trap 'rm -f "${CARGO_LOG:-}"' EXIT
 for tool in "${CARGO_TOOLS[@]}"; do
-  if cargo install "$tool" 2>&1 | tail -n1; then
+  if cargo install "$tool" >"$CARGO_LOG" 2>&1; then
     # Verify binary landed — cargo may exit 0 but still fail to link.
     bin_path="$HOME/.cargo/bin/$tool"
     if [[ -x "$bin_path" ]]; then
       log "  -> $bin_path"
     else
-      warn "  $tool: cargo reported OK but $bin_path not found — check cargo output above for linker/build errors"
+      warn "  $tool: cargo reported OK but $bin_path not found — tail of build log:"
+      tail -n 40 "$CARGO_LOG" >&2
     fi
   else
-    warn "  failed: $tool"
+    warn "  failed: $tool — tail of build log:"
+    tail -n 80 "$CARGO_LOG" >&2
   fi
 done
 
