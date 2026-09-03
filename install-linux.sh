@@ -87,6 +87,46 @@ fi
 # 1) apt packages — base toolchain + dev essentials
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
+
+# 国内镜像源：默认清华 TUNA，可用 APT_MIRROR 覆盖（需以 /ubuntu/ 结尾，如
+# APT_MIRROR=https://mirrors.aliyun.com/ubuntu/）。仅对 Ubuntu 生效、幂等
+# （当前已是该镜像则跳过）。解决国内直连 archive.ubuntu.com 跨境链路不稳、
+# `apt update` 卡在 "Waiting for headers" 的问题。
+if [[ -r /etc/os-release ]] && grep -q '^ID=ubuntu$' /etc/os-release; then
+  APT_MIRROR="${APT_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/ubuntu/}"
+  CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}")"
+  APT_SOURCES="/etc/apt/sources.list.d/ubuntu.sources"        # Ubuntu 24.04+ deb822
+  [[ -f "$APT_SOURCES" ]] || APT_SOURCES="/etc/apt/sources.list"  # 旧版 one-line
+  if grep -qF "$APT_MIRROR" "$APT_SOURCES" 2>/dev/null; then
+    log "apt 已使用镜像源 $APT_MIRROR — 跳过换源"
+  else
+    log "切换 apt 源到国内镜像: $APT_MIRROR ($CODENAME)"
+    sudo cp "$APT_SOURCES" "$APT_SOURCES.bak"
+    if [[ "$APT_SOURCES" == *.sources ]]; then
+      sudo tee "$APT_SOURCES" >/dev/null <<EOF
+Types: deb
+URIs: ${APT_MIRROR}
+Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: ${APT_MIRROR}
+Suites: ${CODENAME}-security
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+    else
+      sudo tee "$APT_SOURCES" >/dev/null <<EOF
+deb ${APT_MIRROR} ${CODENAME} main universe restricted multiverse
+deb ${APT_MIRROR} ${CODENAME}-updates main universe restricted multiverse
+deb ${APT_MIRROR} ${CODENAME}-backports main universe restricted multiverse
+deb ${APT_MIRROR} ${CODENAME}-security main universe restricted multiverse
+EOF
+    fi
+  fi
+fi
+
 log "Updating apt and installing base packages"
 sudo -E apt-get update -qq
 APT_PKGS=(
