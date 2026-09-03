@@ -279,25 +279,31 @@ rustup component add clippy rustfmt 2>/dev/null || true
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
 CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop silicon ast-grep)
-# 完整输出落临时文件：成功静默；失败时 tail 出关键报错（如缺 cc/gcc 的
-# ToolNotFound），避免 `cargo install | tail -n1` 把根因吞成只剩一行。
-CARGO_LOG="$(mktemp)"
-trap 'rm -f "${CARGO_LOG:-}"' EXIT
-for tool in "${CARGO_TOOLS[@]}"; do
-  if cargo install "$tool" >"$CARGO_LOG" 2>&1; then
-    # Verify binary landed — cargo may exit 0 but still fail to link.
-    bin_path="$HOME/.cargo/bin/$tool"
-    if [[ -x "$bin_path" ]]; then
-      log "  -> $bin_path"
+if ! command -v cargo >/dev/null 2>&1; then
+  warn "cargo not on PATH — skipping Cargo tools (run 'source \$HOME/.cargo/env' or re-install rustup)"
+else
+  for tool in "${CARGO_TOOLS[@]}"; do
+    # 捕获完整输出到变量：不依赖临时文件/重定向，失败时总能 tail 到真实报错
+    # （如缺 cc/gcc 的 ToolNotFound，或 cargo 本身 command not found）。
+    if install_log="$(cargo install "$tool" 2>&1)"; then
+      # Verify binary landed — cargo may exit 0 but still fail to link.
+      bin_path="$HOME/.cargo/bin/$tool"
+      if [[ -x "$bin_path" ]]; then
+        log "  -> $bin_path"
+      else
+        warn "  $tool: cargo reported OK but $bin_path not found — build log tail:"
+        printf '%s\n' "$install_log" | tail -n 40 >&2
+      fi
     else
-      warn "  $tool: cargo reported OK but $bin_path not found — tail of build log:"
-      tail -n 40 "$CARGO_LOG" >&2
+      warn "  failed: $tool — build log tail:"
+      if [[ -n "$install_log" ]]; then
+        printf '%s\n' "$install_log" | tail -n 80 >&2
+      else
+        warn "  (no build output captured)"
+      fi
     fi
-  else
-    warn "  failed: $tool — tail of build log:"
-    tail -n 80 "$CARGO_LOG" >&2
-  fi
-done
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # 4) mise — install via official script (the Linux path in Makefile.toml)
