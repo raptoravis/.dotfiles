@@ -84,6 +84,22 @@ fi
 (( IS_WSL )) && log "WSL2 detected" || log "Pure Linux detected"
 
 # ---------------------------------------------------------------------------
+# 0) 网络代理 — 检测 Clash 7890 端口，设置全局代理环境变量，让 curl/git/wget/
+#    npm/go 等自动走代理。TUN 模式对 https(443) 超时，走 7890 由 Clash 规则
+#    分流（国内直连 / 海外走节点）秒通。
+# ---------------------------------------------------------------------------
+if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+  exec 3>&- 3<&- 2>/dev/null || true
+  export http_proxy=http://127.0.0.1:7890
+  export https_proxy=http://127.0.0.1:7890
+  export HTTP_PROXY=http://127.0.0.1:7890
+  export HTTPS_PROXY=http://127.0.0.1:7890
+  export no_proxy=localhost,127.0.0.1
+  export NO_PROXY=localhost,127.0.0.1
+  log "检测到 7890 代理 — 设置全局 http(s)_proxy"
+fi
+
+# ---------------------------------------------------------------------------
 # 1) apt packages — base toolchain + dev essentials
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
