@@ -10,7 +10,7 @@ The shared, non-secret settings live in:
     common/scripts/aicodingagentsettings/
 
 The machine-local ~/.aicodingagentconfig.jsonc contains only apikey, baseurl,
-models, or {"sub": true}.  It can be bootstrapped from CC Switch.
+models, or {"sub": true}.  It can be imported from CC Switch via --import-only.
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ def save_config(data: dict[str, Any]) -> None:
     header = (
         '// Machine-local provider data. This file contains API keys; do not commit it.\n'
         '// Provider fields are restricted to: apikey, baseurl, models, sub.\n'
-        '// Re-import with: aicodingagentconfig.py --import-only --refresh\n'
+        '// Re-import with: aicodingagentconfig.py --import-only\n'
     )
     atomic_write(CONFIG_PATH, header + json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 
@@ -570,8 +570,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument('agent', nargs='?', help='claude、codex、opencode、grok 等')
     parser.add_argument('provider', nargs='?', help='ds、glm、sub，或 JSONC 中的完整别名')
-    parser.add_argument('--refresh', action='store_true', help='重新从 CC Switch 抽取最小配置')
-    parser.add_argument('--import-only', action='store_true', help='只更新 HOME JSONC，不切换')
+    parser.add_argument('--import-only', action='store_true', help='从 CC Switch 导入到 HOME JSONC，不切换')
     parser.add_argument('--dry-run', action='store_true', help='显示将变更的文件，但不写入')
     parser.add_argument('--list', action='store_true', help='列出 agent/provider')
     return parser
@@ -586,20 +585,27 @@ def print_available(config: dict[str, Any]) -> None:
 def main() -> int:
     args = build_parser().parse_args()
     try:
-        config = load_jsonc(CONFIG_PATH)
-        should_import = args.refresh or args.import_only or not config
-        if should_import:
+        if args.import_only:
             config = read_cc_switch()
             if not args.dry_run:
                 save_config(config)
             action = '将从' if args.dry_run else '已从'
             print(f'{action} CC Switch 抽取最小配置到 {CONFIG_PATH}')
+            validate_config(config)
+            if args.list:
+                print_available(config)
+            return 0
+
+        config = load_jsonc(CONFIG_PATH)
+        if not config:
+            raise ConfigError(
+                f'{CONFIG_PATH} 为空或不存在；'
+                '请先运行 --import-only 从 CC Switch 导入，或手动创建该文件'
+            )
         validate_config(config)
 
         if args.list:
             print_available(config)
-            return 0
-        if args.import_only:
             return 0
         if not args.agent or not args.provider:
             raise ConfigError('正常切换需要两个参数: <agent> <provider>')
