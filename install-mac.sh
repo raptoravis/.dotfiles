@@ -503,6 +503,52 @@ else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
 
+# dsh — DeepSeek Harness bundle (package.json dsh.bundle → cordis.patch.yml).
+if command -v dsh >/dev/null 2>&1; then
+  log "Installing yunxing dsh bundle"
+  dsh plugin --profile web add github:raptoravis/yunxing >/dev/null 2>&1 \
+    || warn "  dsh plugin add failed (may already be installed)"
+else
+  warn "dsh CLI not on PATH -- skipping dsh yunxing bundle (re-run after dsh is installed)"
+fi
+
+# Grok Build — grok CLI plugin marketplace (reads yunxing's .grok-plugin/marketplace.json).
+if command -v grok >/dev/null 2>&1; then
+  log "Installing yunxing Grok plugin (marketplace: yunxing)"
+  grok plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
+    || warn "  grok marketplace add failed (may already be registered)"
+  grok plugin install yunxing --trust >/dev/null 2>&1 \
+    || warn "  grok plugin install failed"
+else
+  warn "grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)"
+fi
+
+# Cursor — no scriptable plugin install; symlink promoted skills into ~/.cursor/skills/.
+YUNXING_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/yunxing"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$YUNXING_SRC/.git" ]; then
+    log "Updating yunxing checkout for Cursor skills"
+    git -C "$YUNXING_SRC" pull --ff-only --quiet 2>/dev/null \
+      || warn "  yunxing pull failed"
+  else
+    log "Cloning yunxing for Cursor skills"
+    mkdir -p "$(dirname "$YUNXING_SRC")"
+    git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git "$YUNXING_SRC" \
+      || warn "  yunxing clone failed"
+  fi
+  if [ -d "$YUNXING_SRC/skills" ]; then
+    log "Linking yunxing skills into ~/.cursor/skills"
+    mkdir -p "$HOME/.cursor/skills"
+    for skill in "$YUNXING_SRC"/skills/engineering/*/SKILL.md "$YUNXING_SRC"/skills/productivity/*/SKILL.md; do
+      [ -e "$skill" ] || continue
+      name="$(basename "$(dirname "$skill")")"
+      ln -sfn "$(dirname "$skill")" "$HOME/.cursor/skills/$name"
+    done
+  fi
+else
+  warn "git not on PATH -- skipping Cursor yunxing skills"
+fi
+
 # ---------------------------------------------------------------------------
 # 8) mise — install runtimes declared in mise config (if any)
 # ---------------------------------------------------------------------------

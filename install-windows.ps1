@@ -860,6 +860,58 @@ if (Test-Cmd opencode) {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
 
+# dsh — DeepSeek Harness bundle (package.json dsh.bundle → cordis.patch.yml).
+if (Test-Cmd dsh) {
+    Write-Step 'Installing yunxing dsh bundle'
+    dsh plugin --profile web add github:raptoravis/yunxing 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed (may already be installed)' }
+} else {
+    Write-Warn2 'dsh CLI not on PATH -- skipping dsh yunxing bundle (re-run after dsh is installed)'
+}
+
+# Grok Build — grok CLI plugin marketplace (reads yunxing's .grok-plugin/marketplace.json).
+if (Test-Cmd grok) {
+    Write-Step 'Installing yunxing Grok plugin (marketplace: yunxing)'
+    grok plugin marketplace add raptoravis/yunxing 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok marketplace add failed (may already be registered)' }
+    grok plugin install yunxing --trust 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok plugin install failed' }
+} else {
+    Write-Warn2 'grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)'
+}
+
+# Cursor — no scriptable plugin install; link promoted skills into ~/.cursor/skills/ (junction, no admin needed).
+$YunxingSrc = Join-Path $env:USERPROFILE '.local\share\yunxing'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $YunxingSrc '.git')) {
+        Write-Step 'Updating yunxing checkout for Cursor skills'
+        git -C $YunxingSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing pull failed' }
+    } else {
+        Write-Step 'Cloning yunxing for Cursor skills'
+        New-Item -ItemType Directory -Force -Path (Split-Path $YunxingSrc) | Out-Null
+        git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git $YunxingSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing clone failed' }
+    }
+    if (Test-Path (Join-Path $YunxingSrc 'skills')) {
+        Write-Step 'Linking yunxing skills into ~/.cursor/skills'
+        $SkillsDir = Join-Path $env:USERPROFILE '.cursor\skills'
+        New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+        foreach ($bucket in @('engineering', 'productivity')) {
+            $BucketDir = Join-Path $YunxingSrc "skills\$bucket"
+            if (Test-Path $BucketDir) {
+                foreach ($skillDir in (Get-ChildItem -Directory $BucketDir)) {
+                    $link = Join-Path $SkillsDir $skillDir.Name
+                    if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
+                    New-Item -ItemType Junction -Path $link -Target $skillDir.FullName | Out-Null
+                }
+            }
+        }
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping Cursor yunxing skills'
+}
+
 # ---------------------------------------------------------------------------
 # 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME, PATH)
 # ---------------------------------------------------------------------------
