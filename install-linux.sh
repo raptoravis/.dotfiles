@@ -183,6 +183,8 @@ sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
 APT_PKGS=(
   zsh fzf ripgrep fd-find bat neovim cmake curl git
   build-essential pkg-config libssl-dev fastfetch tmux mosh
+  libfontconfig1-dev libfreetype6-dev libharfbuzz-dev
+  libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
   unzip ca-certificates gnupg
   nodejs npm
   jq ffmpeg
@@ -306,11 +308,13 @@ CARGO_TOOLS=(
   "cargo-update:cargo-install-update"
   "cargo-make:cargo-make"
   "vivid:vivid"
-  "eza:eza"
+  # eza / yazi-fm / yazi-cli 暂时跳过：palette 0.7.5 与 rustc 1.98+ 的 derive 宏不兼容，
+  # 编译报 `could not find lms/meta in crate`。等上游适配后再取消注释（或改用 cargo binstall）。
+  # "eza:eza"
   "bottom:btm"
   "bat:bat"
-  "yazi-fm:yazi"
-  "yazi-cli:ya"
+  # "yazi-fm:yazi"
+  # "yazi-cli:ya"
   "abtop:abtop"
   "silicon:silicon"
   "ast-grep:ast-grep"
@@ -436,17 +440,23 @@ fi
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
+  # npm 全局安装需要 sudo（apt/nodesource node 的 prefix 是 /usr/local，root 所有）；
+  # sudo 默认 env_reset 会清掉代理，而本机直连不通，用 --preserve-env 显式带上代理。
+  npm_global() {
+    sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY \
+      npm install -g "$@"
+  }
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
-    npm install -g hostc || warn "  hostc install failed"
+    npm_global hostc || warn "  hostc install failed"
   fi
   if ! command -v claude-mem >/dev/null 2>&1; then
     log "Installing claude-mem via npm"
-    npm install -g claude-mem || warn "  claude-mem install failed"
+    npm_global claude-mem || warn "  claude-mem install failed"
   fi
   if ! command -v agent-browser >/dev/null 2>&1; then
     log "Installing agent-browser (browser automation for AI agents) via npm"
-    npm install -g agent-browser || warn "  agent-browser install failed"
+    npm_global agent-browser || warn "  agent-browser install failed"
   fi
   # One-time Chromium download for agent-browser (idempotent — skips if already present)
   if command -v agent-browser >/dev/null 2>&1; then
@@ -456,7 +466,7 @@ if command -v npm >/dev/null 2>&1; then
   # puppeteer — browser automation library (includes Chromium)
   if [ ! -d "$(npm root -g 2>/dev/null)/puppeteer" ]; then
     log "Installing puppeteer (browser automation) via npm"
-    npm install -g puppeteer || warn "  puppeteer install failed"
+    npm_global puppeteer || warn "  puppeteer install failed"
   else
     log "puppeteer already installed"
   fi
@@ -464,31 +474,31 @@ if command -v npm >/dev/null 2>&1; then
   # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
-    npm install -g @anthropic-ai/claude-code || warn "  claude-code install failed"
+    npm_global @anthropic-ai/claude-code || warn "  claude-code install failed"
   fi
   if ! command -v codex >/dev/null 2>&1; then
     log "Installing Codex CLI (@openai/codex)"
-    npm install -g @openai/codex || warn "  codex install failed"
+    npm_global @openai/codex || warn "  codex install failed"
   fi
   if ! command -v opencode >/dev/null 2>&1; then
     log "Installing OpenCode CLI (opencode-ai)"
-    npm install -g opencode-ai || warn "  opencode install failed"
+    npm_global opencode-ai || warn "  opencode install failed"
   fi
   if ! command -v reasonix >/dev/null 2>&1; then
     log "Installing DeepSeek-Reasonix CLI (reasonix)"
-    npm i -g reasonix@next || warn "  reasonix install failed (requires Node.js >= 22)"
+    npm_global reasonix@next || warn "  reasonix install failed (requires Node.js >= 22)"
   fi
   # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
   # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
   if ! command -v mimo >/dev/null 2>&1; then
     log "Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)"
-    npm install -g @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
+    npm_global @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
   fi
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
   if ! command -v pi >/dev/null 2>&1; then
     log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
-    npm install -g @earendil-works/pi-coding-agent || warn "  pi install failed"
+    npm_global @earendil-works/pi-coding-agent || warn "  pi install failed"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -626,8 +636,9 @@ if ! command -v corepack >/dev/null 2>&1; then
 fi
 if command -v corepack >/dev/null 2>&1; then
   log "Enabling pnpm via corepack"
-  corepack enable 2>/dev/null || warn "  corepack enable failed"
-  corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
+  sudo corepack enable 2>/dev/null || warn "  corepack enable failed"
+  sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY \
+    corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
 else
   warn "corepack still not on PATH -- skipping pnpm activation"
 fi
