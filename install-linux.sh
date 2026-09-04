@@ -299,24 +299,45 @@ rustup component add clippy rustfmt 2>/dev/null || true
 #    coreutils is provided by the base system on Linux, so we skip it.
 # ---------------------------------------------------------------------------
 log "Installing Cargo tools"
-CARGO_TOOLS=(dotter cargo-update vivid eza bottom bat yazi-fm yazi-cli abtop silicon ast-grep)
+# crate:binary 对 —— 部分 crate 产出的二进制名与 crate 名不同
+# （bottom -> btm, cargo-update -> cargo-install-update, yazi-fm -> yazi, yazi-cli -> ya）。
+CARGO_TOOLS=(
+  "dotter:dotter"
+  "cargo-update:cargo-install-update"
+  "cargo-make:cargo-make"
+  "vivid:vivid"
+  "eza:eza"
+  "bottom:btm"
+  "bat:bat"
+  "yazi-fm:yazi"
+  "yazi-cli:ya"
+  "abtop:abtop"
+  "silicon:silicon"
+  "ast-grep:ast-grep"
+)
 if ! command -v cargo >/dev/null 2>&1; then
   warn "cargo not on PATH — skipping Cargo tools (run 'source \$HOME/.cargo/env' or re-install rustup)"
 else
-  for tool in "${CARGO_TOOLS[@]}"; do
+  for entry in "${CARGO_TOOLS[@]}"; do
+    crate="${entry%%:*}"
+    bin="${entry##*:}"
+    if command -v "$bin" >/dev/null 2>&1; then
+      log "  $crate already installed ($bin on PATH)"
+      continue
+    fi
     # 捕获完整输出到变量：不依赖临时文件/重定向，失败时总能 tail 到真实报错
     # （如缺 cc/gcc 的 ToolNotFound，或 cargo 本身 command not found）。
-    if install_log="$(cargo install "$tool" 2>&1)"; then
+    if install_log="$(cargo install "$crate" 2>&1)"; then
       # Verify binary landed — cargo may exit 0 but still fail to link.
-      bin_path="$HOME/.cargo/bin/$tool"
+      bin_path="$HOME/.cargo/bin/$bin"
       if [[ -x "$bin_path" ]]; then
         log "  -> $bin_path"
       else
-        warn "  $tool: cargo reported OK but $bin_path not found — build log tail:"
+        warn "  $crate: cargo reported OK but $bin_path not found — build log tail:"
         printf '%s\n' "$install_log" | tail -n 40 >&2
       fi
     else
-      warn "  failed: $tool — build log tail:"
+      warn "  failed: $crate — build log tail:"
       if [[ -n "$install_log" ]]; then
         printf '%s\n' "$install_log" | tail -n 80 >&2
       else

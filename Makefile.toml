@@ -54,6 +54,7 @@ script = [
 script = [
     "cargo install dotter",
     "cargo install cargo-update",
+    "cargo install cargo-make",
     "cargo install vivid",
     "cargo install eza",
     "cargo install bottom",
