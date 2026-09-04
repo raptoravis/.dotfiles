@@ -387,8 +387,11 @@ fi
 # 7) Oh My Zsh (unattended) + plugins
 # ---------------------------------------------------------------------------
 export ZSH="$ZSH_CUSTOM_DIR"
-if [[ ! -d "$ZSH" ]]; then
+if [[ ! -f "$ZSH/oh-my-zsh.sh" ]]; then
   log "Installing Oh My Zsh into $ZSH"
+  # 目录存在但缺 oh-my-zsh.sh = 历史遗留的空壳（clone 中途失败）。install.sh 遇到已存在的
+  # 非 git 仓库目录不会重装，所以先清掉（custom 里的插件稍后由下面的 clone_plugin 重建）。
+  [[ -d "$ZSH" ]] && rm -rf "$ZSH"
   RUNZSH=no CHSH=no KEEP_ZSHRC=yes \
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
     "" --unattended
