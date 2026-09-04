@@ -497,10 +497,12 @@ if command -v npm >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
     agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
   fi
-  # puppeteer — browser automation library (includes Chromium)
+  # puppeteer — 浏览器自动化库（自带 Chromium）。--ignore-scripts 跳过 postinstall 的
+  # Chromium 下载：storage.googleapis.com 走 Clash 代理返回 403，~160MB 会一直重试卡死；
+  # 且上面装的 agent-browser 已带 Chromium，这份重复。
   if [ ! -d "$(npm root -g 2>/dev/null)/puppeteer" ]; then
     log "Installing puppeteer (browser automation) via npm"
-    npm_global puppeteer || warn "  puppeteer install failed"
+    npm_global puppeteer --ignore-scripts || warn "  puppeteer install failed"
   else
     log "puppeteer already installed"
   fi

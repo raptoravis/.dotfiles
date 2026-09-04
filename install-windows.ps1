@@ -667,11 +667,12 @@ if (Test-Cmd npm) {
         agent-browser install 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install (Chromium) failed' }
     }
-    # puppeteer — browser automation library (includes Chromium)
+    # puppeteer — browser automation library (includes Chromium). --ignore-scripts skips the
+    # postinstall Chromium download (redundant: agent-browser above already ships Chromium).
     $puppeteerGlobal = Join-Path (npm root -g 2>$null) 'puppeteer'
     if (-not (Test-Path $puppeteerGlobal)) {
         Write-Step 'Installing puppeteer (browser automation) via npm'
-        npm install -g puppeteer
+        npm install -g puppeteer --ignore-scripts
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  puppeteer install failed' }
     } else {
         Write-Host '  puppeteer already installed'

@@ -318,10 +318,11 @@ if command -v npm >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
     agent-browser install 2>/dev/null || warn "  agent-browser install (Chromium) failed"
   fi
-  # puppeteer — browser automation library (includes Chromium)
+  # puppeteer — browser automation library (includes Chromium). --ignore-scripts skips the
+  # postinstall Chromium download (redundant: agent-browser above already ships Chromium).
   if [ ! -d "$(npm root -g 2>/dev/null)/puppeteer" ]; then
     log "Installing puppeteer (browser automation) via npm"
-    npm install -g puppeteer || warn "  puppeteer install failed"
+    npm install -g puppeteer --ignore-scripts || warn "  puppeteer install failed"
   else
     log "puppeteer already installed"
   fi
