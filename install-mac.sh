@@ -191,6 +191,14 @@ fi
 # shellcheck disable=SC1091
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 rustup component add clippy rustfmt 2>/dev/null || true
+# rustup 偶发安装不完整：component 标记已装但 std 的 .rlib 实际缺失，
+# 会导致后续 cargo install 全部报 can't find crate for std。
+if ! compgen -G "$HOME/.rustup/toolchains/"*/lib/rustlib/*/lib/libstd-*.rlib >/dev/null; then
+  warn "rust-std missing/corrupt — reinstalling stable toolchain"
+  rustup toolchain uninstall stable 2>/dev/null || true
+  rustup toolchain install stable --profile default
+  rustup component add clippy rustfmt 2>/dev/null || true
+fi
 
 # ---------------------------------------------------------------------------
 # 5) Cargo tools — skip if the produced binary is already on PATH.
