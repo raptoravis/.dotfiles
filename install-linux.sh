@@ -97,6 +97,24 @@ if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
   export no_proxy=localhost,127.0.0.1
   export NO_PROXY=localhost,127.0.0.1
   log "检测到 7890 代理 — 设置全局 http(s)_proxy"
+
+  # 持久化到 bash 交互 shell（WSL 默认 login shell 是 bash）。zsh 的代理已在
+  # common/zsh/.zshenv 持久化，但 bash 的 ~/.bashrc 没有——补上，让 gh/curl/
+  # git 等 CLI 在 bash 里也自动走 7890。幂等：已含 PROXY_URL 则跳过。
+  if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'PROXY_URL=' "$HOME/.bashrc" 2>/dev/null; then
+    log "持久化代理到 ~/.bashrc"
+    cat >> "$HOME/.bashrc" <<'EOF'
+
+# Proxy (Clash / mihomo default port 7890) — mirrors common/zsh/.zshenv
+export PROXY_URL="http://127.0.0.1:7890"
+export http_proxy="$PROXY_URL"
+export https_proxy="$PROXY_URL"
+export all_proxy="$PROXY_URL"
+export HTTP_PROXY="$PROXY_URL"
+export HTTPS_PROXY="$PROXY_URL"
+export ALL_PROXY="$PROXY_URL"
+EOF
+  fi
 fi
 
 # ---------------------------------------------------------------------------
