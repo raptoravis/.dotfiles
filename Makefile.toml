@@ -56,7 +56,8 @@ script = [
     "cargo install cargo-update",
     "cargo install cargo-make",
     "cargo install vivid",
-    "cargo install eza",
+    # eza 不再走 cargo：palette 0.7.5 与 rustc 1.98+ 的 derive 宏不兼容。
+    # 改为 install-linux.sh 用 apt（Linux）/ Brewfile 用 brew（macOS）安装。
     "cargo install bottom",
     "cargo install bat",
 ]
@@ -185,7 +186,14 @@ script = [
 
     "echo '--- Installing CLI tools ---'",
     "curl -sS https://starship.rs/install.sh | sh -s -- -y",
-    "cargo install yazi-fm yazi-cli",
+    "# yazi 不再走 cargo（palette 0.7.5 与 rustc 1.98+ 不兼容），改用官方 GitHub Release 预编译二进制",
+    "if ! command -v yazi >/dev/null 2>&1; then",
+    "  mkdir -p \"$HOME/.local/bin\"",
+    "  YAZI_ARCH=\"$(uname -m)\"",
+    "  YAZI_TMP=\"$(mktemp -d)\"",
+    "  curl -fsSL \"https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}-unknown-linux-gnu.zip\" -o \"$YAZI_TMP/yazi.zip\" && unzip -q -o \"$YAZI_TMP/yazi.zip\" -d \"$YAZI_TMP\" && install -m 0755 \"$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/yazi\" \"$HOME/.local/bin/yazi\" && install -m 0755 \"$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/ya\" \"$HOME/.local/bin/ya\" || echo '  yazi install failed'",
+    "  rm -rf \"$YAZI_TMP\"",
+    "fi",
     "go install github.com/jesseduffield/lazygit@latest",
     "go install github.com/jesseduffield/lazydocker@latest",
 

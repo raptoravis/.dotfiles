@@ -308,13 +308,12 @@ CARGO_TOOLS=(
   "cargo-update:cargo-install-update"
   "cargo-make:cargo-make"
   "vivid:vivid"
-  # eza / yazi-fm / yazi-cli 暂时跳过：palette 0.7.5 与 rustc 1.98+ 的 derive 宏不兼容，
-  # 编译报 `could not find lms/meta in crate`。等上游适配后再取消注释（或改用 cargo binstall）。
-  # "eza:eza"
+  # eza 改用 apt 预编译二进制（见下方 apt fallback）：cargo 源码编译在 rustc 1.98+
+  # 会因 palette 0.7.5 的 derive 宏报 `could not find lms/meta in crate`。
   "bottom:btm"
   "bat:bat"
-  # "yazi-fm:yazi"
-  # "yazi-cli:ya"
+  # yazi-fm / yazi-cli 改用官方 GitHub Release 预编译二进制（见下方 fallback）：
+  # 同样受 palette 0.7.5 影响，且 apt 无包。
   "abtop:abtop"
   "silicon:silicon"
   "ast-grep:ast-grep"
@@ -349,6 +348,38 @@ else
       fi
     fi
   done
+fi
+
+# eza — cargo 源码编译与 rustc 1.98+ 不兼容（palette 0.7.5 的 derive 宏），改用 apt
+# 预编译二进制。Ubuntu universe 的 eza（0.23.x）已足够新，支持别名里用到的
+# --sort=modified / --group-directories-first / --icons 等 flag。
+if ! command -v eza >/dev/null 2>&1; then
+  log "Installing eza via apt (cargo build broken: palette 0.7.5 vs rustc 1.98+)"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq eza \
+    || warn "  eza install failed (apt unavailable?)"
+fi
+
+# yazi（yazi-fm → yazi / yazi-cli → ya）— cargo 源码编译同样受 palette 0.7.5 影响，
+# 且 apt 无包，改用官方 GitHub Release 的预编译二进制（含 yazi 与 ya），放入 ~/.local/bin。
+if ! command -v yazi >/dev/null 2>&1 || ! command -v ya >/dev/null 2>&1; then
+  YAZI_ARCH="$(uname -m)"
+  if [[ "$YAZI_ARCH" == x86_64 || "$YAZI_ARCH" == aarch64 ]]; then
+    log "Installing yazi via official GitHub Release (cargo build broken: palette 0.7.5)"
+    mkdir -p "$HOME/.local/bin"
+    YAZI_TMP="$(mktemp -d)"
+    if curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}-unknown-linux-gnu.zip" \
+           -o "$YAZI_TMP/yazi.zip" \
+       && unzip -q -o "$YAZI_TMP/yazi.zip" -d "$YAZI_TMP" \
+       && install -m 0755 "$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/yazi" "$HOME/.local/bin/yazi" \
+       && install -m 0755 "$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/ya"    "$HOME/.local/bin/ya"; then
+      log "  -> yazi + ya -> $HOME/.local/bin"
+    else
+      warn "  yazi install failed (download / extract error)"
+    fi
+    rm -rf "$YAZI_TMP"
+  else
+    warn "  unsupported arch ($YAZI_ARCH) — skipping yazi"
+  fi
 fi
 
 # ---------------------------------------------------------------------------

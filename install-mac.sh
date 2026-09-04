@@ -206,12 +206,11 @@ CARGO_TOOLS=(
   "dotter:dotter"
   "cargo-update:cargo-install-update"
   "vivid:vivid"
-  "eza:eza"
+  # eza 由 Brewfile 用 brew 装（macOS），不走 cargo：palette 0.7.5 与 rustc 1.98+ 不兼容。
   "bottom:btm"
   "bat:bat"
   "mise:mise"
-  "yazi-fm:yazi"
-  "yazi-cli:ya"
+  # yazi-fm / yazi-cli 由 Brewfile 用 brew 装（macOS），不走 cargo：同样受 palette 0.7.5 影响。
   "abtop:abtop"
 )
 for entry in "${CARGO_TOOLS[@]}"; do
