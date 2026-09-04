@@ -77,6 +77,16 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
 
+# WSL interop 会把 Windows 的 PATH 追加进来（appendWindowsPath=true），于是
+# `command -v claude` 可能命中 /mnt/c/... 下的 Windows 同名二进制。对 AI agent
+# CLI 我们只关心 WSL 本地安装，把 /mnt/*（以及 UNC //*）当作「不存在」，避免
+# 安装/注册守卫被 Windows host 的版本骗过而静默跳过。
+cmd_exists_local() {
+  local p
+  p="$(command -v "$1" 2>/dev/null)" || return 1
+  [[ "$p" != /mnt/* && "$p" != //* ]]
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
   err "Linux/WSL2 only. Detected: $(uname -s)"
   exit 1
@@ -508,43 +518,43 @@ if command -v npm >/dev/null 2>&1; then
   fi
 
   # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
-  if ! command -v claude >/dev/null 2>&1; then
+  if ! cmd_exists_local claude; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
     npm_global @anthropic-ai/claude-code || warn "  claude-code install failed"
   fi
-  if ! command -v codex >/dev/null 2>&1; then
+  if ! cmd_exists_local codex; then
     log "Installing Codex CLI (@openai/codex)"
     npm_global @openai/codex || warn "  codex install failed"
   fi
-  if ! command -v opencode >/dev/null 2>&1; then
+  if ! cmd_exists_local opencode; then
     log "Installing OpenCode CLI (opencode-ai)"
     npm_global opencode-ai || warn "  opencode install failed"
   fi
-  if ! command -v reasonix >/dev/null 2>&1; then
+  if ! cmd_exists_local reasonix; then
     log "Installing DeepSeek-Reasonix CLI (reasonix)"
     npm_global reasonix@next || warn "  reasonix install failed (requires Node.js >= 22)"
   fi
   # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
   # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
-  if ! command -v mimo >/dev/null 2>&1; then
+  if ! cmd_exists_local mimo; then
     log "Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)"
     npm_global @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
   fi
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-  if ! command -v pi >/dev/null 2>&1; then
+  if ! cmd_exists_local pi; then
     log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
     npm_global @earendil-works/pi-coding-agent || warn "  pi install failed"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
-  if command -v claude >/dev/null 2>&1; then
+  if cmd_exists_local claude; then
     log "Registering context7 MCP for Claude Code (idempotent)"
     claude mcp add context7 -s user -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
-  if command -v codex >/dev/null 2>&1; then
+  if cmd_exists_local codex; then
     log "Registering context7 MCP for Codex (idempotent)"
     codex mcp add context7 -- npx -y @upstash/context7-mcp 2>/dev/null \
       || log "  context7 MCP already registered for codex (or registration failed — see 'codex mcp list')"
@@ -553,12 +563,12 @@ if command -v npm >/dev/null 2>&1; then
   # Register chrome-devtools MCP (local stdio via npx) for Claude Code & Codex.
   # Drives a real Chrome via the DevTools Protocol; idempotent — `mcp add`
   # errors if already registered, which we swallow.
-  if command -v claude >/dev/null 2>&1; then
+  if cmd_exists_local claude; then
     log "Registering chrome-devtools MCP for Claude Code (idempotent)"
     claude mcp add chrome-devtools -s user -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
       || log "  chrome-devtools MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
-  if command -v codex >/dev/null 2>&1; then
+  if cmd_exists_local codex; then
     log "Registering chrome-devtools MCP for Codex (idempotent)"
     codex mcp add chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>/dev/null \
       || log "  chrome-devtools MCP already registered for codex (or registration failed — see 'codex mcp list')"
@@ -567,12 +577,12 @@ if command -v npm >/dev/null 2>&1; then
   # Register zcaceres/fetch-mcp (local stdio via npx, package `mcp-fetch-server`)
   # for Claude Code & Codex. Fetches web content as HTML/markdown/text/JSON.
   # Idempotent — `mcp add` errors if already registered, which we swallow.
-  if command -v claude >/dev/null 2>&1; then
+  if cmd_exists_local claude; then
     log "Registering fetch MCP for Claude Code (idempotent)"
     claude mcp add fetch -s user -- npx -y mcp-fetch-server 2>/dev/null \
       || log "  fetch MCP already registered for claude (or registration failed — see 'claude mcp list')"
   fi
-  if command -v codex >/dev/null 2>&1; then
+  if cmd_exists_local codex; then
     log "Registering fetch MCP for Codex (idempotent)"
     codex mcp add fetch -- npx -y mcp-fetch-server 2>/dev/null \
       || log "  fetch MCP already registered for codex (or registration failed — see 'codex mcp list')"
@@ -588,7 +598,7 @@ if command -v npm >/dev/null 2>&1; then
   if [ -z "$GH_MCP_PAT" ] && command -v gh >/dev/null 2>&1; then
     GH_MCP_PAT="$(gh auth token 2>/dev/null || true)"
   fi
-  if command -v claude >/dev/null 2>&1; then
+  if cmd_exists_local claude; then
     if claude mcp get github >/dev/null 2>&1; then
       log "github MCP already registered for Claude Code (user scope)"
     elif [ -n "$GH_MCP_PAT" ]; then
@@ -599,7 +609,7 @@ if command -v npm >/dev/null 2>&1; then
       warn "  no GitHub PAT found (set GITHUB_PERSONAL_ACCESS_TOKEN or run 'gh auth login') — skipping github MCP for Claude Code (remote endpoint OAuth/DCR is unsupported)"
     fi
   fi
-  if command -v codex >/dev/null 2>&1; then
+  if cmd_exists_local codex; then
     log "Registering github MCP for Codex (remote HTTP; run 'codex mcp login github' to OAuth)"
     codex mcp add github --url "$GH_MCP_URL" 2>/dev/null \
       || log "  github MCP already registered for codex (or registration failed — see 'codex mcp list')"
@@ -626,14 +636,14 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
-    if command -v opencode >/dev/null 2>&1; then
+    if cmd_exists_local opencode; then
       log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
     fi
-    if command -v mimo >/dev/null 2>&1; then
+    if cmd_exists_local mimo; then
       log "Registering github + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
@@ -690,7 +700,7 @@ fi
 #     OpenCode — native plugin module via git URL.
 # ---------------------------------------------------------------------------
 # Claude Code — `claude plugin` CLI (declarative settings.json is the fallback).
-if command -v claude >/dev/null 2>&1; then
+if cmd_exists_local claude; then
   log "Installing yunxing Claude Code plugin (marketplace: yunxing)"
   claude plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
     || warn "  claude marketplace add failed (may already be registered)"
@@ -700,7 +710,7 @@ else
   warn "claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)"
 fi
 
-if command -v codex >/dev/null 2>&1; then
+if cmd_exists_local codex; then
   log "Installing yunxing Codex plugin (marketplace: yunxing)"
   codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
     || warn "  codex marketplace add failed"
@@ -711,7 +721,7 @@ else
 fi
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
-if command -v opencode >/dev/null 2>&1; then
+if cmd_exists_local opencode; then
   log "Installing yunxing OpenCode plugin"
   opencode plugin --force -g 'yunxing@git+https://github.com/raptoravis/yunxing.git' >/dev/null 2>&1 \
     || warn "  opencode plugin install failed"
