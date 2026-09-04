@@ -18,7 +18,7 @@ for arg in "$@"; do
       cat <<EOF
 Usage: $0 [--uninstallagents]
   --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode,
-                     Reasonix, MiMo Code, Pi) and remove their config dirs.
+                     DeepSeek Harness, Pi) and remove their config dirs.
 EOF
       exit 0
       ;;
@@ -31,7 +31,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "reasonix" "@mimo-ai/cli" "@earendil-works/pi-coding-agent"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@deepseek-ai/dsh" "@earendil-works/pi-coding-agent"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -44,16 +44,14 @@ if (( UNINSTALL_AGENTS )); then
     "$HOME/.claude"
     "${CODEX_HOME:-$HOME/.codex}"
     "$HOME/.config/opencode"
-    "${REASONIX_HOME:-$HOME/.reasonix}"
-    "$HOME/.config/mimocode"
+    "${DSH_HOME:-$HOME/.dsh}"
     "$HOME/.pi"
     "$HOME/.agents"
     "$HOME/.cache/dotfiles/agent-plugins"
     "$HOME/.cache/opencode"
     "$HOME/.cache/claude"
     "$HOME/.cache/codex"
-    "$HOME/.cache/mimocode"
-    "$HOME/.cache/reasonix"
+    "$HOME/.cache/dsh"
   )
   for d in "${AGENT_DIRS[@]}"; do
     if [[ -d "$d" || -L "$d" ]]; then
@@ -327,7 +325,7 @@ if command -v npm >/dev/null 2>&1; then
     log "puppeteer already installed"
   fi
 
-  # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
+  # AI coding CLIs (Claude Code / Codex / OpenCode / DeepSeek Harness / Pi)
   if ! command -v claude >/dev/null 2>&1; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
     npm install -g @anthropic-ai/claude-code || warn "  claude-code install failed"
@@ -340,15 +338,11 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing OpenCode CLI (opencode-ai)"
     npm install -g opencode-ai || warn "  opencode install failed"
   fi
-  if ! command -v reasonix >/dev/null 2>&1; then
-    log "Installing DeepSeek-Reasonix CLI (reasonix)"
-    npm i -g reasonix@next || warn "  reasonix install failed (requires Node.js >= 22)"
-  fi
-  # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
-  # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
-  if ! command -v mimo >/dev/null 2>&1; then
-    log "Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)"
-    npm install -g @mimo-ai/cli || warn "  mimo (MiMo Code) install failed"
+  # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
+  # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
+  if ! command -v dsh >/dev/null 2>&1; then
+    log "Installing DeepSeek Harness CLI (@deepseek-ai/dsh)"
+    npm install -g @deepseek-ai/dsh || warn "  dsh (DeepSeek Harness) install failed (requires Node.js >= 22.19)"
   fi
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
@@ -402,7 +396,7 @@ if command -v npm >/dev/null 2>&1; then
   # does NOT support OAuth dynamic client registration, so clients must auth with a
   # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
   # GH_TOKEN env vars, then the gh CLI's stored token. Claude/Codex register via
-  # their CLIs; opencode & MiMo Code (an opencode fork) take a JSON `mcp` entry.
+  # their CLIs; opencode takes a JSON `mcp` entry.
   GH_MCP_URL="https://api.githubcopilot.com/mcp/"
   GH_MCP_PAT="${GITHUB_PERSONAL_ACCESS_TOKEN:-${GH_TOKEN:-}}"
   if [ -z "$GH_MCP_PAT" ] && command -v gh >/dev/null 2>&1; then
@@ -424,7 +418,7 @@ if command -v npm >/dev/null 2>&1; then
     codex mcp add github --url "$GH_MCP_URL" 2>/dev/null \
       || log "  github MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
-  # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
+  # opencode: merge an `mcp.github` (remote) entry into its JSON
   # config idempotently.
   if command -v node >/dev/null 2>&1; then
     register_json_mcp() {  # $1=config file  $2=JSON object to merge under .mcp
@@ -452,27 +446,6 @@ if command -v npm >/dev/null 2>&1; then
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
-    fi
-    if command -v mimo >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)"
-      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$GH_REMOTE_JSON"
-      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$CDT_LOCAL_JSON"
-      register_json_mcp "$HOME/.config/mimocode/mimocode.json" "$FETCH_LOCAL_JSON"
-    fi
-    # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
-    # Can't take a remote HTTP url so github stays with its existing stdio server.
-    REASONIX_CFG="${REASONIX_HOME:-$HOME/.reasonix}/config.json"
-    if [ -f "$REASONIX_CFG" ]; then
-      log "Registering context7 + chrome-devtools + fetch MCP with reasonix"
-      REASONIX_CFG="$REASONIX_CFG" node -e '
-        const fs=require("fs"), p=process.env.REASONIX_CFG;
-        const c=JSON.parse(fs.readFileSync(p,"utf8"));
-        c.mcp=Array.isArray(c.mcp)?c.mcp:[];
-        const entries=["context7=npx -y @upstash/context7-mcp","chrome-devtools=npx -y chrome-devtools-mcp@latest","fetch=npx -y mcp-fetch-server"];
-        let changed=false;
-        for(const e of entries){const n=e.split("=")[0];if(!c.mcp.some(m=>typeof m==="string"&&m.startsWith(n+"="))){c.mcp.push(e);changed=true;}}
-        if(changed)fs.writeFileSync(p,JSON.stringify(c,null,2)+"\n");
-      ' || warn "  failed to register MCPs with reasonix"
     fi
   fi
 else

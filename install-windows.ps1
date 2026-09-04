@@ -16,8 +16,8 @@ param(
     # tools launched outside pwsh (vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
-    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Reasonix,
-    # MiMo Code, Pi) and remove their config directories.
+    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode,
+    # DeepSeek Harness, Pi) and remove their config directories.
     [switch]$UninstallAgents
 )
 
@@ -38,7 +38,7 @@ function Test-Admin {
 }
 
 $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-$ReasonixHome = if ($env:REASONIX_HOME) { $env:REASONIX_HOME } else { Join-Path $env:USERPROFILE '.reasonix' }
+$DshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
 
 if ($UninstallAgents) {
     Write-Step 'Uninstalling AI agent CLIs and cleaning config directories'
@@ -49,8 +49,7 @@ if ($UninstallAgents) {
             '@anthropic-ai/claude-code',
             '@openai/codex',
             'opencode-ai',
-            'reasonix',
-            '@mimo-ai/cli',
+            '@deepseek-ai/dsh',
             '@earendil-works/pi-coding-agent'
         )
         foreach ($pkg in $AgentPackages) {
@@ -70,16 +69,14 @@ if ($UninstallAgents) {
         (Join-Path $env:USERPROFILE '.claude'),
         $CodexHome,
         (Join-Path $env:USERPROFILE '.config\opencode'),
-        $ReasonixHome,
-        (Join-Path $env:USERPROFILE '.config\mimocode'),
+        $DshHome,
         (Join-Path $env:USERPROFILE '.pi'),
         (Join-Path $env:USERPROFILE '.agents'),
         (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'),
         (Join-Path $env:USERPROFILE '.cache\opencode'),
         (Join-Path $env:USERPROFILE '.cache\claude'),
         (Join-Path $env:USERPROFILE '.cache\codex'),
-        (Join-Path $env:USERPROFILE '.cache\mimocode'),
-        (Join-Path $env:USERPROFILE '.cache\reasonix')
+        (Join-Path $env:USERPROFILE '.cache\dsh')
     )
     foreach ($d in $AgentDirs) {
         if (Test-Path $d) {
@@ -677,7 +674,7 @@ if (Test-Cmd npm) {
     } else {
         Write-Host '  puppeteer already installed'
     }
-    # AI coding CLIs (Claude Code / Codex / OpenCode / Reasonix / Pi)
+    # AI coding CLIs (Claude Code / Codex / OpenCode / DeepSeek Harness / Pi)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
         npm install -g '@anthropic-ai/claude-code'
@@ -693,17 +690,12 @@ if (Test-Cmd npm) {
         npm install -g 'opencode-ai'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode install failed' }
     }
-    if (-not (Test-Cmd reasonix)) {
-        Write-Step 'Installing DeepSeek-Reasonix CLI (reasonix)'
-        npm i -g reasonix@next
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  reasonix install failed (requires Node.js >= 22)' }
-    }
-    # Xiaomi MiMo Code — an OpenCode fork tuned for long-horizon tasks. bin: `mimo`,
-    # config: ~/.config/mimocode/mimocode.json (same JSON schema as opencode).
-    if (-not (Test-Cmd mimo)) {
-        Write-Step 'Installing Xiaomi MiMo Code CLI (@mimo-ai/cli)'
-        npm install -g '@mimo-ai/cli'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  mimo (MiMo Code) install failed' }
+    # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
+    # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
+    if (-not (Test-Cmd dsh)) {
+        Write-Step 'Installing DeepSeek Harness CLI (@deepseek-ai/dsh)'
+        npm install -g '@deepseek-ai/dsh'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh (DeepSeek Harness) install failed (requires Node.js >= 22.19)' }
     }
     # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
     # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
@@ -763,7 +755,7 @@ if (Test-Cmd npm) {
     # does NOT support OAuth dynamic client registration, so clients must auth with a
     # PAT in an Authorization header. Token source: GITHUB_PERSONAL_ACCESS_TOKEN /
     # GH_TOKEN env vars, then the gh CLI's stored token. Claude/Codex register via
-    # their CLIs; opencode & MiMo Code (an opencode fork) take a JSON `mcp` entry.
+    # their CLIs; opencode takes a JSON `mcp` entry.
     $GhMcpUrl = 'https://api.githubcopilot.com/mcp/'
     $GhMcpPat = $env:GITHUB_PERSONAL_ACCESS_TOKEN
     if (-not $GhMcpPat) { $GhMcpPat = $env:GH_TOKEN }
@@ -785,7 +777,7 @@ if (Test-Cmd npm) {
         codex mcp add github --url $GhMcpUrl 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  github MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
-    # opencode + MiMo Code: merge an `mcp.github` (remote) entry into their JSON
+    # opencode: merge an `mcp.github` (remote) entry into its JSON
     # config idempotently.
     if (Test-Cmd node) {
         function Register-JsonMcp([string]$File, [string]$AddJson) {
@@ -809,39 +801,6 @@ if (Test-Cmd npm) {
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
-        }
-        if (Test-Cmd mimo) {
-            Write-Step 'Registering github + chrome-devtools + fetch MCP for MiMo Code (~/.config/mimocode/mimocode.json)'
-            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $GhRemoteJson
-            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $CdtLocalJson
-            Register-JsonMcp "$HOME\.config\mimocode\mimocode.json" $FetchLocalJson
-        }
-        # reasonix: its `mcp` config is a stdio command-string array (`"name=cmd args"`).
-        # Can't take a remote HTTP url so github stays with its existing stdio server.
-        $ReasonixCfg = Join-Path $ReasonixHome 'config.json'
-        if (Test-Path $ReasonixCfg) {
-            Write-Step 'Registering context7 + chrome-devtools + fetch MCP with reasonix'
-            try {
-                $cfg = Get-Content $ReasonixCfg -Raw | ConvertFrom-Json
-                if (-not $cfg.PSObject.Properties.Match('mcp').Count) {
-                    $cfg | Add-Member -NotePropertyName mcp -NotePropertyValue @() -Force
-                }
-                $reasonixMcpEntries = @(
-                    'context7=npx -y @upstash/context7-mcp'
-                    'chrome-devtools=npx -y chrome-devtools-mcp@latest'
-                    'fetch=npx -y mcp-fetch-server'
-                )
-                foreach ($entry in $reasonixMcpEntries) {
-                    $prefix = $entry.Split('=')[0] + '='
-                    $existing = @($cfg.mcp) | Where-Object { $_ -like "$prefix*" }
-                    if (-not $existing) {
-                        $cfg.mcp = @($cfg.mcp) + $entry
-                    }
-                }
-                ($cfg | ConvertTo-Json -Depth 20) | Set-Content $ReasonixCfg -Encoding utf8
-            } catch {
-                Write-Warn2 '  failed to register MCPs with reasonix'
-            }
         }
     }
 } else {
