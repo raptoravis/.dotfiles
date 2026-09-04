@@ -104,12 +104,15 @@ fi
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 
-# 国内镜像源：默认清华 TUNA，可用 APT_MIRROR 覆盖（需以 /ubuntu/ 结尾，如
-# APT_MIRROR=https://mirrors.aliyun.com/ubuntu/）。仅对 Ubuntu 生效、幂等
+# 国内镜像源：默认阿里云，可用 APT_MIRROR 覆盖（需以 /ubuntu/ 结尾，如
+# APT_MIRROR=https://mirrors.ustc.edu.cn/ubuntu/）。仅对 Ubuntu 生效、幂等
 # （当前已是该镜像则跳过）。解决国内直连 archive.ubuntu.com 跨境链路不稳、
 # `apt update` 卡在 "Waiting for headers" 的问题。
+# 选阿里云而非清华 TUNA：TUNA 对走代理的请求返回 403（x-tuna-mirror-id
+# neomirrors 反代理），在「必须走 Clash 代理」的网络下装不上包；阿里云对
+# 代理访问宽容（走 7890 仍 200）。
 if [[ -r /etc/os-release ]] && grep -q '^ID=ubuntu$' /etc/os-release; then
-  APT_MIRROR="${APT_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/ubuntu/}"
+  APT_MIRROR="${APT_MIRROR:-https://mirrors.aliyun.com/ubuntu/}"
   CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}")"
   APT_SOURCES="/etc/apt/sources.list.d/ubuntu.sources"        # Ubuntu 24.04+ deb822
   [[ -f "$APT_SOURCES" ]] || APT_SOURCES="/etc/apt/sources.list"  # 旧版 one-line
@@ -143,19 +146,18 @@ EOF
   fi
 fi
 
-# apt 走 7890 代理（Clash 混合端口）：TUN 模式对 https(443) 会超时，导致
-# `apt update` 卡在等待响应头。走 7890 由 Clash 规则分流（国内直连 / 海外
-# 走节点）秒通。与上面换国内源配合使用。
+# apt 走 7890 代理（Clash 混合端口）：本机网络「直连 IPv4 全断」（连 baidu
+# 都超时），只能走代理出网。国内镜像换阿里云后走代理仍 200，无需 DIRECT
+# 例外（直连不通，加 DIRECT 反而下载超时）。无条件覆盖，清掉可能残留的
+# per-host DIRECT 配置。
 if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
   exec 3>&- 3<&- 2>/dev/null || true
   APT_PROXY_CONF="/etc/apt/apt.conf.d/01proxy"
-  if [[ ! -f "$APT_PROXY_CONF" ]] || ! grep -q '127.0.0.1:7890' "$APT_PROXY_CONF" 2>/dev/null; then
-    log "配置 apt 走 7890 代理 (Clash 分流)"
-    sudo tee "$APT_PROXY_CONF" >/dev/null <<'EOF'
+  log "配置 apt 走 7890 代理"
+  sudo tee "$APT_PROXY_CONF" >/dev/null <<'EOF'
 Acquire::http::Proxy "http://127.0.0.1:7890";
 Acquire::https::Proxy "http://127.0.0.1:7890";
 EOF
-  fi
 fi
 
 log "Updating apt and installing base packages"
@@ -238,8 +240,9 @@ if ! command -v cloudflared >/dev/null 2>&1; then
   sudo install -d -m 0755 /usr/share/keyrings
   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
     | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
-  CF_CODENAME="$(. /etc/os-release && echo "${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null)}")"
-  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared ${CF_CODENAME} main" \
+  # Cloudflare 的 cloudflared 仓库不分发行版代号，统一用固定 `any`（dists/any/Release）。
+  # 不能写 VERSION_CODENAME（如 Ubuntu 26.04 的 `resolute`）——那个目录不存在会 404。
+  echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
     | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
   sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cloudflared || warn "  cloudflared install failed"
