@@ -487,6 +487,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8b2) herdr — coding-agent runtime (background daemon that keeps terminals
+#      alive for Claude Code / Codex / OpenCode etc. across sleep/network drops)
+# ---------------------------------------------------------------------------
+if ! command -v herdr >/dev/null 2>&1; then
+  log "Installing herdr (coding-agent runtime)"
+  curl -fsSL https://herdr.dev/install.sh | sh || warn "  herdr install failed"
+  # herdr installs to ~/.local/bin (overridable via HERDR_INSTALL_DIR)
+  [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+else
+  log "herdr already installed"
+fi
+
+# ---------------------------------------------------------------------------
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then

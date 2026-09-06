@@ -640,6 +640,18 @@ if (-not (Test-Cmd grok)) {
 }
 
 # ---------------------------------------------------------------------------
+# 7b2) herdr — coding-agent runtime (background daemon that keeps terminals
+#      alive for Claude Code / Codex / OpenCode etc. across sleep/network drops)
+# ---------------------------------------------------------------------------
+if (-not (Test-Cmd herdr)) {
+    Write-Step 'Installing herdr (coding-agent runtime)'
+    irm 'https://herdr.dev/install.ps1' | iex
+    if (-not (Test-Cmd herdr)) { Write-Warn2 '  herdr install failed or herdr is not yet on PATH' }
+} else {
+    Write-Host '  herdr already installed'
+}
+
+# ---------------------------------------------------------------------------
 # 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if (Test-Cmd npm) {
