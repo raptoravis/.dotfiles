@@ -80,20 +80,22 @@ fi
 # mise (runtime version manager)
 eval "$(mise activate zsh)"
 
-# tmux auto-start (interactive shell, not nested, not in editor terminals).
-# Skipped inside WezTerm on every platform: WezTerm has its own tabs/panes,
-# a shared `main` session would make every WezTerm tab attach to the same
-# shell, and tmux doesn't forward clipboard image bytes (breaks Claude Code
-# image paste). tmux still auto-starts under Moshi / plain SSH / other
-# terminals. Set FORCE_TMUX=1 to opt back in inside WezTerm.
-if (( $+commands[tmux] )) \
+# herdr auto-start (interactive shell, not nested, not in editor terminals) —
+# replaces the old tmux auto-start. Bare `herdr` attaches to the running
+# session or starts one (server + attach, like tmux's attach-or-new).
+# `HERDR_ENV=1` is set inside herdr terminals, so skip re-attaching when
+# nested; also skip inside a manual tmux session (`moshi` still uses tmux).
+# Runs in every terminal by default — herdr is the default session manager,
+# and WezTerm (where installed) is just a plain terminal.
+if (( $+commands[herdr] )) \
    && [[ -o interactive ]] \
+   && [[ -z "$HERDR_ENV" ]] \
    && [[ -z "$TMUX" ]] \
    && [[ -z "$VSCODE_INJECTION" ]] \
    && [[ -z "$INSIDE_EMACS" ]] \
    && [[ "$TERM_PROGRAM" != "vscode" ]] \
-   && [[ -z "$NO_TMUX" ]] \
-   && { [[ -z "$WEZTERM_PANE" && "$TERM_PROGRAM" != "WezTerm" ]] || [[ -n "$FORCE_TMUX" ]]; }; then
-  # Attach to "main" if exists, else create. No `exec` — exit returns to shell.
-  tmux attach -t main 2>/dev/null || tmux new -s main
+   && [[ -z "$NO_HERDR" ]]; then
+  # Attach to the running session if exists, else start one. No `exec` —
+  # detaching (ctrl+b q) returns to the shell.
+  herdr
 fi

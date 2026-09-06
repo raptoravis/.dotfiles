@@ -139,9 +139,10 @@ else
   warn "Brewfile not found at $DOTFILES_DIR/Brewfile — skipping"
 fi
 
-# WezTerm is declared in Brewfile but brew bundle may skip already-installed
-# casks without upgrading them. Ensure it's installed and up to date.
-log "Installing/upgrading WezTerm terminal"
+# WezTerm — installed as an optional terminal, but NOT the default session
+# manager (herdr auto-starts instead). Brewfile declares the cask; brew bundle
+# may skip already-installed casks, so ensure it's installed/up to date here.
+log "Installing/upgrading WezTerm terminal (optional)"
 if command -v wezterm >/dev/null 2>&1; then
   brew upgrade --cask wezterm --no-quarantine --greedy-latest 2>/dev/null \
     && log "  wezterm upgraded" || log "  wezterm already up to date"
@@ -587,7 +588,7 @@ HOSTNAME_FQDN="$(hostname)"
 MACHINE_TOML="$DOTFILES_DIR/.dotter/${HOSTNAME_FQDN}.toml"
 if [[ ! -f "$MACHINE_TOML" ]]; then
   log "Creating dotter machine config: ${MACHINE_TOML#$DOTFILES_DIR/}"
-  printf 'packages = [ "common", "mac", "wezterm" ]\n' > "$MACHINE_TOML"
+  printf 'packages = [ "common", "mac" ]\n' > "$MACHINE_TOML"
 fi
 
 # ---------------------------------------------------------------------------
@@ -674,13 +675,7 @@ fi
 warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
-# 11) WezTerm config & session directories — pre-create so dotter can symlink.
-# ---------------------------------------------------------------------------
-mkdir -p "$HOME/.config/wezterm"
-mkdir -p "$HOME/.local/share/wezterm/sessions"
-
-# ---------------------------------------------------------------------------
-# 12) Default shell
+# 11) Default shell
 # ---------------------------------------------------------------------------
 ZSH_BIN="$(command -v zsh || echo /bin/zsh)"
 if [[ "${SHELL:-}" != "$ZSH_BIN" ]]; then
