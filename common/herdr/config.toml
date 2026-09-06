@@ -1,0 +1,11 @@
+# herdr configuration — dotter-managed (symlinked from common/herdr/config.toml).
+# Full default with every option: `herdr --default-config`
+# Apply without restart: `herdr server reload-config`
+
+# Skip the first-run setup wizard; this file is the source of truth.
+onboarding = false
+
+[theme]
+# Built-ins: catppuccin, terminal, tokyo-night, dracula, nord, gruvbox,
+#            one-dark, solarized, kanagawa, rose-pine, vesper
+name = "tokyo-night"

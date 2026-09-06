@@ -925,6 +925,33 @@ if (Test-Cmd git) {
 }
 
 # ---------------------------------------------------------------------------
+# 7e) herdr agent skill — install the release-matched herdr SKILL.md into each
+#     coding agent's global skills dir. `herdr --skill` prints the copy bundled
+#     with the installed binary (no network, always matches the running version).
+#     Written directly per-agent: grok isn't covered by the `npx skills` CLI.
+# ---------------------------------------------------------------------------
+if (Test-Cmd herdr) {
+    Write-Step 'Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor)'
+    $herdrSkillDirs = @(
+        (Join-Path $env:USERPROFILE '.claude\skills\herdr'),
+        (Join-Path $CodexHome 'skills\herdr'),
+        (Join-Path $env:USERPROFILE '.grok\skills\herdr'),
+        (Join-Path $env:USERPROFILE '.config\opencode\skills\herdr'),
+        (Join-Path $env:USERPROFILE '.cursor\skills\herdr')
+    )
+    foreach ($dir in $herdrSkillDirs) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $skillFile = Join-Path $dir 'SKILL.md'
+        # cmd /c redirect keeps herdr's raw UTF-8 bytes intact (PowerShell 5.1
+        # would re-encode through the OEM codepage and mangle non-ASCII).
+        cmd /c "herdr --skill > `"$skillFile`" 2>nul"
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  herdr --skill failed (writing $dir)" }
+    }
+} else {
+    Write-Warn2 'herdr CLI not on PATH -- skipping herdr agent skill (re-run after herdr is installed)'
+}
+
+# ---------------------------------------------------------------------------
 # 8) Environment variables (XDG_CONFIG_HOME, YAZI_CONFIG_HOME, PATH)
 # ---------------------------------------------------------------------------
 Write-Step 'Setting user environment variables'

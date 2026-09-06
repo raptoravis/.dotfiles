@@ -10,6 +10,9 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/fastfetch" = "~/.config/fastfetch"
 "common/mise" = "~/.config/mise"
 "common/nvim" = "~/.config/nvim"
+# herdr config.toml is symlinked file-only: herdr writes runtime logs and
+# agent-detection overrides into ~/.config/herdr/, which must stay machine-local.
+"common/herdr/config.toml" = "~/.config/herdr/config.toml"
 "common/starship" = "~/.config"
 "common/zsh" = "~/.config/zsh"
 "common/bash" = "~/.config/bash"

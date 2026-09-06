@@ -572,6 +572,28 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7e) herdr agent skill — install the release-matched herdr SKILL.md into each
+#     coding agent's global skills dir. `herdr --skill` prints the copy bundled
+#     with the installed binary (no network, always matches the running version).
+#     Written directly per-agent: grok isn't covered by the `npx skills` CLI.
+# ---------------------------------------------------------------------------
+if command -v herdr >/dev/null 2>&1; then
+  log "Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor)"
+  herdr_skill_dir() { # $1 = target skill dir
+    mkdir -p "$1"
+    herdr --skill > "$1/SKILL.md" 2>/dev/null \
+      || warn "  herdr --skill failed (writing $1)"
+  }
+  herdr_skill_dir "$HOME/.claude/skills/herdr"
+  herdr_skill_dir "${CODEX_HOME:-$HOME/.codex}/skills/herdr"
+  herdr_skill_dir "$HOME/.grok/skills/herdr"
+  herdr_skill_dir "$HOME/.config/opencode/skills/herdr"
+  herdr_skill_dir "$HOME/.cursor/skills/herdr"
+else
+  warn "herdr CLI not on PATH -- skipping herdr agent skill (re-run after herdr is installed)"
+fi
+
+# ---------------------------------------------------------------------------
 # 8) mise — install runtimes declared in mise config (if any)
 # ---------------------------------------------------------------------------
 if command -v mise >/dev/null 2>&1; then
