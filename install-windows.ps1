@@ -843,7 +843,19 @@ if (Test-Cmd npm) {
         function Register-JsonMcp([string]$File, [string]$AddJson) {
             $env:MCP_FILE = $File
             $env:MCP_ADD = $AddJson
-            node -e 'const fs=require("fs"), path=require("path"); const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD); let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){} c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{}; let changed=false; for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } } if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }'
+            # Pass via stdin (single-quoted here-string) instead of `node -e`:
+            # PowerShell 5.1 strips double quotes from native args, corrupting
+            # `require("fs")` into `require(fs)`.
+            $script = @'
+const fs=require("fs"), path=require("path");
+const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD);
+let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){}
+c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{};
+let changed=false;
+for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } }
+if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
+'@
+            $script | node -
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed to write MCP config to $File" }
             Remove-Item Env:MCP_FILE, Env:MCP_ADD -ErrorAction SilentlyContinue
         }
@@ -902,11 +914,18 @@ if (Test-Cmd claude) {
 }
 
 if (Test-Cmd codex) {
-    Write-Step 'Installing yunxing Codex plugin (marketplace: yunxing)'
-    codex plugin marketplace add raptoravis/yunxing 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
-    codex plugin add yunxing@yunxing 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex plugin add failed' }
+    # A running codex holds its plugin cache/state files open, so `plugin add`
+    # fails with "Access denied" when backing up an existing cache entry. Skip
+    # instead of spamming that misleading error.
+    if (Get-Process -Name codex -ErrorAction SilentlyContinue) {
+        Write-Warn2 'codex is running -- skip Codex plugin install (close codex, then re-run)'
+    } else {
+        Write-Step 'Installing yunxing Codex plugin (marketplace: yunxing)'
+        codex plugin marketplace add raptoravis/yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
+        codex plugin add yunxing@yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex plugin add failed' }
+    }
 } else {
     Write-Warn2 'codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)'
 }

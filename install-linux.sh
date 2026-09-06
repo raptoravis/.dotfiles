@@ -707,11 +707,18 @@ else
 fi
 
 if cmd_exists_local codex; then
-  log "Installing yunxing Codex plugin (marketplace: yunxing)"
-  codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
-    || warn "  codex marketplace add failed"
-  codex plugin add yunxing@yunxing >/dev/null 2>&1 \
-    || warn "  codex plugin add failed"
+  # A running codex holds its plugin cache/state files open, so `plugin add`
+  # fails with "Access denied" when backing up an existing cache entry. Skip
+  # instead of spamming that misleading error.
+  if pgrep -x codex >/dev/null 2>&1; then
+    warn "codex is running -- skip Codex plugin install (close codex, then re-run)"
+  else
+    log "Installing yunxing Codex plugin (marketplace: yunxing)"
+    codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
+      || warn "  codex marketplace add failed"
+    codex plugin add yunxing@yunxing >/dev/null 2>&1 \
+      || warn "  codex plugin add failed"
+  fi
 else
   warn "codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)"
 fi
