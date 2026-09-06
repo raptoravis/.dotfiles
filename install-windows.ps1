@@ -847,11 +847,11 @@ if (Test-Cmd npm) {
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  failed to write MCP config to $File" }
             Remove-Item Env:MCP_FILE, Env:MCP_ADD -ErrorAction SilentlyContinue
         }
-        if ($GhMcpPat) {
-            $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true,"headers":{"Authorization":"Bearer ' + $GhMcpPat + '"}}}'
-        } else {
-            $GhRemoteJson = '{"github":{"type":"remote","url":"' + $GhMcpUrl + '","enabled":true}}'
-        }
+        # Build the github entry via ConvertTo-Json so a PAT containing quotes or
+        # backslashes can't corrupt the JSON (hand-built strings would).
+        $ghMcp = @{ github = @{ type = 'remote'; url = $GhMcpUrl; enabled = $true } }
+        if ($GhMcpPat) { $ghMcp.github.headers = @{ Authorization = "Bearer $GhMcpPat" } }
+        $GhRemoteJson = $ghMcp | ConvertTo-Json -Compress -Depth 5
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
@@ -929,13 +929,18 @@ if (Test-Cmd dsh) {
     Write-Warn2 'dsh CLI not on PATH -- skipping dsh yunxing bundle (re-run after dsh is installed)'
 }
 
-# Grok Build — grok CLI plugin marketplace (reads yunxing's .grok-plugin/marketplace.json).
+# Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
+# marketplace plugin name (fails); use GitHub shorthand (user/repo) to install
+# directly. install is non-idempotent (repeat errors "already installed"), so
+# guard with `grok plugin list`.
 if (Test-Cmd grok) {
-    Write-Step 'Installing yunxing Grok plugin (marketplace: yunxing)'
-    grok plugin marketplace add raptoravis/yunxing 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok marketplace add failed (may already be registered)' }
-    grok plugin install yunxing --trust 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok plugin install failed' }
+    if (grok plugin list 2>$null | Select-String -Quiet 'yunxing') {
+        Write-Host '  yunxing Grok plugin already installed'
+    } else {
+        Write-Step 'Installing yunxing Grok plugin (raptoravis/yunxing)'
+        grok plugin install raptoravis/yunxing --trust 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok plugin install failed' }
+    }
 } else {
     Write-Warn2 'grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)'
 }

@@ -643,11 +643,13 @@ if command -v npm >/dev/null 2>&1; then
         if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
       ' || warn "  failed to write MCP config to $1"
     }
-    if [ -n "$GH_MCP_PAT" ]; then
-      GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true,\"headers\":{\"Authorization\":\"Bearer $GH_MCP_PAT\"}}}"
-    else
-      GH_REMOTE_JSON="{\"github\":{\"type\":\"remote\",\"url\":\"$GH_MCP_URL\",\"enabled\":true}}"
-    fi
+    # Build the github entry via node's JSON.stringify so a PAT containing quotes
+    # or backslashes can't corrupt the JSON (hand-built strings would).
+    GH_REMOTE_JSON="$(GH_MCP_URL="$GH_MCP_URL" GH_MCP_PAT="${GH_MCP_PAT:-}" node -e '
+      const o={github:{type:"remote",url:process.env.GH_MCP_URL,enabled:true}};
+      if(process.env.GH_MCP_PAT){ o.github.headers={Authorization:"Bearer "+process.env.GH_MCP_PAT}; }
+      process.stdout.write(JSON.stringify(o));
+    ')"
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
@@ -732,13 +734,18 @@ else
   warn "dsh CLI not on PATH -- skipping dsh yunxing bundle (re-run after dsh is installed)"
 fi
 
-# Grok Build — grok CLI plugin marketplace (reads yunxing's .grok-plugin/marketplace.json).
+# Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
+# marketplace plugin name (fails); use GitHub shorthand (user/repo) to install
+# directly. install is non-idempotent (repeat errors "already installed"), so
+# guard with `grok plugin list`.
 if cmd_exists_local grok; then
-  log "Installing yunxing Grok plugin (marketplace: yunxing)"
-  grok plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
-    || warn "  grok marketplace add failed (may already be registered)"
-  grok plugin install yunxing --trust >/dev/null 2>&1 \
-    || warn "  grok plugin install failed"
+  if grok plugin list 2>/dev/null | grep -q 'yunxing'; then
+    log "grok yunxing plugin already installed"
+  else
+    log "Installing yunxing Grok plugin (raptoravis/yunxing)"
+    grok plugin install raptoravis/yunxing --trust >/dev/null 2>&1 \
+      || warn "  grok plugin install failed"
+  fi
 else
   warn "grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)"
 fi
