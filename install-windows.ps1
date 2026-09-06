@@ -171,12 +171,51 @@ try {
     $InstalledScoop = @(scoop list 2>$null | ForEach-Object { $_.Name } | Where-Object { $_ })
 }
 
-# Background-service packages whose running exe holds the scoop shim open,
-# which makes `scoop update` fail to replace the shim (Access denied / in use).
-# These are safe to stop+let-the-user-restart before updating. Interactive apps
-# (nvim, etc.) are deliberately NOT listed: scoop already skips updating them
-# when their process is running, and killing them would lose unsaved work.
-$ScoopRestartable = @('cloudflared')
+# Packages that run as a Windows service (cloudflared). The running service holds
+# the scoop shim open, so `scoop update` fails to replace it (Access denied / in
+# use). A LocalSystem service can't be killed with `Stop-Process` from a standard
+# user -- it must be stopped via `sc.exe stop`, which needs an admin token.
+# Admin runs stop/update/start directly; non-admin runs elevate via UAC and fall
+# back to a skip + pointer if the user declines the prompt.
+$ScoopServices = @('cloudflared')
+
+function Test-ScoopServiceRunning($pkg) {
+    $svc = Get-Service -Name $pkg -ErrorAction SilentlyContinue
+    return ($null -ne $svc -and $svc.Status -eq 'Running')
+}
+
+# Stop the scoop-managed service for $pkg so its shim can be replaced. Returns
+# $true when it's safe to update (stopped, already stopped, or not registered);
+# $false when the stop failed (e.g. no admin token) and the update must be skipped.
+function Stop-ScoopService($pkg) {
+    if (-not (Test-ScoopServiceRunning $pkg)) { return $true }
+    sc.exe stop $pkg *>$null
+    return ($LASTEXITCODE -eq 0)
+}
+
+# Restart the service we stopped, unless it's not registered or is disabled.
+function Start-ScoopService($pkg) {
+    $svc = Get-Service -Name $pkg -ErrorAction SilentlyContinue
+    if ($null -eq $svc -or $svc.StartType -eq 'Disabled') { return }
+    sc.exe start $pkg *>$null
+}
+
+# Non-admin path: elevate via UAC to run `stop -> update -> start` for a service
+# package. Output is captured to a temp log and replayed. If the user declines
+# UAC, fall back to a skip + pointer.
+function Invoke-ScoopServiceUpdateElevated($pkg) {
+    $log = Join-Path $env:TEMP "$pkg-scoop-update.log"
+    Remove-Item $log -ErrorAction SilentlyContinue
+    $inner = "& { sc.exe stop $pkg; scoop update $pkg; sc.exe start $pkg; sc.exe query $pkg } *>> '$log'"
+    $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
+    try {
+        $proc = Start-Process -Verb RunAs -Wait -PassThru powershell -ArgumentList '-NoProfile','-EncodedCommand',$enc
+        if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host "    $_" } }
+        if ($proc.ExitCode -ne 0) { Write-Warn2 "  $pkg elevated update failed (exit $($proc.ExitCode))" }
+    } catch {
+        Write-Warn2 "  $pkg update skipped -- elevation declined. Run in an admin shell: sc.exe stop $pkg; scoop update $pkg; sc.exe start $pkg"
+    }
+}
 
 # Stop only the scoop-managed instance of $pkg, so unrelated same-named programs
 # on the system are untouched. Matches both the app dir (process started from the
@@ -213,12 +252,21 @@ function Install-ScoopPackages($label, $pkgs) {
     Write-Step "Installing $label"
     foreach ($p in $pkgs) {
         if ($script:InstalledScoop -contains $p) {
-            if ($script:ScoopRestartable -contains $p) {
-                # Background service: stop its scoop instance, update, user restarts.
-                Write-Host "  $p already installed -- updating"
-                Stop-ScoopAppProcesses $p
-                scoop update $p
-                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+            if ($script:ScoopServices -contains $p) {
+                # Windows-service package: stop the service, update, restart it.
+                Write-Host "  $p already installed -- updating (service)"
+                if (Test-Admin) {
+                    if (Stop-ScoopService $p) {
+                        Stop-ScoopAppProcesses $p   # clear any stray non-service process
+                        scoop update $p
+                        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+                        Start-ScoopService $p
+                    } else {
+                        Write-Warn2 "  $p update skipped -- could not stop service"
+                    }
+                } else {
+                    Invoke-ScoopServiceUpdateElevated $p
+                }
             } elseif (Test-ScoopAppRunning $p) {
                 # Interactive/long-running app (nvim, node...): don't kill it,
                 # don't let scoop spam errors -- just skip this update.
