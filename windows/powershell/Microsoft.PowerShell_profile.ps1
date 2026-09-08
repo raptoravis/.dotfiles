@@ -319,7 +319,7 @@ function prompt {
         }
     }
     if ($global:_cachedZgHint) {
-        Write-Host "[zg] 此项目还没索引，跑 zg --index 建一次（agent 也能用了）" -ForegroundColor Yellow
+        Write-Host "[zg] 此项目还没索引，跑 zg index 建一次（agent 也能用了）" -ForegroundColor Yellow
     }
     if ($Script:_origPrompt) {
         & $Script:_origPrompt

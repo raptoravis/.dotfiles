@@ -77,12 +77,12 @@ if [[ -n "$WT_SESSION" ]] && (( $+commands[wslpath] )); then
     precmd_functions+=(_report_cwd_to_wt)
 fi
 
-# zg 索引提示 — 进入 git 仓库但还没建 zg 索引时，提示跑一次 `zg --index`。
+# zg 索引提示 — 进入 git 仓库但还没建 zg 索引时，提示跑一次 `zg index`。
 # 只在仓库根（有 .git）且 zg 已装时触发；建完索引（.zvec-grep 存在）即停。
 if (( $+commands[zg] )); then
   _zg_index_hint() {
     [[ -e .git && ! -e .zvec-grep ]] || return
-    print -P '%F{yellow}[zg] 此项目还没索引，跑 %Bzg --index%b 建一次（agent 也能用了）%f'
+    print -P '%F{yellow}[zg] 此项目还没索引，跑 %Bzg index%b 建一次（agent 也能用了）%f'
   }
   chpwd_functions+=(_zg_index_hint)
   _zg_index_hint   # 打开 shell 就在项目目录时也检查一次
