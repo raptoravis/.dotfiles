@@ -4,7 +4,12 @@
 
 # PSReadLine — predictive intellisense + history dropdown + tab menu
 Import-Module PSReadLine
-Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView -ErrorAction SilentlyContinue
+# Predictive intellisense (PredictionSource/PredictionViewStyle) needs PSReadLine
+# >= 2.1.0; Windows PowerShell 5.1 ships 2.0.0, which lacks both params (and the
+# binding error bypasses -ErrorAction since it happens at the call site).
+if ([version](Get-Module PSReadLine).Version -ge [version]"2.1.0") {
+    Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView
+}
 Set-PSReadLineOption -EditMode Windows -HistorySearchCursorMovesToEnd
 Set-PSReadLineKeyHandler -Key Tab           -Function MenuComplete
 Set-PSReadLineKeyHandler -Key UpArrow       -Function HistorySearchBackward
