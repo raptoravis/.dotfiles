@@ -390,7 +390,7 @@ if command -v npm >/dev/null 2>&1; then
     zg_args=()
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    zg --install "${zg_args[@]}" --yes || warn "  zg --install failed (inspect zg output above)"
+    zg install "${zg_args[@]}" --yes || warn "  zg install failed (inspect zg output above)"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.

@@ -783,8 +783,8 @@ if (Test-Cmd npm) {
         $zgArgs = @()
         foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
         Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
-        & zg --install @zgArgs --yes
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg --install failed (inspect zg output above)' }
+        & zg install @zgArgs --yes
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (inspect zg output above)' }
     }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.

@@ -18,7 +18,8 @@
       "Bash(cat:*)",
       "Bash(echo:*)",
       "Bash(grep:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "mcp__zvec_grep__*"
     ],
     "deny": [
       "Read(**/*.pem)",

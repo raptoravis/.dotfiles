@@ -308,6 +308,19 @@ function prompt {
     if ($loc.Provider.Name -eq 'FileSystem') {
         [System.IO.Directory]::SetCurrentDirectory($loc.ProviderPath)
     }
+    # zg 索引提示 — 复用 Set-Title 的 repo 缓存，只在目录变化时检测
+    $here = (Get-Location).Path
+    if ($global:_cachedZgHintPath -ne $here) {
+        $global:_cachedZgHintPath = $here
+        $global:_cachedZgHint = $false
+        if (Get-Command zg -ErrorAction SilentlyContinue) {
+            $repo = $global:_cachedTitle
+            $global:_cachedZgHint = (Test-Path -LiteralPath (Join-Path $repo '.git')) -and -not (Test-Path -LiteralPath (Join-Path $repo '.zvec-grep'))
+        }
+    }
+    if ($global:_cachedZgHint) {
+        Write-Host "[zg] 此项目还没索引，跑 zg --index 建一次（agent 也能用了）" -ForegroundColor Yellow
+    }
     if ($Script:_origPrompt) {
         & $Script:_origPrompt
     } else {
