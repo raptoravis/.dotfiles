@@ -1,4 +1,4 @@
-# Microsoft.PowerShell_profile.ps1
+﻿# Microsoft.PowerShell_profile.ps1
 # Loaded by $PROFILE (wired by install-windows.ps1).
 # Runtime configuration for PowerShell modules installed via PSGallery.
 
