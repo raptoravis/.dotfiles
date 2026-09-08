@@ -62,3 +62,4 @@ windows/bin/LiteMonitor_v1.2.4-win-x64/HardwareHistory.json
 *.pyc
 .reasonix/
 reasonix.toml
+.zvec-grep/
