@@ -1,7 +1,7 @@
 // claude-hud usage snapshot refresher.
 //
 // Why: claude-hud >=0.0.12 shows the 5h / weekly reset bars ONLY from Claude
-// Code's stdin `rate_limits`. When cc-switch injects ANTHROPIC_AUTH_TOKEN into
+// Code's stdin `rate_limits`. When ANTHROPIC_AUTH_TOKEN is injected into
 // ~/.claude/settings.json, Claude Code stops emitting rate_limits, so the bars
 // vanish. claude-hud still supports an external usage snapshot fallback, so we
 // poll Anthropic's OAuth usage API ourselves (using the subscription OAuth
@@ -30,10 +30,10 @@ try {
 } catch {}
 
 function readToken() {
-  // cc-switch injects the active account's token into the environment, so
-  // prefer it — that's the CURRENT user. Falling back to ~/.claude's stored
-  // OAuth credential would poll a stale (possibly previous) account, or simply
-  // not exist on Windows where Claude Code keeps no .credentials.json file.
+  // The active account's token is injected into the environment, so prefer it
+  // — that's the CURRENT user. Falling back to ~/.claude's stored OAuth
+  // credential would poll a stale (possibly previous) account, or simply not
+  // exist on Windows where Claude Code keeps no .credentials.json file.
   const envToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
   if (typeof envToken === "string" && envToken.trim()) return envToken.trim();
   try {
@@ -131,9 +131,9 @@ const res = await fetchUsage(token);
 if (res === null) process.exit(0); // transient network error — keep last good snapshot
 
 if (!res.ok) {
-  // 401/403 = the token is rejected or lacks the usage scope (a cc-switch
-  // token-injected account carries user:inference but not user:profile, which
-  // /api/oauth/usage requires). That's definitive, so clear the stale value.
+  // 401/403 = the token is rejected or lacks the usage scope (a token-injected
+  // account carries user:inference but not user:profile, which /api/oauth/usage
+  // requires). That's definitive, so clear the stale value.
   // Other status codes may be transient server hiccups — leave the snapshot.
   if (res.status === 401 || res.status === 403) writeUnavailable();
   process.exit(0);

@@ -18,12 +18,11 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/bash" = "~/.config/bash"
 "common/tmux/tmux.conf" = "~/.tmux.conf"
 "common/uv" = "~/.config/uv"
-# NOTE: settings.json is intentionally NOT symlinked here. cc-switch owns
-# ~/.claude/settings.json (it injects the env block — ANTHROPIC_BASE_URL /
-# ANTHROPIC_AUTH_TOKEN — when switching providers). A dotter symlink would let
-# cc-switch write the auth token through into this git repo and break on every
-# provider switch. The repo's common/claude/settings.json is the shared *base*;
-# sync it into cc-switch's common config manually (see install-* scripts).
+# NOTE: settings.json is intentionally NOT symlinked here. It is a generated
+# file written by common/scripts/aicodingagentconfig.py from the
+# common/scripts/aicodingagentsettings/claude.json template plus the
+# machine-local ~/.aicodingagentconfig.jsonc (apikey/baseurl/models). A symlink
+# would let the auth token leak into this repo on every provider switch.
 "common/claude/statusline.mjs" = "~/.claude/statusline.mjs"
 "common/claude/claude-hud-usage-refresh.mjs" = "~/.claude/claude-hud-usage-refresh.mjs"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"

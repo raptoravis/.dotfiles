@@ -561,6 +561,26 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
     npm_global @earendil-works/pi-coding-agent || warn "  pi install failed"
   fi
+  # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
+  # for humans and agents. bin: `zg`. Requires Node.js >= 22.
+  if ! cmd_exists_local zg; then
+    log "Installing zg (zvec-grep) via npm"
+    npm_global @zvec/zvec-grep || warn "  zg install failed (requires Node.js >= 22)"
+  fi
+  # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
+  # guidance + tool approval + start local server). Idempotent — re-runs update
+  # only the ZVEC_GREP_START/END managed blocks. dsh / pi / grok are not
+  # supported zg targets and are skipped.
+  if cmd_exists_local zg; then
+    zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
+    for t in claude codex opencode; do
+      cmd_exists_local "$t" && zg_targets+=("$t")
+    done
+    zg_args=()
+    for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
+    log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
+    zg --install "${zg_args[@]}" --yes || warn "  zg --install failed (inspect zg output above)"
+  fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -903,17 +923,6 @@ if command -v dotter >/dev/null 2>&1; then
 else
   warn "dotter not on PATH — skipping symlinks. Open a new shell so \$HOME/.cargo/bin is loaded, then re-run."
 fi
-
-# ---------------------------------------------------------------------------
-# 12b) MANUAL: sync Claude settings into cc-switch
-#      ~/.claude/settings.json is NOT symlinked by dotter — cc-switch owns it
-#      and injects the env block (ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN) on
-#      every provider switch. The repo's common/claude/settings.json is the
-#      shared *base* (permissions / hooks / enabledPlugins / statusLine). Copy
-#      that base into cc-switch's common config ("通用配置") by hand so cc-switch
-#      composes base + per-provider env into ~/.claude/settings.json.
-# ---------------------------------------------------------------------------
-warn 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
 # 13) WezTerm session state directory — only needed if wezterm is installed.

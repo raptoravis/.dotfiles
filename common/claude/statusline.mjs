@@ -8,13 +8,14 @@ import { ReadStream } from "node:tty";
 const claudeDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 const cacheRoot = join(claudeDir, "plugins", "cache");
 
-// --- External usage snapshot (cc-switch fallback) -------------------------
-// When cc-switch injects ANTHROPIC_AUTH_TOKEN into settings.json, Claude Code
-// stops sending stdin.rate_limits, so claude-hud's 5h / weekly reset bars
-// vanish. In that mode we keep a self-refreshed snapshot (see
-// claude-hud-usage-refresh.mjs) and feed it to the HUD via main()'s
-// getUsageFromExternalSnapshot override. Native subscription logins (no token
-// in env) keep using stdin.rate_limits and skip all of this entirely.
+// --- External usage snapshot (token-injection fallback) --------------------
+// When ANTHROPIC_AUTH_TOKEN is injected into settings.json (e.g. by
+// aicodingagentconfig.py's env block), Claude Code stops sending
+// stdin.rate_limits, so claude-hud's 5h / weekly reset bars vanish. In that
+// mode we keep a self-refreshed snapshot (see claude-hud-usage-refresh.mjs)
+// and feed it to the HUD via main()'s getUsageFromExternalSnapshot override.
+// Native subscription logins (no token in env) keep using stdin.rate_limits
+// and skip all of this entirely.
 const usingInjectedToken = !!(
   process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY
 );

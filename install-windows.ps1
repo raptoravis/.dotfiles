@@ -640,7 +640,7 @@ if ((Test-Path $UvFile) -and (Test-Cmd uv)) {
 # ---------------------------------------------------------------------------
 # 7a-bis) Claude Code: defaultShell -> PowerShell (Windows only)
 #     Windows-specific shell selection goes into settings.local.json (Claude
-#     Code's machine-local overlay), kept separate from the cc-switch-managed
+#     Code's machine-local overlay), kept separate from the generated
 #     settings.json so it survives provider switches. Prefer pwsh (PowerShell
 #     7+) when present,
 #     fall back to Windows PowerShell 5.1.
@@ -763,6 +763,28 @@ if (Test-Cmd npm) {
         Write-Step 'Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)'
         npm install -g '@earendil-works/pi-coding-agent'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi install failed' }
+    }
+    # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
+    # for humans and agents. bin: `zg`. Requires Node.js >= 22.
+    if (-not (Test-Cmd zg)) {
+        Write-Step 'Installing zg (zvec-grep) via npm'
+        npm install -g '@zvec/zvec-grep'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (requires Node.js >= 22)' }
+    }
+    # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
+    # guidance + tool approval + start local server). Idempotent — re-runs update
+    # only the ZVEC_GREP_START/END managed blocks. dsh / pi / grok are not
+    # supported zg targets and are skipped.
+    if (Test-Cmd zg) {
+        $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
+        foreach ($t in @('claude', 'codex', 'opencode')) {
+            if (Test-Cmd $t) { $zgTargets += $t }
+        }
+        $zgArgs = @()
+        foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
+        Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
+        & zg --install @zgArgs --yes
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg --install failed (inspect zg output above)' }
     }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -1206,18 +1228,6 @@ if (Test-Cmd dotter) {
 } else {
     Write-Warn2 'dotter not on PATH — open a new shell so cargo bin is loaded, then re-run.'
 }
-
-# ---------------------------------------------------------------------------
-# 10b) MANUAL: sync Claude settings into cc-switch
-#     ~/.claude/settings.json is NOT symlinked by dotter — cc-switch owns it and
-#     injects the env block (ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN) on every
-#     provider switch. The repo's common/claude/settings.json is the shared
-#     *base* (permissions / hooks / enabledPlugins / statusLine). You must copy
-#     that base into cc-switch's common config ("通用配置") by hand so cc-switch
-#     composes base + per-provider env into ~/.claude/settings.json. Skipping
-#     this means the shared settings won't apply after a provider switch.
-# ---------------------------------------------------------------------------
-Write-Warn2 'MANUAL STEP: sync common/claude/settings.json into cc-switch "通用配置" (cc-switch owns ~/.claude/settings.json; dotter no longer symlinks it).'
 
 # ---------------------------------------------------------------------------
 # 11) Windows Terminal settings directory (Scoop portable mode).
