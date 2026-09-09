@@ -187,6 +187,16 @@ def apply_claude(provider: dict[str, Any], stamp: str, dry_run: bool) -> list[Pa
         env = result.setdefault('env', {})
         if not isinstance(env, dict):
             raise ConfigError('Claude setting 模板的 env 必须是对象')
+        permissions = result.setdefault('permissions', {})
+        if not isinstance(permissions, dict):
+            raise ConfigError('Claude setting 模板的 permissions 必须是对象')
+        denied_tools = permissions.setdefault('deny', [])
+        if not isinstance(denied_tools, list):
+            raise ConfigError('Claude setting 模板的 permissions.deny 必须是数组')
+        # Artifact requires a claude.ai session. Some Anthropic-compatible API
+        # providers reject its Unicode regex schema before processing a prompt.
+        if 'Artifact' not in denied_tools:
+            denied_tools.insert(0, 'Artifact')
         if provider.get('apikey'):
             env['ANTHROPIC_AUTH_TOKEN'] = provider['apikey']
         if provider.get('baseurl'):
