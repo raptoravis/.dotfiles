@@ -8,7 +8,17 @@ Import-Module PSReadLine
 # >= 2.1.0; Windows PowerShell 5.1 ships 2.0.0, which lacks both params (and the
 # binding error bypasses -ErrorAction since it happens at the call site).
 if ([version](Get-Module PSReadLine).Version -ge [version]"2.1.0") {
-    Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView
+    Set-PSReadLineOption -PredictionSource History
+    # ListView renders a dropdown that needs WindowWidth >= 50 and WindowHeight >= 5;
+    # in narrower consoles (e.g. herdr splits) PSReadLine prints a warning and falls
+    # back to InlineView on every render. Pick once at startup by current size so a
+    # narrow pane starts on InlineView and never emits the warning.
+    $win = $Host.UI.RawUI.WindowSize
+    if ($win -and $win.Width -ge 50 -and $win.Height -ge 5) {
+        Set-PSReadLineOption -PredictionViewStyle ListView
+    } else {
+        Set-PSReadLineOption -PredictionViewStyle InlineView
+    }
 }
 Set-PSReadLineOption -EditMode Windows -HistorySearchCursorMovesToEnd
 Set-PSReadLineKeyHandler -Key Tab           -Function MenuComplete
