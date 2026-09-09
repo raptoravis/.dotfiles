@@ -1219,7 +1219,7 @@ if (Test-Cmd dotter) {
         # "Some files were skipped." summary as [ERROR], but those are
         # not real failures -- downgrade them to [WARN ] (yellow).
         $softErrorPattern = 'already exists\. Skipping\.|Some files were skipped\.'
-        dotter -v 2>&1 | ForEach-Object {
+        dotter -v --force 2>&1 | ForEach-Object {
             $line = $_.ToString()
             if ($line -match '^\[ERROR\]') {
                 if ($line -match $softErrorPattern) {

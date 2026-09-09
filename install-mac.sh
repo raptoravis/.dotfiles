@@ -390,7 +390,20 @@ if command -v npm >/dev/null 2>&1; then
     zg_args=()
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    zg install "${zg_args[@]}" --yes || warn "  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)"
+    if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
+      printf '%s\n' "$zg_out"
+    else
+      case "$zg_out" in
+        *EADDRINUSE*)
+          log "  zg daemon already running — daemon start skipped (benign)";;
+        *conflicting*|*unmanaged*)
+          printf '%s\n' "$zg_out" >&2
+          warn "  zg install failed: MCP config conflict needs cleanup (see zg output above)";;
+        *)
+          printf '%s\n' "$zg_out" >&2
+          warn "  zg install failed (see zg output above)";;
+      esac
+    fi
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -590,9 +603,13 @@ YUNXING_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/yunxing"
 if command -v git >/dev/null 2>&1; then
   if [ -d "$YUNXING_SRC/.git" ]; then
     log "Updating yunxing checkout for Cursor skills"
-    git -C "$YUNXING_SRC" pull --ff-only --quiet 2>/dev/null \
-      || warn "  yunxing pull failed"
-  else
+    if ! git -C "$YUNXING_SRC" pull --ff-only --quiet 2>/dev/null; then
+      # pull failed — checkout is corrupt (e.g. lost .git/index); drop it and re-clone below.
+      warn "  yunxing pull failed — re-cloning"
+      rm -rf "$YUNXING_SRC"
+    fi
+  fi
+  if [ ! -d "$YUNXING_SRC/.git" ]; then
     log "Cloning yunxing for Cursor skills"
     mkdir -p "$(dirname "$YUNXING_SRC")"
     git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git "$YUNXING_SRC" \
@@ -720,7 +737,9 @@ fi
 # ---------------------------------------------------------------------------
 if command -v dotter >/dev/null 2>&1; then
   log "Symlinking dotfiles via dotter"
-  ( cd "$DOTFILES_DIR" && dotter -v ) || warn "dotter exited with errors"
+  # --force: overwrite stray non-symlink targets (e.g. `zg install` writes
+  # AGENTS.md as regular files before dotter runs) so symlinks always win.
+  ( cd "$DOTFILES_DIR" && dotter -v --force ) || warn "dotter exited with errors"
 else
   warn "dotter not on PATH — skipping symlinks. Re-run after \$HOME/.cargo/bin is on PATH."
 fi
