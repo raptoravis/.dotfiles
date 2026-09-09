@@ -318,15 +318,23 @@ function prompt {
     if ($loc.Provider.Name -eq 'FileSystem') {
         [System.IO.Directory]::SetCurrentDirectory($loc.ProviderPath)
     }
-    # zg 索引提示 — 复用 Set-Title 的 repo 缓存，只在目录变化时检测
+    # zg 索引提示 — 复用 Set-Title 的 repo 缓存；每次重绘只刷新轻量的索引目录检测，
+    # 这样在当前目录运行 `zg index` 后，提示会在下一个 prompt 自动消失。
     $here = (Get-Location).Path
     if ($global:_cachedZgHintPath -ne $here) {
         $global:_cachedZgHintPath = $here
-        $global:_cachedZgHint = $false
+        $global:_cachedZgHintRepo = $null
         if (Get-Command zg -ErrorAction SilentlyContinue) {
             $repo = $global:_cachedTitle
-            $global:_cachedZgHint = (Test-Path -LiteralPath (Join-Path $repo '.git')) -and -not (Test-Path -LiteralPath (Join-Path $repo '.zvec-grep'))
+            if (Test-Path -LiteralPath (Join-Path $repo '.git')) {
+                $global:_cachedZgHintRepo = $repo
+            }
         }
+    }
+    $global:_cachedZgHint = $false
+    if ($global:_cachedZgHintRepo) {
+        $indexPath = Join-Path $global:_cachedZgHintRepo '.zvec-grep'
+        $global:_cachedZgHint = -not (Test-Path -LiteralPath $indexPath)
     }
     if ($global:_cachedZgHint) {
         Write-Host "[zg] 此项目还没索引，跑 zg index 建一次（agent 也能用了）" -ForegroundColor Yellow
