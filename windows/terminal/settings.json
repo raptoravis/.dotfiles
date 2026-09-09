@@ -1,148 +1,237 @@
-// Windows Terminal settings — managed by dotter
-// https://github.com/SuperCuber/dotter
-// See also: https://aka.ms/terminal-documentation
-//
-// Symlinked via dotter into %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-// Requires Developer Mode for non-admin symlinks (enabled by install-windows.ps1).
-
 {
-  "$schema": "https://aka.ms/terminal-profiles-schema",
-
-  "actions":
-  [
-    // Clipboard
-    { "command": { "action": "copy", "singleLine": false }, "keys": "ctrl+c" },
-    { "command": "paste", "keys": "ctrl+v" },
-
-    // Tabs
-    { "command": "closeTab", "keys": "ctrl+shift+w" },
-    { "command": { "action": "nextTab" }, "keys": "ctrl+tab" },
-    { "command": { "action": "prevTab" }, "keys": "ctrl+shift+tab" },
-
-    // New tab with specific profiles
-    { "command": { "action": "newTab", "profile": "PowerShell 7" }, "keys": "ctrl+shift+1" },
-    { "command": { "action": "newTab", "profile": "WSL (zsh)" }, "keys": "ctrl+shift+2" },
-    { "command": { "action": "newTab", "profile": "Command Prompt" }, "keys": "ctrl+shift+3" },
-
-    // Duplicate tab (inherits CWD via OSC 9;9)
-    { "command": "duplicateTab", "keys": "ctrl+shift+d" },
-
-    // Panes (split — inherits CWD via OSC 9;9 when splitMode=duplicate)
-    { "command": { "action": "splitPane", "split": "auto", "splitMode": "duplicate" }, "keys": "alt+shift+d" },
-
-    // Font size
-    { "command": "adjustFontSizeUp", "keys": "ctrl+=" },
-    { "command": "adjustFontSizeDown", "keys": "ctrl+-" },
-    { "command": "resetFontSize", "keys": "ctrl+0" },
-
-    // Search
-    { "command": "find", "keys": "ctrl+shift+f" },
-
-    // Fullscreen
-    { "command": "toggleFullscreen", "keys": "alt+enter" },
-
-    // Command palette
-    { "command": "commandPalette", "keys": "ctrl+shift+p" },
-  ],
-
-  "copyFormatting": "none",
-  "copyOnSelect": false,
-
-  "persistWindowLayout": true,
-
-  "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
-
-  "disabledProfileSources": [],
-  "disableAnimations": true,
-
-  "profiles":
-  {
-    "defaults":
-    {
-      "colorScheme": "Tokyo Night",
-      "font":
-      {
-        "face": "FiraCode Nerd Font",
-        "size": 11
-      },
-      "opacity": 100,
-      "useAcrylic": false,
-      "cursorShape": "bar",
-      "antialiasingMode": "grayscale",
-      "intenseTextStyle": "bold",
-      "startingDirectory": "D:\\dev",
-      "scrollbarState": "hidden",
-      "closeOnExit": "graceful"
-    },
-    "list":
+    "$help": "https://aka.ms/terminal-documentation",
+    "$schema": "https://aka.ms/terminal-profiles-schema",
+    "actions": 
     [
-      {
-        "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
-        "name": "PowerShell 7",
-        "commandline": "pwsh.exe -NoLogo",
-        "icon": "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png",
-        "hidden": false
-      },
-      {
-        "guid": "{2c4de342-38b7-51cf-b940-2309a097f518}",
-        "name": "WSL (zsh)",
-        "commandline": "wsl.exe --cd ~",
-        "source": "Windows.Terminal.Wsl",
-        "icon": "ms-appx:///ProfileIcons/{9acb9455-ca41-5af7-950f-204b4cbf56df}.png",
-        "hidden": false
-      },
-      {
-        "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
-        "name": "Windows PowerShell",
-        "commandline": "powershell.exe",
-        "hidden": true
-      },
-      {
-        "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
-        "name": "Command Prompt",
-        "commandline": "cmd.exe",
-        "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
-        "hidden": true
-      }
-    ]
-  },
-
-  "schemes":
-  [
+        {
+            "command": 
+            {
+                "action": "closeTab"
+            },
+            "id": "User.closeTab.0"
+        },
+        {
+            "command": 
+            {
+                "action": "newTab",
+                "profile": "PowerShell 7"
+            },
+            "id": "User.newTab.26C3ECE2"
+        },
+        {
+            "command": 
+            {
+                "action": "newTab",
+                "profile": "Command Prompt"
+            },
+            "id": "User.newTab.D78C777"
+        },
+        {
+            "command": 
+            {
+                "action": "newTab",
+                "profile": "WSL (zsh)"
+            },
+            "id": "User.newTab.1A46AA41"
+        }
+    ],
+    "copyFormatting": "none",
+    "copyOnSelect": false,
+    "defaultProfile": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+    "disableAnimations": true,
+    "disabledProfileSources": [],
+    "keybindings": 
+    [
+        {
+            "id": "User.newTab.26C3ECE2",
+            "keys": "ctrl+shift+1"
+        },
+        {
+            "id": "Terminal.DuplicateTab",
+            "keys": "ctrl+shift+d"
+        },
+        {
+            "id": "Terminal.CopyToClipboard",
+            "keys": "ctrl+c"
+        },
+        {
+            "id": "Terminal.PrevTab",
+            "keys": "ctrl+shift+tab"
+        },
+        {
+            "id": "Terminal.NextTab",
+            "keys": "ctrl+tab"
+        },
+        {
+            "id": "User.closeTab.0",
+            "keys": "ctrl+shift+w"
+        },
+        {
+            "id": "Terminal.FindText",
+            "keys": "ctrl+shift+f"
+        },
+        {
+            "id": "Terminal.PasteFromClipboard",
+            "keys": "ctrl+v"
+        },
+        {
+            "id": "Terminal.ResetFontSize",
+            "keys": "ctrl+0"
+        },
+        {
+            "id": "User.newTab.1A46AA41",
+            "keys": "ctrl+shift+2"
+        },
+        {
+            "id": null,
+            "keys": "ctrl+minus"
+        },
+        {
+            "id": null,
+            "keys": "ctrl+plus"
+        },
+        {
+            "id": "Terminal.DuplicatePaneAuto",
+            "keys": "alt+shift+d"
+        },
+        {
+            "id": "User.newTab.D78C777",
+            "keys": "ctrl+shift+3"
+        },
+        {
+            "id": "Terminal.ToggleFullscreen",
+            "keys": "alt+enter"
+        },
+        {
+            "id": "Terminal.ToggleCommandPalette",
+            "keys": "ctrl+shift+p"
+        }
+    ],
+    "newTabMenu": [],
+    "profiles": 
     {
-      "name": "Tokyo Night",
-      "background": "#1a1b26",
-      "foreground": "#a9b1d6",
-      "cursorColor": "#c0caf5",
-      "selectionBackground": "#33467c",
-      "black": "#32344a",
-      "red": "#f7768e",
-      "green": "#9ece6a",
-      "yellow": "#e0af68",
-      "blue": "#7aa2f7",
-      "purple": "#ad8ee6",
-      "cyan": "#449dab",
-      "white": "#9699a8",
-      "brightBlack": "#444b6a",
-      "brightRed": "#ff7a93",
-      "brightGreen": "#b9f27c",
-      "brightYellow": "#ff9e64",
-      "brightBlue": "#7da6ff",
-      "brightPurple": "#bb9af7",
-      "brightCyan": "#0db9d7",
-      "brightWhite": "#abb2bf"
-    }
-  ],
-
-  "newTabMenu": [],
-
-  "showTabsInTitlebar": true,
-  "showTerminalTitleInTab": false,
-  "snapToGridOnResize": false,
-  "startOnUserLogin": true,
-  "tabSwitcherMode": "mru",
-  "theme": "dark",
-  "useAcrylicInTabRow": false,
-  "windowingBehavior": "useExisting",
-  "wordDelimiters": " ./\\()\"'-:,.;<>~!@#$%^&*|+=[]{}~?│"
+        "defaults": 
+        {
+            "antialiasingMode": "grayscale",
+            "closeOnExit": "graceful",
+            "colorScheme": "Tokyo Night",
+            "cursorShape": "bar",
+            "font": 
+            {
+                "face": "FiraCode Nerd Font",
+                "size": 11
+            },
+            "intenseTextStyle": "bold",
+            "opacity": 100,
+            "scrollbarState": "hidden",
+            "startingDirectory": "D:\\dev",
+            "useAcrylic": false
+        },
+        "list": 
+        [
+            {
+                "commandline": "pwsh.exe -NoLogo",
+                "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+                "hidden": false,
+                "icon": "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png",
+                "name": "PowerShell 7",
+                "source": "Windows.Terminal.PowershellCore"
+            },
+            {
+                "commandline": "wsl.exe --cd ~",
+                "guid": "{2c4de342-38b7-51cf-b940-2309a097f518}",
+                "hidden": false,
+                "icon": "ms-appx:///ProfileIcons/{9acb9455-ca41-5af7-950f-204b4cbf56df}.png",
+                "name": "WSL (zsh)",
+                "source": "Windows.Terminal.Wsl"
+            },
+            {
+                "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
+                "hidden": true,
+                "name": "Windows PowerShell"
+            },
+            {
+                "guid": "{0caa0dad-35be-5f56-a8ff-afceeeaa6101}",
+                "hidden": true,
+                "icon": "ms-appx:///ProfileIcons/{0caa0dad-35be-5f56-a8ff-afceeeaa6101}.png",
+                "name": "Command Prompt"
+            },
+            {
+                "guid": "{b453ae62-4e3d-5e58-b989-0a998ec441b8}",
+                "hidden": false,
+                "name": "Azure Cloud Shell",
+                "source": "Windows.Terminal.Azure"
+            },
+            {
+                "guid": "{223ca131-a6fc-5273-af91-0cd2eab2b9b8}",
+                "hidden": false,
+                "name": "Developer Command Prompt for VS 2022 (2)",
+                "source": "Windows.Terminal.VisualStudio"
+            },
+            {
+                "guid": "{a532cefc-a080-5b66-9da3-10e23f02d34c}",
+                "hidden": false,
+                "name": "Developer PowerShell for VS 2022 (2)",
+                "source": "Windows.Terminal.VisualStudio"
+            },
+            {
+                "guid": "{0667e54a-5770-58a8-ad60-5a9f69383acf}",
+                "hidden": true,
+                "name": "Developer Command Prompt for VS 2022",
+                "source": "Windows.Terminal.VisualStudio"
+            },
+            {
+                "guid": "{6e98425e-7bec-5a57-b5cb-442c31914eb9}",
+                "hidden": true,
+                "name": "Developer PowerShell for VS 2022",
+                "source": "Windows.Terminal.VisualStudio"
+            },
+            {
+                "guid": "{c6773968-c273-5c97-b3ae-84c9375d07fa}",
+                "hidden": false,
+                "name": "Ubuntu",
+                "source": "Microsoft.WSL"
+            },
+            {
+                "guid": "{2ece5bfe-50ed-5f3a-ab87-5cd4baafed2b}",
+                "hidden": false,
+                "name": "Git Bash",
+                "source": "Git"
+            }
+        ]
+    },
+    "schemes": 
+    [
+        {
+            "background": "#1A1B26",
+            "black": "#32344A",
+            "blue": "#7AA2F7",
+            "brightBlack": "#444B6A",
+            "brightBlue": "#7DA6FF",
+            "brightCyan": "#0DB9D7",
+            "brightGreen": "#B9F27C",
+            "brightPurple": "#BB9AF7",
+            "brightRed": "#FF7A93",
+            "brightWhite": "#ABB2BF",
+            "brightYellow": "#FF9E64",
+            "cursorColor": "#C0CAF5",
+            "cyan": "#449DAB",
+            "foreground": "#A9B1D6",
+            "green": "#9ECE6A",
+            "name": "Tokyo Night",
+            "purple": "#AD8EE6",
+            "red": "#F7768E",
+            "selectionBackground": "#33467C",
+            "white": "#9699A8",
+            "yellow": "#E0AF68"
+        }
+    ],
+    "showTabsInTitlebar": true,
+    "snapToGridOnResize": false,
+    "tabSwitcherMode": "mru",
+    "theme": "dark",
+    "themes": [],
+    "useAcrylicInTabRow": false,
+    "windowingBehavior": "useExisting",
+    "wordDelimiters": " ./\\()\"'-:,.;<>~!@#$%^&*|+=[]{}~?\u2502"
 }

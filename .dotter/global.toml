@@ -1,5 +1,6 @@
 [common.variables]
 copy_command = "pbcopy"  # default/fallback
+herdr_shell      = ""                           # herdr pane shell; Windows local.toml overrides to PowerShell 7
 theme            = "tokyo-night"                # tokyo-night | catppuccin-macchiato | catppuccin-mocha | gruvbox-dark
 theme_wezterm    = "Tokyo Night"               # Tokyo Night | Catppuccin Macchiato | Catppuccin Mocha | GruvboxDark
 theme_wt         = "Tokyo Night"               # Windows Terminal — define color table in windows/terminal/settings.json
@@ -40,7 +41,7 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 
 [windows.files]
 "windows/wsl/.wslconfig" = "~/.wslconfig"
-"windows/terminal/settings.json" = "~/scoop/apps/windows-terminal/current/settings"
+"windows/terminal/settings.json" = "~/scoop/apps/windows-terminal/current/settings/settings.json"
 
 [mac.files]
 "common/bottom" = "~/Library/Application Support/bottom"

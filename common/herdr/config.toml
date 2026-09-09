@@ -1,6 +1,9 @@
-# herdr configuration — dotter-managed (symlinked from common/herdr/config.toml).
+# herdr configuration — dotter-managed (templated from common/herdr/config.toml).
 # Full default with every option: `herdr --default-config`
 # Apply without restart: `herdr server reload-config`
+#
+# Contains handlebars placeholders, so dotter renders it as a template (copied)
+# rather than a symlink. Re-run `dotter -v` after editing this file.
 
 # Skip the first-run setup wizard; this file is the source of truth.
 onboarding = false
@@ -9,3 +12,9 @@ onboarding = false
 # Built-ins: catppuccin, terminal, tokyo-night, dracula, nord, gruvbox,
 #            one-dark, solarized, kanagawa, rose-pine, vesper
 name = "tokyo-night"
+
+[terminal]
+# Shell for new interactive panes. Empty means $SHELL (unix) or powershell.exe
+# (Windows). Value comes from the `herdr_shell` dotter variable; the Windows
+# local.toml overrides it to PowerShell 7's pwsh.exe.
+default_shell = "{{herdr_shell}}"
