@@ -16,6 +16,7 @@ models, or {"sub": true}.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import json
 import os
@@ -24,6 +25,8 @@ import shutil
 import sys
 import tempfile
 import tomllib
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -35,6 +38,7 @@ if sys.platform == 'win32':
 SCRIPT_DIR = Path(__file__).resolve().parent
 SETTINGS_DIR = SCRIPT_DIR / 'aicodingagentsettings'
 CONFIG_PATH = Path.home() / '.aicodingagentconfig.jsonc'
+ENV_PATH = Path.home() / '.env'
 BACKUP_DIR = Path.home() / '.aicodingagentconfig.backups'
 AGENT_ALIASES = {
     'claude-code': 'claude',
@@ -44,6 +48,8 @@ AGENT_ALIASES = {
 }
 SUPPORTED_AGENTS = {'claude', 'codex', 'opencode'}
 ALLOWED_PROVIDER_KEYS = {'apikey', 'baseurl', 'models', 'sub'}
+WEBDAV_BASE_URL = 'https://dav.jianguoyun.com/dav/'
+WEBDAV_REMOTE_DIR = 'aicodingagentconfig'
 
 
 class ConfigError(RuntimeError):
@@ -123,6 +129,109 @@ def save_config(data: dict[str, Any]) -> None:
         '// Edit manually, then switch with: aicodingagentconfig.py <agent> <provider>.\n'
     )
     atomic_write(CONFIG_PATH, header + json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+
+def webdav_request(url: str, user: str, password: str, method: str = 'GET', data: bytes | None = None):
+    request = urllib.request.Request(url, data=data, method=method)
+    token = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
+    request.add_header('Authorization', f'Basic {token}')
+    return urllib.request.urlopen(request, timeout=60)
+
+
+def webdav_put(url: str, user: str, password: str, content: bytes) -> None:
+    try:
+        with webdav_request(url, user, password, 'PUT', content) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        raise ConfigError(f'WebDAV 上传失败: HTTP {exc.code} {exc.reason} ({url})') from exc
+    except urllib.error.URLError as exc:
+        raise ConfigError(f'WebDAV 上传失败: {exc.reason} ({url})') from exc
+
+
+def webdav_get(url: str, user: str, password: str) -> bytes:
+    try:
+        with webdav_request(url, user, password, 'GET') as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        raise ConfigError(f'WebDAV 下载失败: HTTP {exc.code} {exc.reason} ({url})') from exc
+    except urllib.error.URLError as exc:
+        raise ConfigError(f'WebDAV 下载失败: {exc.reason} ({url})') from exc
+
+
+def remote_url(name: str) -> str:
+    return f'{WEBDAV_BASE_URL.rstrip("/")}/{WEBDAV_REMOTE_DIR}/{name}'
+
+
+def webdav_mkcol(url: str, user: str, password: str) -> None:
+    try:
+        with webdav_request(url, user, password, 'MKCOL') as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 405:
+            return
+        raise ConfigError(f'WebDAV 创建目录失败: HTTP {exc.code} {exc.reason} ({url})') from exc
+    except urllib.error.URLError as exc:
+        raise ConfigError(f'WebDAV 创建目录失败: {exc.reason} ({url})') from exc
+
+
+def remote_dir_url() -> str:
+    return f'{WEBDAV_BASE_URL.rstrip("/")}/{WEBDAV_REMOTE_DIR}/'
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('export '):
+            line = line[len('export '):].lstrip()
+        if '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+            value = value[1:-1]
+        if key:
+            values[key] = value
+    return values
+
+
+def resolve_webdav_credentials(user: str | None, password: str | None) -> tuple[str, str]:
+    if not (user and password):
+        env_values = load_dotenv(ENV_PATH)
+        user = user or env_values.get('WEBDAV_USER')
+        password = password or env_values.get('WEBDAV_PASSWORD')
+    if not user or not password:
+        raise ConfigError(
+            '--push/--pull 需要 --user 和 --password，'
+            '或 ~/.env 中的 WEBDAV_USER / WEBDAV_PASSWORD'
+        )
+    return user, password
+
+
+def push_remote(user: str, password: str) -> list[Path]:
+    local_paths = [path for path in (CONFIG_PATH, ENV_PATH) if path.exists()]
+    if not local_paths:
+        raise ConfigError(f'没有可上传的文件: {CONFIG_PATH}、{ENV_PATH} 均不存在')
+    uploaded: list[Path] = []
+    webdav_mkcol(remote_dir_url(), user, password)
+    for path in local_paths:
+        webdav_put(remote_url(path.name), user, password, path.read_bytes())
+        uploaded.append(path)
+    return uploaded
+
+
+def pull_remote(user: str, password: str) -> list[Path]:
+    downloaded: list[Path] = []
+    for path in (CONFIG_PATH, ENV_PATH):
+        content = webdav_get(remote_url(path.name), user, password)
+        atomic_write(path, content.decode('utf-8'))
+        downloaded.append(path)
+    return downloaded
 
 
 def validate_config(config: dict[str, Any]) -> None:
@@ -359,6 +468,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('provider', nargs='?', help='ds、glm、sub，或 JSONC 中的完整别名')
     parser.add_argument('--dry-run', action='store_true', help='显示将变更的文件，但不写入')
     parser.add_argument('--list', action='store_true', help='列出 agent/provider')
+    parser.add_argument('--push', action='store_true', help='将 ~/.aicodingagentconfig.jsonc 与 ~/.env 上传到坚果云 WebDAV')
+    parser.add_argument('--pull', action='store_true', help='从坚果云 WebDAV 下载 ~/.aicodingagentconfig.jsonc 与 ~/.env')
+    parser.add_argument('--user', help='WebDAV 账号')
+    parser.add_argument('--password', help='WebDAV 密码')
     return parser
 
 
@@ -371,6 +484,18 @@ def print_available(config: dict[str, Any]) -> None:
 def main() -> int:
     args = build_parser().parse_args()
     try:
+        if args.push or args.pull:
+            user, password = resolve_webdav_credentials(args.user, args.password)
+            if args.push:
+                changed = push_remote(user, password)
+                print('已上传:')
+            else:
+                changed = pull_remote(user, password)
+                print('已下载:')
+            for path in changed:
+                print(f'  {path}')
+            return 0
+
         config = load_jsonc(CONFIG_PATH)
         if not config:
             raise ConfigError(
