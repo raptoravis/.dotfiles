@@ -22,17 +22,17 @@
             "command": 
             {
                 "action": "newTab",
-                "profile": "Command Prompt"
+                "profile": "WSL (zsh)"
             },
-            "id": "User.newTab.D78C777"
+            "id": "User.newTab.1A46AA41"
         },
         {
             "command": 
             {
                 "action": "newTab",
-                "profile": "WSL (zsh)"
+                "profile": "Command Prompt"
             },
-            "id": "User.newTab.1A46AA41"
+            "id": "User.newTab.D78C777"
         }
     ],
     "copyFormatting": "none",
@@ -47,16 +47,16 @@
             "keys": "ctrl+shift+1"
         },
         {
-            "id": "Terminal.DuplicateTab",
-            "keys": "ctrl+shift+d"
+            "id": "Terminal.PrevTab",
+            "keys": "ctrl+shift+tab"
         },
         {
             "id": "Terminal.CopyToClipboard",
             "keys": "ctrl+c"
         },
         {
-            "id": "Terminal.PrevTab",
-            "keys": "ctrl+shift+tab"
+            "id": "Terminal.DuplicateTab",
+            "keys": "ctrl+shift+d"
         },
         {
             "id": "Terminal.NextTab",
@@ -67,36 +67,36 @@
             "keys": "ctrl+shift+w"
         },
         {
-            "id": "Terminal.FindText",
-            "keys": "ctrl+shift+f"
-        },
-        {
             "id": "Terminal.PasteFromClipboard",
             "keys": "ctrl+v"
         },
         {
-            "id": "Terminal.ResetFontSize",
-            "keys": "ctrl+0"
+            "id": "Terminal.FindText",
+            "keys": "ctrl+shift+f"
         },
         {
             "id": "User.newTab.1A46AA41",
             "keys": "ctrl+shift+2"
         },
         {
-            "id": null,
-            "keys": "ctrl+minus"
+            "id": "Terminal.ResetFontSize",
+            "keys": "ctrl+0"
         },
         {
-            "id": null,
-            "keys": "ctrl+plus"
+            "id": "User.newTab.D78C777",
+            "keys": "ctrl+shift+3"
         },
         {
             "id": "Terminal.DuplicatePaneAuto",
             "keys": "alt+shift+d"
         },
         {
-            "id": "User.newTab.D78C777",
-            "keys": "ctrl+shift+3"
+            "id": null,
+            "keys": "ctrl+plus"
+        },
+        {
+            "id": null,
+            "keys": "ctrl+minus"
         },
         {
             "id": "Terminal.ToggleFullscreen",
