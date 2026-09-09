@@ -579,7 +579,7 @@ if command -v npm >/dev/null 2>&1; then
     zg_args=()
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    zg install "${zg_args[@]}" --yes || warn "  zg install failed (inspect zg output above)"
+    zg install "${zg_args[@]}" --yes || warn "  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign on WSL2 mirrored networking)"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -686,23 +686,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8c) pnpm via corepack
-#     apt 的 nodejs 包不一定带 corepack（取决于发行版）。优先尝试独立的
-#     corepack apt 包（Ubuntu 24.04+ / Debian 12+），失败回退到 npm -g。
+# 8c) pnpm — 独立二进制（dsh 为 profile 装插件时调用 `pnpm`）。
+#     不用 corepack：apt 的 node-corepack (0.24.0) 跑不了 pnpm >= 10
+#     （pnpm.cjs 顶层 dynamic import 抛 ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING）。
+#     旧机器上 corepack 的 pnpm shim 可能已在 PATH 却是坏的，故按「能否真正
+#     执行」判断（pnpm --version），而不是 command -v。
 # ---------------------------------------------------------------------------
-if ! command -v corepack >/dev/null 2>&1; then
-  log "corepack not on PATH -- installing"
-  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq corepack 2>/dev/null \
-    || (command -v npm >/dev/null 2>&1 && sudo npm install -g corepack 2>/dev/null) \
-    || warn "  corepack install failed (apt + npm both unable)"
-fi
-if command -v corepack >/dev/null 2>&1; then
-  log "Enabling pnpm via corepack"
-  sudo corepack enable 2>/dev/null || warn "  corepack enable failed"
-  sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY \
-    corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
+if command -v npm >/dev/null 2>&1; then
+  if ! pnpm --version >/dev/null 2>&1; then
+    log "Installing standalone pnpm via npm"
+    sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY \
+      npm install -g pnpm || warn "  pnpm install failed"
+  else
+    log "pnpm: $(pnpm --version 2>/dev/null)"
+  fi
 else
-  warn "corepack still not on PATH -- skipping pnpm activation"
+  warn "npm not on PATH -- skipping pnpm install"
 fi
 
 # ---------------------------------------------------------------------------

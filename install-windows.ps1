@@ -784,7 +784,7 @@ if (Test-Cmd npm) {
         foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
         Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
         & zg install @zgArgs --yes
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (inspect zg output above)' }
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)' }
     }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -902,16 +902,24 @@ if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f,
 }
 
 # ---------------------------------------------------------------------------
-# 7c) pnpm via corepack (ships with Node >= 16.10)
+# 7c) pnpm — standalone binary (dsh invokes `pnpm` to install profile plugins).
+#     Avoid corepack: the corepack that ships with nodejs-lts can't run pnpm >= 10
+#     (pnpm.cjs top-level dynamic import throws ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING).
+#     Gate on "can actually run", not Test-Cmd — a broken shim may already be on PATH.
 # ---------------------------------------------------------------------------
-if (Test-Cmd corepack) {
-    Write-Step 'Enabling pnpm via corepack'
-    corepack enable
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  corepack enable failed' }
-    corepack prepare pnpm@latest --activate
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  corepack prepare pnpm failed' }
+if (Test-Cmd npm) {
+    $pnpmOk = $false
+    if (Test-Cmd pnpm) {
+        pnpm --version *> $null
+        if ($LASTEXITCODE -eq 0) { $pnpmOk = $true }
+    }
+    if (-not $pnpmOk) {
+        Write-Step 'Installing standalone pnpm via npm'
+        npm install -g pnpm
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pnpm install failed' }
+    }
 } else {
-    Write-Warn2 'corepack not on PATH -- skipping pnpm activation (open a new shell after scoop installs nodejs-lts, then re-run)'
+    Write-Warn2 'npm not on PATH -- skipping pnpm install (open a new shell after scoop installs nodejs-lts, then re-run)'
 }
 
 # ---------------------------------------------------------------------------

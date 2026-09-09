@@ -390,7 +390,7 @@ if command -v npm >/dev/null 2>&1; then
     zg_args=()
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    zg install "${zg_args[@]}" --yes || warn "  zg install failed (inspect zg output above)"
+    zg install "${zg_args[@]}" --yes || warn "  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)"
   fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
@@ -497,14 +497,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7c) pnpm via corepack (ships with Node >= 16.10)
+# 7c) pnpm — standalone binary (dsh invokes `pnpm` to install profile plugins).
+#     Avoid corepack: the corepack bundled with node / brew can't run pnpm >= 10
+#     (pnpm.cjs top-level dynamic import throws ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING).
+#     Gate on "can actually run", not command -v — a broken shim may already be on PATH.
 # ---------------------------------------------------------------------------
-if command -v corepack >/dev/null 2>&1; then
-  log "Enabling pnpm via corepack"
-  corepack enable 2>/dev/null || warn "  corepack enable failed"
-  corepack prepare pnpm@latest --activate 2>/dev/null || warn "  corepack prepare pnpm failed"
+if command -v npm >/dev/null 2>&1; then
+  if ! pnpm --version >/dev/null 2>&1; then
+    log "Installing standalone pnpm via npm"
+    npm install -g pnpm || warn "  pnpm install failed"
+  else
+    log "pnpm: $(pnpm --version 2>/dev/null)"
+  fi
 else
-  warn "corepack not on PATH -- skipping pnpm activation (ensure node was installed by brew bundle)"
+  warn "npm not on PATH -- skipping pnpm install (ensure node was installed by brew bundle)"
 fi
 
 # ---------------------------------------------------------------------------
