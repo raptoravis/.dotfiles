@@ -16,8 +16,6 @@
 - 仅当用户在同一指令里写了"commit + push + ff-merge"这种连写时，按字面授权范围执行；他说 "commit" 就只 commit 不 push
 - 不影响纯 local 操作（编辑文件 / mkdir / 装依赖 / 跑测试）— 那些可以照常做
 
-
-
 <!-- ZVEC_GREP_START -->
 ## zvec-grep
 
