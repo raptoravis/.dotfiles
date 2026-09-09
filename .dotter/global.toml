@@ -28,6 +28,9 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/claude/claude-hud-usage-refresh.mjs" = "~/.claude/claude-hud-usage-refresh.mjs"
 "common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
 "common/claude/claude-hud-config.json" = "~/.claude/plugins/claude-hud/config.json"
+"common/codex/AGENTS.md" = "~/.codex/AGENTS.md"
+"common/opencode/AGENTS.md" = "~/.config/opencode/AGENTS.md"
+"common/grok/AGENTS.md" = "~/.grok/AGENTS.md"
 "common/nushell" = "~/.config/nushell"
 "common/scripts/check-balance.py" = "~/.local/bin/check-balance.py"
 
