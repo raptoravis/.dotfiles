@@ -872,6 +872,10 @@ def apply_opencode(
         Path.home() / '.opencode' / 'config.json',
     ]
     path = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+    current = load_jsonc(path) if path.exists() else {}
+    managed_keys = set(result) | {'provider', 'model'}
+    preserved = {key: value for key, value in current.items() if key not in managed_keys}
+    result = deep_merge(preserved, result)
     content = json.dumps(result, ensure_ascii=False, indent=2) + '\n'
     return [path] if write_if_changed(path, content, stamp, dry_run) else []
 
