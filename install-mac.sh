@@ -538,11 +538,20 @@ fi
 # ---------------------------------------------------------------------------
 # Claude Code — `claude plugin` CLI (declarative settings.json is the fallback).
 if command -v claude >/dev/null 2>&1; then
-  log "Installing yunxing Claude Code plugin (marketplace: yunxing)"
+  log "Installing/updating yunxing Claude Code plugin (marketplace: yunxing)"
   claude plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
     || warn "  claude marketplace add failed (may already be registered)"
-  claude plugin install yunxing@yunxing >/dev/null 2>&1 \
-    || warn "  claude plugin install failed (may already be enabled)"
+  # `install` is idempotent and won't pull newer code, so force a marketplace
+  # refresh + `update` to pick up the latest yunxing on every re-run.
+  claude plugin marketplace update yunxing >/dev/null 2>&1 \
+    || warn "  claude marketplace update failed"
+  if claude plugin list 2>/dev/null | grep -q 'yunxing@yunxing'; then
+    claude plugin update yunxing@yunxing >/dev/null 2>&1 \
+      || warn "  claude plugin update failed"
+  else
+    claude plugin install yunxing@yunxing >/dev/null 2>&1 \
+      || warn "  claude plugin install failed (may already be enabled)"
+  fi
 else
   warn "claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)"
 fi
