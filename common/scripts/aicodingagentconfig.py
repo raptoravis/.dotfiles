@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import hashlib
 import json
 import os
 import re
@@ -31,6 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
@@ -40,6 +42,16 @@ SETTINGS_DIR = SCRIPT_DIR / 'aicodingagentsettings'
 CONFIG_PATH = Path.home() / '.aicodingagentconfig.jsonc'
 ENV_PATH = Path.home() / '.env'
 BACKUP_DIR = Path.home() / '.aicodingagentconfig.backups'
+SYNC_DIR = Path.home() / '.aicodingagentconfig.sync'
+SYNC_STATE_PATH = SYNC_DIR / 'state.json'
+MANIFEST_NAME = 'manifest.json'
+# 同步的两个文件（basename），顺序固定以便状态/清单一致。
+SYNC_NAMES = (CONFIG_PATH.name, ENV_PATH.name)
+CONFIG_HEADER = (
+    '// Machine-local provider data. This file contains API keys; do not commit it.\n'
+    '// Provider fields are restricted to: apikey, baseurl, models, sub.\n'
+    '// Edit manually, then switch with: aicodingagentconfig.py <agent> <provider>.\n'
+)
 AGENT_ALIASES = {
     'claude-code': 'claude',
     'open-code': 'opencode',
@@ -123,17 +135,12 @@ def atomic_write(path: Path, content: str, *, secret: bool = True) -> None:
 
 
 def save_config(data: dict[str, Any]) -> None:
-    header = (
-        '// Machine-local provider data. This file contains API keys; do not commit it.\n'
-        '// Provider fields are restricted to: apikey, baseurl, models, sub.\n'
-        '// Edit manually, then switch with: aicodingagentconfig.py <agent> <provider>.\n'
-    )
-    atomic_write(CONFIG_PATH, header + json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    atomic_write(CONFIG_PATH, CONFIG_HEADER + json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 
 
 def webdav_request(url: str, user: str, password: str, method: str = 'GET', data: bytes | None = None):
     request = urllib.request.Request(url, data=data, method=method)
-    token = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
+    token = base64.b64encode(f'{user}:{password}'.encode()).decode('ascii')
     request.add_header('Authorization', f'Basic {token}')
     return urllib.request.urlopen(request, timeout=60)
 
@@ -178,11 +185,9 @@ def remote_dir_url() -> str:
     return f'{WEBDAV_BASE_URL.rstrip("/")}/{WEBDAV_REMOTE_DIR}/'
 
 
-def load_dotenv(path: Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
+def parse_dotenv(text: str) -> dict[str, str]:
     values: dict[str, str] = {}
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith('#'):
             continue
@@ -200,6 +205,12 @@ def load_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
+def load_dotenv(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    return parse_dotenv(path.read_text(encoding='utf-8'))
+
+
 def resolve_webdav_credentials(user: str | None, password: str | None) -> tuple[str, str]:
     if not (user and password):
         env_values = load_dotenv(ENV_PATH)
@@ -213,25 +224,446 @@ def resolve_webdav_credentials(user: str | None, password: str | None) -> tuple[
     return user, password
 
 
-def push_remote(user: str, password: str) -> list[Path]:
+def hash_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def short_hash(value: str) -> str:
+    return value[:12]
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, 'wb') as handle:
+            handle.write(content)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def load_sync_state() -> dict[str, Any]:
+    return load_jsonc(SYNC_STATE_PATH)
+
+
+def save_sync_state(state: dict[str, Any]) -> None:
+    atomic_write(SYNC_STATE_PATH, json.dumps(state, ensure_ascii=False, indent=2) + '\n')
+
+
+def remote_get(name: str, user: str, password: str) -> bytes | None:
+    """下载远端文件；404 返回 None，其余错误抛 ConfigError。"""
+    try:
+        return webdav_get(remote_url(name), user, password)
+    except ConfigError as exc:
+        if 'HTTP 404' in str(exc):
+            return None
+        raise
+
+
+def load_remote_manifest(user: str, password: str) -> dict[str, Any]:
+    content = remote_get(MANIFEST_NAME, user, password)
+    if content is None:
+        return {}
+    try:
+        data = json.loads(content.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ConfigError(f'远端 manifest 解析失败: {exc}') from exc
+    if not isinstance(data, dict):
+        raise ConfigError('远端 manifest 顶层必须是对象')
+    return data
+
+
+def save_remote_manifest(user: str, password: str, manifest: dict[str, Any]) -> None:
+    payload = json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8')
+    webdav_put(remote_url(MANIFEST_NAME), user, password, payload)
+
+
+def base_path(name: str) -> Path:
+    return SYNC_DIR / f'{name}.base'
+
+
+def read_base(name: str) -> bytes | None:
+    path = base_path(name)
+    if not path.exists():
+        return None
+    return path.read_bytes()
+
+
+def write_base(name: str, content: bytes) -> None:
+    atomic_write_bytes(base_path(name), content)
+
+
+def backup_bytes(name: str, content: bytes, suffix: str, stamp: str) -> Path:
+    destination = BACKUP_DIR / stamp / suffix / name
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    return destination
+
+
+def sidecar_path(name: str) -> Path:
+    return Path.home() / f'{name}.remote'
+
+
+def merge3(base: Any, ours: Any, theirs: Any) -> tuple[Any, list[str]]:
+    """三路合并，返回 (merged, conflicts)；conflicts 为冲突键的 dot 路径列表。"""
+    conflicts: list[str] = []
+    if ours == theirs:
+        return copy.deepcopy(theirs), conflicts
+    if ours == base:
+        return copy.deepcopy(theirs), conflicts
+    if theirs == base:
+        return copy.deepcopy(ours), conflicts
+    if isinstance(base, dict) and isinstance(ours, dict) and isinstance(theirs, dict):
+        merged: dict[str, Any] = {}
+        for key in sorted(set(base) | set(ours) | set(theirs)):
+            in_base = key in base
+            in_ours = key in ours
+            in_theirs = key in theirs
+            if in_ours and in_theirs:
+                if not in_base:
+                    if ours[key] == theirs[key]:
+                        merged[key] = copy.deepcopy(ours[key])
+                    else:
+                        conflicts.append(key)
+                    continue
+                value, sub_conflicts = merge3(base[key], ours[key], theirs[key])
+                merged[key] = value
+                conflicts.extend(f'{key}.{path}' if path else key for path in sub_conflicts)
+            elif in_ours:
+                if not in_base:
+                    merged[key] = copy.deepcopy(ours[key])
+                elif base[key] == ours[key]:
+                    continue  # 我方未动、对方删除 → 保持删除
+                else:
+                    merged[key] = copy.deepcopy(ours[key])
+                    conflicts.append(key)  # 我方改、对方删 → 冲突，保留我方
+            elif not in_base:
+                merged[key] = copy.deepcopy(theirs[key])  # 对方新增
+            elif base[key] == theirs[key]:
+                continue  # 对方未动、我方删除 → 保持删除
+            else:
+                conflicts.append(key)  # 对方改、我方删 → 冲突，保留删除
+        return merged, conflicts
+    conflicts.append('')
+    return copy.deepcopy(ours), conflicts
+
+
+def merge3_jsonc(base: bytes, ours: bytes, theirs: bytes) -> tuple[bytes | None, list[str]]:
+    try:
+        base_obj = json.loads(strip_jsonc(base.decode('utf-8')))
+        ours_obj = json.loads(strip_jsonc(ours.decode('utf-8')))
+        theirs_obj = json.loads(strip_jsonc(theirs.decode('utf-8')))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return None, [f'JSON 解析失败: {exc}']
+    if not all(isinstance(obj, dict) for obj in (base_obj, ours_obj, theirs_obj)):
+        return None, ['顶层必须是对象，无法结构化合并']
+    merged, conflicts = merge3(base_obj, ours_obj, theirs_obj)
+    content = CONFIG_HEADER + json.dumps(merged, ensure_ascii=False, indent=2) + '\n'
+    return content.encode('utf-8'), conflicts
+
+
+def merge3_env(base: bytes, ours: bytes, theirs: bytes) -> tuple[bytes | None, list[str]]:
+    try:
+        base_obj = parse_dotenv(base.decode('utf-8'))
+        ours_obj = parse_dotenv(ours.decode('utf-8'))
+        theirs_obj = parse_dotenv(theirs.decode('utf-8'))
+    except UnicodeDecodeError as exc:
+        return None, [f'.env 解析失败: {exc}']
+    merged, conflicts = merge3(base_obj, ours_obj, theirs_obj)
+    lines = [f'{key}={value}' for key, value in sorted(merged.items())]
+    content = '\n'.join(lines) + ('\n' if lines else '')
+    return content.encode('utf-8'), conflicts
+
+
+def merge_by_name(name: str, base: bytes, ours: bytes, theirs: bytes) -> tuple[bytes | None, list[str]]:
+    if name == ENV_PATH.name:
+        return merge3_env(base, ours, theirs)
+    return merge3_jsonc(base, ours, theirs)
+
+
+def resolve_conflict(
+    name: str,
+    ours: bytes,
+    theirs: bytes | None,
+    conflicts: list[str],
+    stamp: str,
+    direction: str,
+) -> str:
+    """交互式解决冲突，返回 'remote' / 'local' / 'manual'。"""
+    local_backup = backup_bytes(name, ours, 'local', stamp)
+    remote_backup = None
+    if theirs is not None:
+        remote_backup = backup_bytes(name, theirs, 'remote', stamp)
+        atomic_write_bytes(sidecar_path(name), theirs)
+    print(f'\n检测到冲突: {name}（{direction}）')
+    print(f'  本地 (ours):   {short_hash(hash_bytes(ours))}')
+    print(f'  远端 (theirs): {short_hash(hash_bytes(theirs)) if theirs is not None else "无(已被删除)"}')
+    if conflicts:
+        print(f'  无法自动合并的字段: {", ".join(conflicts)}')
+    print(f'  已备份 本地 → {local_backup}')
+    if remote_backup is not None:
+        print(f'  已备份 远端 → {remote_backup}')
+        print(f'  远端内容已拉取到: {sidecar_path(name)}')
+    if not sys.stdin.isatty():
+        raise ConfigError(
+            f'{name} 存在冲突但当前不是交互终端，无法自动解决'
+            f'（远端内容见 {sidecar_path(name)}）'
+        )
+    while True:
+        try:
+            choice = input('  [r] 采用远端  [l] 采用本地  [m] 手动合并  请选择 [r/l/m]: ').strip().lower()
+        except EOFError as exc:
+            raise ConfigError(
+                f'{name} 冲突需交互选择，但 stdin 已关闭（远端内容见 {sidecar_path(name)}）'
+            ) from exc
+        if choice in ('r', 'remote'):
+            return 'remote'
+        if choice in ('l', 'local'):
+            return 'local'
+        if choice in ('m', 'manual'):
+            print(
+                f'  已退出，未写入。请参考 {sidecar_path(name)} 手动合并进本地文件，'
+                '完成后重跑 --push/--pull（冲突时选 l 采用合并结果）。'
+            )
+            return 'manual'
+        print('  无效输入，请输入 r / l / m')
+
+
+MAX_HISTORY = 3
+
+
+def record_version(
+    name: str,
+    content: bytes,
+    old_chain: list[dict[str, Any]] | None,
+    state: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    """把 base 快照、本地 state、远端 manifest 三者对齐到同一个新版本。
+
+    每个版本节点只有单一 `parent`，构成一条版本链；链上最多保留 MAX_HISTORY
+    个节点（最新在前），更早的历史被丢弃。
+    """
+    write_base(name, content)
+    new_hash = hash_bytes(content)
+    parent = old_chain[0]['hash'] if old_chain else None
+    new_node = {'hash': new_hash, 'parent': parent}
+    chain = [new_node] + (old_chain[: MAX_HISTORY - 1] if old_chain else [])
+    state[name] = chain
+    manifest[name] = chain
+
+
+def _push_file(
+    name: str,
+    ours: bytes,
+    base: list[dict[str, Any]] | None,
+    base_content: bytes | None,
+    theirs: bytes | None,
+    manifest: dict[str, Any],
+    state: dict[str, Any],
+    stamp: str,
+    user: str,
+    password: str,
+) -> str:
+    ours_hash = hash_bytes(ours)
+    theirs_hash = hash_bytes(theirs) if theirs is not None else None
+    local_path = Path.home() / name
+
+    if theirs is None:
+        if base is None:
+            webdav_put(remote_url(name), user, password, ours)
+            record_version(name, ours, None, state, manifest)
+            return f'  {name}: 已上传（首次，{short_hash(ours_hash)}）'
+        choice = resolve_conflict(name, ours, None, ['远端文件已被删除'], stamp, 'push')
+        if choice == 'local':
+            webdav_put(remote_url(name), user, password, ours)
+            record_version(name, ours, base, state, manifest)
+            return f'  {name}: 已重新上传（采用本地，{short_hash(ours_hash)}）'
+        if choice == 'remote':
+            base_path(name).unlink(missing_ok=True)
+            state.pop(name, None)
+            manifest.pop(name, None)
+            local_path.unlink(missing_ok=True)
+            return f'  {name}: 已删除本地（采用远端删除）'
+        return f'  {name}: 冲突未解决，已跳过'
+
+    if base is None:
+        if ours == theirs:
+            record_version(name, theirs, None, state, manifest)
+            return f'  {name}: 已一致（{short_hash(theirs_hash)}）'
+        choice = resolve_conflict(name, ours, theirs, ['本地与远端各自独立产生，无共同祖先'], stamp, 'push')
+        if choice == 'local':
+            webdav_put(remote_url(name), user, password, ours)
+            record_version(name, ours, None, state, manifest)
+            return f'  {name}: 已上传（采用本地，{short_hash(ours_hash)}）'
+        if choice == 'remote':
+            atomic_write_bytes(local_path, theirs)
+            record_version(name, theirs, None, state, manifest)
+            return f'  {name}: 本地已回退为远端（{short_hash(theirs_hash)}）'
+        return f'  {name}: 冲突未解决，已跳过'
+
+    local_changed = ours_hash != base[0]['hash']
+    remote_changed = theirs_hash != base[0]['hash']
+
+    if not local_changed and not remote_changed:
+        return f'  {name}: 已一致（{short_hash(ours_hash)}）'
+    if local_changed and not remote_changed:
+        webdav_put(remote_url(name), user, password, ours)
+        record_version(name, ours, base, state, manifest)
+        return f'  {name}: 已上传（{short_hash(ours_hash)}）'
+    if not local_changed and remote_changed:
+        choice = resolve_conflict(name, ours, theirs, ['本地未变、远端有更新'], stamp, 'push')
+        if choice == 'local':
+            webdav_put(remote_url(name), user, password, ours)
+            record_version(name, ours, base, state, manifest)
+            return f'  {name}: 已上传覆盖远端（采用本地）'
+        if choice == 'remote':
+            atomic_write_bytes(local_path, theirs)
+            record_version(name, theirs, base, state, manifest)
+            return f'  {name}: 本地已更新为远端（{short_hash(theirs_hash)}）'
+        return f'  {name}: 冲突未解决，已跳过'
+
+    # 两端都改 → 三路合并；无共同祖先快照则退回交互。
+    if base_content is not None:
+        merged, conflicts = merge_by_name(name, base_content, ours, theirs)
+        if merged is not None and not conflicts:
+            atomic_write_bytes(local_path, merged)
+            webdav_put(remote_url(name), user, password, merged)
+            record_version(name, merged, base, state, manifest)
+            return f'  {name}: 已自动合并并上传（{short_hash(hash_bytes(merged))}）'
+        choice = resolve_conflict(name, ours, theirs, conflicts, stamp, 'push')
+    else:
+        choice = resolve_conflict(name, ours, theirs, ['缺少共同祖先快照，无法自动合并'], stamp, 'push')
+    if choice == 'local':
+        webdav_put(remote_url(name), user, password, ours)
+        record_version(name, ours, base, state, manifest)
+        return f'  {name}: 已上传（采用本地）'
+    if choice == 'remote':
+        atomic_write_bytes(local_path, theirs)
+        record_version(name, theirs, base, state, manifest)
+        return f'  {name}: 本地已回退为远端（{short_hash(theirs_hash)}）'
+    return f'  {name}: 冲突未解决，已跳过'
+
+
+def _pull_file(
+    name: str,
+    ours: bytes | None,
+    base: list[dict[str, Any]] | None,
+    base_content: bytes | None,
+    theirs: bytes,
+    manifest: dict[str, Any],
+    state: dict[str, Any],
+    stamp: str,
+    user: str,
+    password: str,
+) -> str:
+    ours_hash = hash_bytes(ours) if ours is not None else None
+    theirs_hash = hash_bytes(theirs)
+    local_path = Path.home() / name
+
+    if base is None:
+        if ours is None:
+            atomic_write_bytes(local_path, theirs)
+            record_version(name, theirs, None, state, manifest)
+            return f'  {name}: 已下载（首次，{short_hash(theirs_hash)}）'
+        if ours == theirs:
+            record_version(name, theirs, None, state, manifest)
+            return f'  {name}: 已一致（{short_hash(theirs_hash)}）'
+        choice = resolve_conflict(name, ours, theirs, ['本地与远端各自独立产生，无共同祖先'], stamp, 'pull')
+        if choice == 'remote':
+            atomic_write_bytes(local_path, theirs)
+            record_version(name, theirs, None, state, manifest)
+            return f'  {name}: 已下载（采用远端）'
+        if choice == 'local':
+            return f'  {name}: 保留本地，未下载'
+        return f'  {name}: 冲突未解决，已跳过'
+
+    local_changed = ours_hash != base[0]['hash'] if ours is not None else True
+    remote_changed = theirs_hash != base[0]['hash']
+
+    if not remote_changed:
+        if local_changed:
+            choice = resolve_conflict(name, ours or b'', theirs, ['远端无更新、本地有未推送改动'], stamp, 'pull')
+            if choice == 'remote':
+                atomic_write_bytes(local_path, theirs)
+                record_version(name, theirs, base, state, manifest)
+                return f'  {name}: 本地已回退为远端'
+            if choice == 'local':
+                return f'  {name}: 保留本地（远端无更新）'
+            return f'  {name}: 冲突未解决，已跳过'
+        return f'  {name}: 已一致（{short_hash(theirs_hash)}）'
+    if not local_changed:
+        atomic_write_bytes(local_path, theirs)
+        record_version(name, theirs, base, state, manifest)
+        return f'  {name}: 已下载（{short_hash(theirs_hash)}）'
+
+    # 两端都改 → 三路合并；无共同祖先快照则退回交互。
+    if base_content is not None:
+        merged, conflicts = merge_by_name(name, base_content, ours or b'', theirs)
+        if merged is not None and not conflicts:
+            atomic_write_bytes(local_path, merged)
+            record_version(name, merged, base, state, manifest)
+            return f'  {name}: 已自动合并（{short_hash(hash_bytes(merged))}）'
+        choice = resolve_conflict(name, ours or b'', theirs, conflicts, stamp, 'pull')
+    else:
+        choice = resolve_conflict(name, ours or b'', theirs, ['缺少共同祖先快照，无法自动合并'], stamp, 'pull')
+    if choice == 'remote':
+        atomic_write_bytes(local_path, theirs)
+        record_version(name, theirs, base, state, manifest)
+        return f'  {name}: 已下载（采用远端）'
+    if choice == 'local':
+        return f'  {name}: 保留本地（采用本地）'
+    return f'  {name}: 冲突未解决，已跳过'
+
+
+def push_remote(user: str, password: str) -> list[str]:
     local_paths = [path for path in (CONFIG_PATH, ENV_PATH) if path.exists()]
     if not local_paths:
         raise ConfigError(f'没有可上传的文件: {CONFIG_PATH}、{ENV_PATH} 均不存在')
-    uploaded: list[Path] = []
     webdav_mkcol(remote_dir_url(), user, password)
+    manifest = load_remote_manifest(user, password)
+    state = load_sync_state()
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    results: list[str] = []
     for path in local_paths:
-        webdav_put(remote_url(path.name), user, password, path.read_bytes())
-        uploaded.append(path)
-    return uploaded
+        name = path.name
+        ours = path.read_bytes()
+        base = state.get(name)
+        base_content = read_base(name) if base is not None else None
+        theirs = remote_get(name, user, password)
+        results.append(
+            _push_file(name, ours, base, base_content, theirs, manifest, state, stamp, user, password)
+        )
+    save_sync_state(state)
+    save_remote_manifest(user, password, manifest)
+    return results
 
 
-def pull_remote(user: str, password: str) -> list[Path]:
-    downloaded: list[Path] = []
-    for path in (CONFIG_PATH, ENV_PATH):
-        content = webdav_get(remote_url(path.name), user, password)
-        atomic_write(path, content.decode('utf-8'))
-        downloaded.append(path)
-    return downloaded
+def pull_remote(user: str, password: str) -> list[str]:
+    webdav_mkcol(remote_dir_url(), user, password)
+    manifest = load_remote_manifest(user, password)
+    state = load_sync_state()
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    results: list[str] = []
+    for name in SYNC_NAMES:
+        theirs = remote_get(name, user, password)
+        if theirs is None:
+            continue
+        local_path = Path.home() / name
+        ours = local_path.read_bytes() if local_path.exists() else None
+        base = state.get(name)
+        base_content = read_base(name) if base is not None else None
+        results.append(
+            _pull_file(name, ours, base, base_content, theirs, manifest, state, stamp, user, password)
+        )
+    if not results:
+        return ['  远端无文件可下载']
+    save_sync_state(state)
+    save_remote_manifest(user, password, manifest)
+    return results
 
 
 def validate_config(config: dict[str, Any]) -> None:
@@ -487,13 +919,13 @@ def main() -> int:
         if args.push or args.pull:
             user, password = resolve_webdav_credentials(args.user, args.password)
             if args.push:
-                changed = push_remote(user, password)
-                print('已上传:')
+                results = push_remote(user, password)
+                print('推送结果:')
             else:
-                changed = pull_remote(user, password)
-                print('已下载:')
-            for path in changed:
-                print(f'  {path}')
+                results = pull_remote(user, password)
+                print('拉取结果:')
+            for line in results:
+                print(line)
             return 0
 
         config = load_jsonc(CONFIG_PATH)
