@@ -959,8 +959,16 @@ if (Test-Cmd codex) {
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if (Test-Cmd opencode) {
     Write-Step 'Installing yunxing OpenCode plugin'
-    opencode plugin --force -g 'yunxing@git+https://github.com/raptoravis/yunxing.git' 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed' }
+    # OpenCode reuses the cached Git dependency for an unchanged module spec,
+    # even with --force. Include HEAD so a new yunxing revision gets a new spec.
+    $yunxingRefLine = git ls-remote https://github.com/raptoravis/yunxing.git HEAD 2>$null | Select-Object -First 1
+    $yunxingRef = if ($yunxingRefLine) { ($yunxingRefLine -split '\s+')[0] } else { $null }
+    if ($yunxingRef) {
+        opencode plugin --force -g "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxingRef" 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed' }
+    } else {
+        Write-Warn2 '  could not resolve yunxing HEAD; skipping OpenCode plugin install'
+    }
 } else {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
