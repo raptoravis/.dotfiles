@@ -17,7 +17,7 @@ for arg in "$@"; do
     -h|--help)
       cat <<EOF
 Usage: $0 [--uninstallagents]
-  --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode,
+  --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
                      DeepSeek Harness, Pi) and remove their config dirs.
 EOF
       exit 0
@@ -31,7 +31,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@deepseek-ai/dsh" "@earendil-works/pi-coding-agent"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@xai-official/grok" "@deepseek-ai/dsh" "@earendil-works/pi-coding-agent"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -44,6 +44,7 @@ if (( UNINSTALL_AGENTS )); then
     "$HOME/.claude"
     "${CODEX_HOME:-$HOME/.codex}"
     "$HOME/.config/opencode"
+    "$HOME/.grok"
     "${DSH_HOME:-$HOME/.dsh}"
     "$HOME/.pi"
     "$HOME/.agents"
@@ -477,16 +478,6 @@ if [[ -f "$DOTFILES_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8b) Grok Build
-# ---------------------------------------------------------------------------
-if ! command -v grok >/dev/null 2>&1; then
-  log "Installing Grok Build"
-  curl -fsSL https://x.ai/cli/install.sh | bash || warn "  Grok Build install failed"
-else
-  log "Grok Build already installed"
-fi
-
-# ---------------------------------------------------------------------------
 # 8b2) herdr — coding-agent runtime (background daemon that keeps terminals
 #      alive for Claude Code / Codex / OpenCode etc. across sleep/network drops)
 # ---------------------------------------------------------------------------
@@ -536,7 +527,7 @@ if command -v npm >/dev/null 2>&1; then
     log "puppeteer already installed"
   fi
 
-  # AI coding CLIs (Claude Code / Codex / OpenCode / DeepSeek Harness / Pi)
+  # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
   if ! cmd_exists_local claude; then
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
     npm_global @anthropic-ai/claude-code || warn "  claude-code install failed"
@@ -548,6 +539,10 @@ if command -v npm >/dev/null 2>&1; then
   if ! cmd_exists_local opencode; then
     log "Installing OpenCode CLI (opencode-ai)"
     npm_global opencode-ai || warn "  opencode install failed"
+  fi
+  if ! cmd_exists_local grok; then
+    log "Installing Grok CLI (@xai-official/grok)"
+    npm_global @xai-official/grok || warn "  grok install failed"
   fi
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.

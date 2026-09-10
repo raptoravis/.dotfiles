@@ -31,16 +31,17 @@ dependencies = [
     "install-rust-tools",      # Install additional Rust tools
     "install-mise",            # Install mise runtime manager
     "dotfiles",                # Symlink dotfiles
-    "install-ai-clis",         # Claude Code / Codex / OpenCode CLIs (npm)
+    "install-ai-clis",         # Claude Code / Codex / OpenCode / Grok CLIs (npm global)
 ]
 
 [tasks.install-ai-clis]
-description = "Install Claude Code / Codex / OpenCode CLIs via npm"
+description = "Install Claude Code / Codex / OpenCode / Grok CLIs globally via npm"
 script = [
     "echo --- Installing AI coding CLIs ---",
     "npm install -g @anthropic-ai/claude-code || echo '  claude-code install failed (need npm on PATH)'",
     "npm install -g @openai/codex             || echo '  codex install failed'",
     "npm install -g opencode-ai               || echo '  opencode install failed'",
+    "npm install -g @xai-official/grok         || echo '  grok install failed'",
 ]
 
 [tasks.install-rust]

@@ -16,7 +16,7 @@ param(
     # tools launched outside pwsh (vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
-    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode,
+    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
     # DeepSeek Harness, Pi) and remove their config directories.
     [switch]$UninstallAgents
 )
@@ -49,6 +49,7 @@ if ($UninstallAgents) {
             '@anthropic-ai/claude-code',
             '@openai/codex',
             'opencode-ai',
+            '@xai-official/grok',
             '@deepseek-ai/dsh',
             '@earendil-works/pi-coding-agent'
         )
@@ -69,6 +70,7 @@ if ($UninstallAgents) {
         (Join-Path $env:USERPROFILE '.claude'),
         $CodexHome,
         (Join-Path $env:USERPROFILE '.config\opencode'),
+        (Join-Path $env:USERPROFILE '.grok'),
         $DshHome,
         (Join-Path $env:USERPROFILE '.pi'),
         (Join-Path $env:USERPROFILE '.agents'),
@@ -677,17 +679,6 @@ if ($shellPath) {
 }
 
 # ---------------------------------------------------------------------------
-# 7b) Grok Build
-# ---------------------------------------------------------------------------
-if (-not (Test-Cmd grok)) {
-    Write-Step 'Installing Grok Build'
-    irm 'https://x.ai/cli/install.ps1' | iex
-    if (-not (Test-Cmd grok)) { Write-Warn2 '  Grok Build install failed or grok is not yet on PATH' }
-} else {
-    Write-Host '  Grok Build already installed'
-}
-
-# ---------------------------------------------------------------------------
 # 7b2) herdr — coding-agent runtime (background daemon that keeps terminals
 #      alive for Claude Code / Codex / OpenCode etc. across sleep/network drops)
 # ---------------------------------------------------------------------------
@@ -734,7 +725,7 @@ if (Test-Cmd npm) {
     } else {
         Write-Host '  puppeteer already installed'
     }
-    # AI coding CLIs (Claude Code / Codex / OpenCode / DeepSeek Harness / Pi)
+    # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
     if (-not (Test-Cmd claude)) {
         Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
         npm install -g '@anthropic-ai/claude-code'
@@ -749,6 +740,11 @@ if (Test-Cmd npm) {
         Write-Step 'Installing OpenCode CLI (opencode-ai)'
         npm install -g 'opencode-ai'
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode install failed' }
+    }
+    if (-not (Test-Cmd grok)) {
+        Write-Step 'Installing Grok CLI (@xai-official/grok)'
+        npm install -g '@xai-official/grok'
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok install failed' }
     }
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
