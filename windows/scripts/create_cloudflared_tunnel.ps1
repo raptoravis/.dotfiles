@@ -71,8 +71,23 @@ param(
     [switch]$Force,
     [switch]$InstallService,
     [switch]$Cleanup,
-    [switch]$DeleteRemoteTunnel
+    [switch]$DeleteRemoteTunnel,
+
+    # Internal: set when the script re-launches itself elevated (see the
+    # self-elevation block after Test-IsAdmin). -ElevationParamsFile carries the
+    # serialized bound parameters.
+    [switch]$Elevated,
+    [string]$ElevationParamsFile
 )
+
+# Re-hydrate parameters when re-launched elevated (see self-elevation block below).
+if ($ElevationParamsFile) {
+    $elev = Import-Clixml $ElevationParamsFile
+    foreach ($key in $elev.Keys) {
+        Set-Variable -Name $key -Value $elev[$key]
+    }
+    Remove-Item $ElevationParamsFile -ErrorAction SilentlyContinue
+}
 
 $ErrorActionPreference = 'Stop'
 
@@ -118,6 +133,34 @@ function Test-IsAdmin {
         [Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Auto-elevate when the requested action needs admin (-InstallService / -Cleanup
+# touch the Windows service and the SYSTEM profile) and we are not already elevated.
+# Re-invoke ourselves via UAC, forwarding every bound parameter through a CliXml
+# temp file so -Routes (hashtable) and the switches survive the round-trip.
+if ((-not $Elevated) -and ($InstallService -or $Cleanup) -and (-not (Test-IsAdmin))) {
+    $elevParams = @{}
+    foreach ($key in $PSBoundParameters.Keys) { $elevParams[$key] = $PSBoundParameters[$key] }
+    $elevFile = Join-Path $env:TEMP ("cloudflared-elev-{0}.clixml" -f $PID)
+    $elevParams | Export-Clixml -Path $elevFile
+
+    Write-Host 'Admin required for -InstallService / -Cleanup. Re-launching elevated...' -ForegroundColor Yellow
+    $argList = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-File', "`"$PSCommandPath`"",
+        '-Elevated', '-ElevationParamsFile', "`"$elevFile`"",
+        # -Preset is Mandatory, so it must be on the command line too — the
+        # CliXml re-hydration runs after param binding and can't satisfy it.
+        '-Preset', $Preset
+    )
+    try {
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -ArgumentList $argList
+    } catch {
+        Write-Warning 'Elevation was canceled or failed. Re-run from an elevated PowerShell to use -InstallService / -Cleanup.'
+        exit 1
+    }
+    exit 0
+}
+
 # Probe whether Cloudflare's edge can complete a TLS handshake for $hostname.
 # A separate sub-zone (e.g. tunan.ccwu.cc registered as its own zone) gets its
 # own Universal SSL cert that may not be issued yet; until then CF closes the
@@ -157,6 +200,12 @@ Require-Command cloudflared
 $cloudflaredDir = Join-Path $env:USERPROFILE '.cloudflared'
 if (-not (Test-Path $cloudflaredDir)) {
     New-Item -ItemType Directory -Path $cloudflaredDir | Out-Null
+}
+
+# Fail fast on a missing API token before any destructive cleanup, so a missing
+# CLOUDFLARE_API_TOKEN can't leave the service deleted + config moved with no rebuild.
+if (-not $env:CLOUDFLARE_API_TOKEN) {
+    throw 'CLOUDFLARE_API_TOKEN env var not set. Create a token with Zone.Zone:Read + Zone.DNS:Edit.'
 }
 
 # ----- cleanup -----
@@ -400,6 +449,7 @@ $lines = @(
     "tunnel: $TunnelName"
     "credentials-file: `"$credsForwardSlash`""
     "ha-connections: $HaConnections"
+    "protocol: http2"
     ''
     'ingress:'
 )
