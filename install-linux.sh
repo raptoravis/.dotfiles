@@ -569,29 +569,45 @@ if command -v npm >/dev/null 2>&1; then
   fi
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
-  # only the ZVEC_GREP_START/END managed blocks. dsh / pi / grok are not
-  # supported zg targets and are skipped.
+  # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+  # unmanaged zvec_grep table. dsh / pi / grok are not supported zg targets and
+  # are skipped.
   if cmd_exists_local zg; then
     zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
     for t in claude codex opencode; do
       cmd_exists_local "$t" && zg_targets+=("$t")
     done
-    zg_args=()
+    zg_args=(--force)
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
-      printf '%s\n' "$zg_out"
+    if (( IS_WSL )); then
+      # WSL2 mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
+      # (serving Cursor) and cannot see WSL paths, so stdio would collide on 7999.
+      # Run a separate WSL daemon on 7998 and wire agents over HTTP instead.
+      zg_port=7998
+      if ! zg_on_out=$(zg server on --listen "127.0.0.1:$zg_port" 2>&1); then
+        printf '%s\n' "$zg_on_out" >&2
+        warn "  zg daemon (127.0.0.1:$zg_port) failed to start"
+      fi
+      if zg_out=$(ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" \
+          zg install "${zg_args[@]}" --mcp-transport http --yes 2>&1); then
+        printf '%s\n' "$zg_out"
+      else
+        printf '%s\n' "$zg_out" >&2
+        warn "  zg install failed (see zg output above)"
+      fi
     else
-      case "$zg_out" in
-        *EADDRINUSE*)
-          log "  zg daemon already running — daemon start skipped (benign on WSL2 mirrored networking)";;
-        *conflicting*|*unmanaged*)
-          printf '%s\n' "$zg_out" >&2
-          warn "  zg install failed: MCP config conflict needs cleanup (see zg output above)";;
-        *)
-          printf '%s\n' "$zg_out" >&2
-          warn "  zg install failed (see zg output above)";;
-      esac
+      if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
+        printf '%s\n' "$zg_out"
+      else
+        case "$zg_out" in
+          *EADDRINUSE*)
+            log "  zg daemon already running — daemon start skipped";;
+          *)
+            printf '%s\n' "$zg_out" >&2
+            warn "  zg install failed (see zg output above)";;
+        esac
+      fi
     fi
   fi
 
