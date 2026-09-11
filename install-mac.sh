@@ -182,6 +182,20 @@ for pkg in jq vhs silicon ffmpeg ast-grep; do
   fi
 done
 
+# Tailscale — installed via Brewfile; start the daemon and authenticate if needed.
+if command -v tailscale >/dev/null 2>&1; then
+  log "Starting Tailscale daemon"
+  brew services start tailscale 2>/dev/null || warn "  tailscaled start failed"
+  if tailscale status >/dev/null 2>&1; then
+    log "  Tailscale already up"
+  else
+    log "  Logging in to Tailscale — complete browser auth when prompted"
+    tailscale up || warn "  tailscale up failed (run it manually)"
+  fi
+else
+  warn "tailscale not on PATH — ensure Brewfile installed it"
+fi
+
 # ---------------------------------------------------------------------------
 # 4) Rust toolchain (rustup)
 # ---------------------------------------------------------------------------

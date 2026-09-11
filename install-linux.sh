@@ -225,6 +225,21 @@ if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh || warn "  tailscale install failed"
 fi
 
+if command -v tailscale >/dev/null 2>&1; then
+  # Start the daemon (systemd). On WSL2 without systemd this is skipped — the
+  # Windows host's Tailscale covers the network instead.
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl enable --now tailscaled 2>/dev/null \
+      || warn "  tailscaled start failed (WSL2 without systemd? use the Windows host's Tailscale)"
+  fi
+  if tailscale status >/dev/null 2>&1; then
+    log "  Tailscale already up"
+  else
+    log "  Logging in to Tailscale — complete browser auth when prompted"
+    tailscale up || warn "  tailscale up failed (run it manually)"
+  fi
+fi
+
 # WezTerm — only on bare Linux (WSL uses the Windows host's wezterm).
 # Default Debian/Ubuntu repos lag behind upstream by years; use wez's
 # fury.io apt repo for current builds.
