@@ -407,7 +407,13 @@ if (Test-Path $ScoopFile) {
 # ---------------------------------------------------------------------------
 if (Test-Cmd winget) {
     Write-Step 'Installing winget apps'
-    $WingetApps = @('Microsoft.PowerToys', 'Microsoft.Coreutils')
+    $WingetApps = @(
+        'Microsoft.PowerToys',
+        'Microsoft.Coreutils',
+        # Private networking for reaching services such as the PostgreSQL host
+        # without exposing their ports to the public internet.
+        'Tailscale.Tailscale'
+    )
     foreach ($id in $WingetApps) {
         $installed = winget list --id $id --source winget --accept-source-agreements 2>$null |
             Select-String -SimpleMatch $id -Quiet
