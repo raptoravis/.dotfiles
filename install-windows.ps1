@@ -430,6 +430,32 @@ if (Test-Cmd winget) {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
 }
 
+# Tailscale — installed via winget; ensure the daemon service is running and
+# authenticate if this machine hasn't logged in yet.
+$tailscaleCommand = Get-Command tailscale.exe -ErrorAction SilentlyContinue
+$tailscaleExe = if ($tailscaleCommand) {
+    $tailscaleCommand.Source
+} else {
+    Join-Path $env:ProgramFiles 'Tailscale\tailscale.exe'
+}
+if (Test-Path -LiteralPath $tailscaleExe) {
+    $tsSvc = Get-Service -Name 'Tailscale' -ErrorAction SilentlyContinue
+    if (-not $tsSvc) { $tsSvc = Get-Service -Name 'tailscaled' -ErrorAction SilentlyContinue }
+    if ($tsSvc -and $tsSvc.Status -ne 'Running') {
+        Start-Service -Name $tsSvc.Name -ErrorAction SilentlyContinue
+    }
+    & $tailscaleExe status *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host '  Tailscale already up'
+    } else {
+        Write-Host '  Logging in to Tailscale — complete browser auth when prompted'
+        & $tailscaleExe up
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  tailscale up failed (run it manually)' }
+    }
+} else {
+    Write-Warn2 'tailscale.exe not found — Tailscale may not have installed via winget'
+}
+
 # ---------------------------------------------------------------------------
 # 4d) Visual Studio Build Tools — C++ compiler, MSBuild, CMake, headers.
 #     Needed by: Neovim Telescope FZF Native (requires gcc/cl), Windows
