@@ -159,7 +159,8 @@ $Tools = @(
     'dotter'
 )
 $Languages = @('python', 'go', 'lua', 'lua51', 'luarocks', 'stylua')
-$Deps      = @('autohotkey', 'cmake', 'fastfetch', 'firacode')
+# tree-sitter CLI is required by nvim-treesitter (main) to compile parsers.
+$Deps      = @('autohotkey', 'cmake', 'fastfetch', 'firacode', 'tree-sitter')
 
 # Snapshot installed scoop apps once. `scoop export` emits JSON (apps[].Name);
 # fall back to parsing `scoop list` on older scoop versions.

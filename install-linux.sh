@@ -399,6 +399,33 @@ if ! command -v yazi >/dev/null 2>&1 || ! command -v ya >/dev/null 2>&1; then
   fi
 fi
 
+# tree-sitter CLI — required by nvim-treesitter (main) to compile parsers.
+# apt's `tree-sitter-cli` is too old (<0.26.1), so use the official release binary.
+if ! command -v tree-sitter >/dev/null 2>&1; then
+  TS_ARCH="$(uname -m)"
+  case "$TS_ARCH" in
+    x86_64) TS_ASSET="tree-sitter-linux-x64.gz" ;;
+    aarch64) TS_ASSET="tree-sitter-linux-arm64.gz" ;;
+    *) TS_ASSET="" ;;
+  esac
+  if [[ -n "$TS_ASSET" ]]; then
+    log "Installing tree-sitter CLI via official GitHub Release (apt version too old)"
+    mkdir -p "$HOME/.local/bin"
+    TS_TMP="$(mktemp -d)"
+    if curl -fsSL "https://github.com/tree-sitter/tree-sitter/releases/latest/download/$TS_ASSET" \
+           -o "$TS_TMP/tree-sitter.gz" \
+       && gunzip -c "$TS_TMP/tree-sitter.gz" > "$TS_TMP/tree-sitter" \
+       && install -m 0755 "$TS_TMP/tree-sitter" "$HOME/.local/bin/tree-sitter"; then
+      log "  -> tree-sitter -> $HOME/.local/bin"
+    else
+      warn "  tree-sitter install failed (download / extract error)"
+    fi
+    rm -rf "$TS_TMP"
+  else
+    warn "  unsupported arch ($TS_ARCH) — skipping tree-sitter"
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # 4) mise — install via official script (the Linux path in Makefile.toml)
 # ---------------------------------------------------------------------------

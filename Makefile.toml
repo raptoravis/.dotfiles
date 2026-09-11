@@ -124,7 +124,7 @@ script = [
     "scoop install python go lua lua51 luarocks stylua",
 
     "echo --- Installing Dependencies ---",
-    "scoop install autohotkey gcc cmake fastfetch firacode",
+    "scoop install autohotkey gcc cmake fastfetch firacode tree-sitter",
     "scoop shim add gcc ~\\scoop\\apps\\gcc\\current\\bin\\gcc.exe", # Needed for NVim Telescope FZF Native
 
     "echo --- Installing Scoopfile (if exists) ---",
@@ -194,6 +194,11 @@ script = [
     "  YAZI_TMP=\"$(mktemp -d)\"",
     "  curl -fsSL \"https://github.com/sxyazi/yazi/releases/latest/download/yazi-${YAZI_ARCH}-unknown-linux-gnu.zip\" -o \"$YAZI_TMP/yazi.zip\" && unzip -q -o \"$YAZI_TMP/yazi.zip\" -d \"$YAZI_TMP\" && install -m 0755 \"$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/yazi\" \"$HOME/.local/bin/yazi\" && install -m 0755 \"$YAZI_TMP/yazi-${YAZI_ARCH}-unknown-linux-gnu/ya\" \"$HOME/.local/bin/ya\" || echo '  yazi install failed'",
     "  rm -rf \"$YAZI_TMP\"",
+    "fi",
+    "# tree-sitter CLI — required by nvim-treesitter (main); apt version too old, use release binary",
+    "if ! command -v tree-sitter >/dev/null 2>&1; then",
+    "  TS_ARCH=\"$(uname -m)\"; case \"$TS_ARCH\" in x86_64) TS_ASSET=tree-sitter-linux-x64.gz ;; aarch64) TS_ASSET=tree-sitter-linux-arm64.gz ;; *) TS_ASSET= ;; esac",
+    "  if [ -n \"$TS_ASSET\" ]; then mkdir -p \"$HOME/.local/bin\"; TS_TMP=\"$(mktemp -d)\"; curl -fsSL \"https://github.com/tree-sitter/tree-sitter/releases/latest/download/$TS_ASSET\" -o \"$TS_TMP/ts.gz\" && gunzip -c \"$TS_TMP/ts.gz\" > \"$TS_TMP/ts\" && install -m 0755 \"$TS_TMP/ts\" \"$HOME/.local/bin/tree-sitter\" && echo '  -> tree-sitter' || echo '  tree-sitter install failed'; rm -rf \"$TS_TMP\"; fi",
     "fi",
     "go install github.com/jesseduffield/lazygit@latest",
     "go install github.com/jesseduffield/lazydocker@latest",

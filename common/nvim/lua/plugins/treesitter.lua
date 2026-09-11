@@ -5,56 +5,62 @@ end
 return {
     {
         'nvim-treesitter/nvim-treesitter',
-        dependencies = {
-            'nushell/tree-sitter-nu',
-            'nvim-treesitter/nvim-treesitter-textobjects',
-        },
-        event = { 'BufReadPre', 'BufNewFile' },
+        lazy = false,
         build = ':TSUpdate',
         config = function()
-            vim.defer_fn(function()
-                require('nvim-treesitter.configs').setup({
-                    ensure_installed = {
-                        'bash',
-                        'dockerfile',
-                        'lua',
-                        'c',
-                        'lua',
-                        'rust',
-                        'python',
-                        'go',
-                        'dockerfile',
-                        'toml',
-                        'json',
-                        'yaml',
-                        'toml',
-                        'markdown',
-                        'bash',
-                        'nu',
-                        'terraform',
-                    },
-                    sync_install = false,
-                    auto_install = true,
-                    highlights = {
-                        enable = true,
-                    },
-                    textobjects = {
-                        select = {
-                            enable = true,
-                            lookahead = true, -- Automatically jump forward to textobj, similar to targets.vim""
-                            keymaps = {
-                                -- You can use the capture groups defined in textobjects.scm
-                                ['aa'] = '@parameter.outer',
-                                ['ia'] = '@parameter.inner',
-                                ['af'] = '@function.outer',
-                                ['if'] = '@function.inner',
-                                ['ac'] = '@class.outer',
-                                ['ic'] = '@class.inner',
-                            },
-                        },
-                    },
-                })
-            end, 0)
+            require('nvim-treesitter').setup({})
+
+            require('nvim-treesitter').install({
+                'bash',
+                'c',
+                'dockerfile',
+                'go',
+                'json',
+                'lua',
+                'markdown',
+                'nu',
+                'python',
+                'rust',
+                'terraform',
+                'toml',
+                'yaml',
+            })
+
+            -- Treesitter highlighting is a core Neovim feature, not auto-enabled by the plugin.
+            vim.api.nvim_create_autocmd('FileType', {
+                pattern = { '*' },
+                callback = function()
+                    pcall(vim.treesitter.start)
+                end,
+            })
+        end,
+    },
+
+    {
+        'nvim-treesitter/nvim-treesitter-textobjects',
+        branch = 'main',
+        dependencies = { 'nvim-treesitter/nvim-treesitter' },
+        lazy = false,
+        config = function()
+            require('nvim-treesitter-textobjects').setup({
+                select = {
+                    lookahead = true, -- Automatically jump forward to textobj, similar to targets.vim
+                },
+            })
+
+            local function ts_select(capture)
+                return function()
+                    require('nvim-treesitter-textobjects.select').select_textobject(capture, 'textobjects')
+                end
+            end
+
+            -- You can use the capture groups defined in textobjects.scm
+            vim.keymap.set({ 'x', 'o' }, 'aa', ts_select('@parameter.outer'))
+            vim.keymap.set({ 'x', 'o' }, 'ia', ts_select('@parameter.inner'))
+            vim.keymap.set({ 'x', 'o' }, 'af', ts_select('@function.outer'))
+            vim.keymap.set({ 'x', 'o' }, 'if', ts_select('@function.inner'))
+            vim.keymap.set({ 'x', 'o' }, 'ac', ts_select('@class.outer'))
+            vim.keymap.set({ 'x', 'o' }, 'ic', ts_select('@class.inner'))
         end,
     },
 

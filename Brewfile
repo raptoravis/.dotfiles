@@ -36,6 +36,7 @@ brew "fastfetch"
 brew "cmake"
 brew "openssl"
 brew "neovim"
+brew "tree-sitter" # CLI required by nvim-treesitter to compile parsers
 brew "lazydocker"
 
 # Languages
