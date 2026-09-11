@@ -29,6 +29,7 @@ brew "gh"
 
 # Networking / Tunnels
 brew "cloudflared"
+brew "tailscale"
 
 # Dev Tools
 brew "witr"

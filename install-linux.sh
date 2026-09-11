@@ -219,6 +219,12 @@ else
   warn "npm not on PATH after apt install — consider nodesource.com/setup_22.x for a current Node.js"
 fi
 
+# Tailscale — private mesh network for reaching services (e.g. the PostgreSQL host).
+if ! command -v tailscale >/dev/null 2>&1; then
+  log "Installing Tailscale"
+  curl -fsSL https://tailscale.com/install.sh | sh || warn "  tailscale install failed"
+fi
+
 # WezTerm — only on bare Linux (WSL uses the Windows host's wezterm).
 # Default Debian/Ubuntu repos lag behind upstream by years; use wez's
 # fury.io apt repo for current builds.
