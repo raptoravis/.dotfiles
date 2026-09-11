@@ -38,8 +38,10 @@ file and run:
 
 The migration creates a separate database and login role, restores a custom
 format dump, and replaces `DATABASE_URL` in the target env file with this
-host's Tailscale MagicDNS name. It refuses to overwrite an existing target
-database.
+host's Tailscale MagicDNS name. The generated URL preserves the source
+project's PostgreSQL driver scheme and explicitly disables PostgreSQL TLS;
+Tailscale already encrypts the network path. It refuses to overwrite an
+existing target database.
 
 On another application machine, run `install-windows.ps1`, sign in to the same
 tailnet, and pull or otherwise transfer the project's env file. Tailscale

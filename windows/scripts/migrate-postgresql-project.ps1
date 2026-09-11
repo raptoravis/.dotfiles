@@ -42,8 +42,12 @@ $sourceLine = Get-Content -LiteralPath $SourceEnvFile |
     Select-Object -Last 1
 if (-not $sourceLine) { throw "DATABASE_URL was not found in $SourceEnvFile." }
 $sourceUrl = ($sourceLine -split '=', 2)[1].Trim()
-$sourceUrl = $sourceUrl -replace '^postgresql\+[^:]+:', 'postgresql:'
-$sourceUri = [Uri]$sourceUrl
+if ($sourceUrl -notmatch '^(?<scheme>postgres(?:ql)?(?:\+(?<driver>[^:]+))?):') {
+    throw 'DATABASE_URL must use a PostgreSQL URL scheme.'
+}
+$targetScheme = $Matches.scheme
+$targetSslOption = if ($Matches.driver -eq 'asyncpg') { 'ssl=disable' } else { 'sslmode=disable' }
+$sourceUri = [Uri]($sourceUrl -replace '^postgres(?:ql)?\+[^:]+:', 'postgresql:')
 $sourceUserInfo = $sourceUri.UserInfo -split ':', 2
 $sourceUser = [Uri]::UnescapeDataString($sourceUserInfo[0])
 $sourcePassword = if ($sourceUserInfo.Count -gt 1) { [Uri]::UnescapeDataString($sourceUserInfo[1]) } else { '' }
@@ -115,7 +119,7 @@ try {
     $tailscaleHost = $tailscaleStatus.Self.DNSName.TrimEnd('.')
     if (-not $tailscaleHost) { $tailscaleHost = $tailscaleStatus.Self.TailscaleIPs[0] }
     $encodedPassword = ConvertTo-UrlEncoded $appPassword
-    $targetUrl = "postgresql+asyncpg://${TargetUser}:${encodedPassword}@${tailscaleHost}:$Port/$TargetDatabase"
+    $targetUrl = "$($targetScheme)://${TargetUser}:${encodedPassword}@${tailscaleHost}:$Port/$TargetDatabase`?$targetSslOption"
     $targetLines = @(Get-Content -LiteralPath $TargetEnvFile -ErrorAction SilentlyContinue)
     $updated = $false
     for ($index = 0; $index -lt $targetLines.Count; $index++) {
