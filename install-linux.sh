@@ -611,40 +611,56 @@ if command -v npm >/dev/null 2>&1; then
   fi
 
   # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
-  if ! cmd_exists_local claude; then
+  # 已装也重新走 npm 升级：`npm install -g` 会拉到 latest，重跑脚本时同步更新。
+  if cmd_exists_local claude; then
+    log "Upgrading Claude Code CLI (@anthropic-ai/claude-code)"
+  else
     log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
-    npm_global @anthropic-ai/claude-code || warn "  claude-code install failed"
   fi
-  if ! cmd_exists_local codex; then
+  npm_global @anthropic-ai/claude-code || warn "  claude-code install/upgrade failed"
+  if cmd_exists_local codex; then
+    log "Upgrading Codex CLI (@openai/codex)"
+  else
     log "Installing Codex CLI (@openai/codex)"
-    npm_global @openai/codex || warn "  codex install failed"
   fi
-  if ! cmd_exists_local opencode; then
+  npm_global @openai/codex || warn "  codex install/upgrade failed"
+  if cmd_exists_local opencode; then
+    log "Upgrading OpenCode CLI (opencode-ai)"
+  else
     log "Installing OpenCode CLI (opencode-ai)"
-    npm_global opencode-ai || warn "  opencode install failed"
   fi
-  if ! cmd_exists_local grok; then
+  npm_global opencode-ai || warn "  opencode install/upgrade failed"
+  if cmd_exists_local grok; then
+    log "Upgrading Grok CLI (@xai-official/grok)"
+  else
     log "Installing Grok CLI (@xai-official/grok)"
-    npm_global @xai-official/grok || warn "  grok install failed"
   fi
+  npm_global @xai-official/grok || warn "  grok install/upgrade failed"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
-  if ! cmd_exists_local dsh; then
+  if cmd_exists_local dsh; then
+    log "Upgrading DeepSeek Harness CLI (@deepseek-ai/dsh)"
+  else
     log "Installing DeepSeek Harness CLI (@deepseek-ai/dsh)"
-    npm_global @deepseek-ai/dsh || warn "  dsh (DeepSeek Harness) install failed (requires Node.js >= 22.19)"
   fi
+  npm_global @deepseek-ai/dsh || warn "  dsh (DeepSeek Harness) install/upgrade failed (requires Node.js >= 22.19)"
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-  if ! cmd_exists_local pi; then
+  if cmd_exists_local pi; then
+    log "Upgrading Pi coding agent CLI (@earendil-works/pi-coding-agent)"
+  else
     log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
-    npm_global @earendil-works/pi-coding-agent || warn "  pi install failed"
   fi
+  npm_global @earendil-works/pi-coding-agent || warn "  pi install/upgrade failed"
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  if ! cmd_exists_local zg; then
+  # 已装也重新走 npm 升级：`npm install -g` 会拉到 latest，重跑脚本时同步更新。
+  if cmd_exists_local zg; then
+    log "Upgrading zg (zvec-grep) via npm"
+  else
     log "Installing zg (zvec-grep) via npm"
-    npm_global @zvec/zvec-grep || warn "  zg install failed (requires Node.js >= 22)"
   fi
+  npm_global @zvec/zvec-grep || warn "  zg install/upgrade failed (requires Node.js >= 22)"
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
