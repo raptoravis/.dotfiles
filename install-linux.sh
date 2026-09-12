@@ -964,8 +964,8 @@ fi
 # ---------------------------------------------------------------------------
 # 8f) Codex subagents (awesome-codex-subagents) — clone/update into $HOME and
 #     copy selected agents into ~/.codex/agents/ (global, available in every
-#     project). Ships all of 01-core-development plus a curated set of
-#     02-language-specialists.
+#     project). Ships all of 01-core-development plus a curated set across
+#     02-language-specialists and 05-data-ai.
 # ---------------------------------------------------------------------------
 CODEX_AGENTS_SRC="$HOME/awesome-codex-subagents"
 CODEX_AGENTS_DST="${CODEX_HOME:-$HOME/.codex}/agents"
@@ -988,12 +988,27 @@ if command -v git >/dev/null 2>&1; then
     mkdir -p "$CODEX_AGENTS_DST"
     cp -f "$CODEX_AGENTS_SRC"/categories/01-core-development/*.toml "$CODEX_AGENTS_DST/" 2>/dev/null \
       || warn "  failed to copy 01-core-development agents"
-    for name in node-specialist javascript-pro fastapi-developer nextjs-developer python-pro typescript-pro vue-expert react-specialist; do
-      src="$CODEX_AGENTS_SRC/categories/02-language-specialists/$name.toml"
+    EXTRA_AGENTS=(
+      02-language-specialists/node-specialist
+      02-language-specialists/javascript-pro
+      02-language-specialists/fastapi-developer
+      02-language-specialists/nextjs-developer
+      02-language-specialists/python-pro
+      02-language-specialists/typescript-pro
+      02-language-specialists/vue-expert
+      02-language-specialists/react-specialist
+      02-language-specialists/sql-pro
+      05-data-ai/database-optimizer
+      05-data-ai/postgres-pro
+      05-data-ai/prompt-engineer
+      05-data-ai/llm-architect
+    )
+    for rel in "${EXTRA_AGENTS[@]}"; do
+      src="$CODEX_AGENTS_SRC/categories/$rel.toml"
       if [ -f "$src" ]; then
         cp -f "$src" "$CODEX_AGENTS_DST/"
       else
-        warn "  missing agent: $name.toml"
+        warn "  missing agent: $rel.toml"
       fi
     done
   else

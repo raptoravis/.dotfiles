@@ -1215,8 +1215,8 @@ if (Test-Cmd herdr) {
 # ---------------------------------------------------------------------------
 # 7f) Codex subagents (awesome-codex-subagents) — clone/update into the home
 #     dir and copy selected agents into ~/.codex/agents/ (global, available in
-#     every project). Ships all of 01-core-development plus a curated set of
-#     02-language-specialists.
+#     every project). Ships all of 01-core-development plus a curated set across
+#     02-language-specialists and 05-data-ai.
 # ---------------------------------------------------------------------------
 $CodexAgentsSrc = Join-Path $env:USERPROFILE 'awesome-codex-subagents'
 $CodexAgentsDst = Join-Path $CodexHome 'agents'
@@ -1239,12 +1239,27 @@ if (Test-Cmd git) {
         Write-Step "Syncing Codex subagents into $CodexAgentsDst"
         New-Item -ItemType Directory -Force -Path $CodexAgentsDst | Out-Null
         Copy-Item (Join-Path $CodexAgentsSrc 'categories\01-core-development\*.toml') -Destination $CodexAgentsDst -Force -ErrorAction SilentlyContinue
-        foreach ($name in @('node-specialist', 'javascript-pro', 'fastapi-developer', 'nextjs-developer', 'python-pro', 'typescript-pro', 'vue-expert', 'react-specialist')) {
-            $src = Join-Path $CodexAgentsSrc "categories\02-language-specialists\$name.toml"
+        $extraAgents = @(
+            '02-language-specialists\node-specialist',
+            '02-language-specialists\javascript-pro',
+            '02-language-specialists\fastapi-developer',
+            '02-language-specialists\nextjs-developer',
+            '02-language-specialists\python-pro',
+            '02-language-specialists\typescript-pro',
+            '02-language-specialists\vue-expert',
+            '02-language-specialists\react-specialist',
+            '02-language-specialists\sql-pro',
+            '05-data-ai\database-optimizer',
+            '05-data-ai\postgres-pro',
+            '05-data-ai\prompt-engineer',
+            '05-data-ai\llm-architect'
+        )
+        foreach ($rel in $extraAgents) {
+            $src = Join-Path $CodexAgentsSrc "categories\$rel.toml"
             if (Test-Path $src) {
                 Copy-Item $src -Destination $CodexAgentsDst -Force
             } else {
-                Write-Warn2 "  missing agent: $name.toml"
+                Write-Warn2 "  missing agent: $rel.toml"
             }
         }
     } else {
