@@ -42,3 +42,10 @@ export all_proxy="$PROXY_URL"
 export HTTP_PROXY="$PROXY_URL"
 export HTTPS_PROXY="$PROXY_URL"
 export ALL_PROXY="$PROXY_URL"
+
+# global-agent (native-module installers like onnxruntime-node / node-llama-cpp)
+# reads its own GLOBAL_AGENT_* namespace, not http(s)_proxy; without these the
+# download bypasses the proxy and hangs under TUN mode.
+export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
+export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
+export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"

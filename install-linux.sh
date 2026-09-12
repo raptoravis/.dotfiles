@@ -105,6 +105,10 @@ if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
   export HTTPS_PROXY=http://127.0.0.1:7890
   export no_proxy=localhost,127.0.0.1
   export NO_PROXY=localhost,127.0.0.1
+  # global-agent（原生模块安装器如 onnxruntime-node）只认 GLOBAL_AGENT_*，不设则绕过代理直连、TUN 下卡死
+  export GLOBAL_AGENT_HTTP_PROXY=http://127.0.0.1:7890
+  export GLOBAL_AGENT_HTTPS_PROXY=http://127.0.0.1:7890
+  export GLOBAL_AGENT_NO_PROXY=localhost,127.0.0.1
   log "检测到 7890 代理 — 设置全局 http(s)_proxy"
 
   # 持久化到 bash 交互 shell（WSL 默认 login shell 是 bash）。zsh 的代理已在
@@ -122,6 +126,9 @@ export all_proxy="$PROXY_URL"
 export HTTP_PROXY="$PROXY_URL"
 export HTTPS_PROXY="$PROXY_URL"
 export ALL_PROXY="$PROXY_URL"
+export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
+export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
+export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"
 EOF
   fi
 fi
@@ -669,7 +676,11 @@ if command -v npm >/dev/null 2>&1; then
   else
     log "Installing zg (zvec-grep) via npm"
   fi
-  npm_global @zvec/zvec-grep || warn "  zg install/upgrade failed (requires Node.js >= 22)"
+  # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL2 无 GPU 用不上）、
+  # node-llama-cpp 默认下预编译 llama.cpp，两者经 Clash 代理都易卡死/超时；skip 跳过。
+  # zg 核心搜索走 @zvec/bindings-linux-x64（Rust 绑定），不受影响。
+  NODE_LLAMA_CPP_SKIP_DOWNLOAD=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip \
+    npm_global @zvec/zvec-grep || warn "  zg install/upgrade failed (requires Node.js >= 22)"
   # npm 半途失败会留下悬空的 ~/.local/bin/zg，command -v 静默回退到 Windows 侧 /mnt/c
   # 的 zg，直到 `zg index` 才崩（missing @zvec/bindings-linux-x64）。装完立刻跑一次，
   # 失败就地暴露，而不是留个坏链接等后续才炸。
