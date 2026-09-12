@@ -187,6 +187,18 @@ function Test-ScoopServiceRunning($pkg) {
     return ($null -ne $svc -and $svc.Status -eq 'Running')
 }
 
+# Detect whether scoop has a newer version of $pkg than what's installed.
+# `scoop status` refreshes the buckets (network) then emits one object per
+# outdated app (with a Name property), so $pkg appearing there means an update
+# is available. We check this instead of trying `scoop update` first: a
+# non-elevated update against a running service still tears down the shim
+# (access-denied spam) and returns exit 0, so its exit code can't be trusted
+# to mean "no update".
+function Test-ScoopAppOutdated($pkg) {
+    $status = scoop status 2>$null
+    return ($null -ne ($status | Where-Object { $_.Name -eq $pkg }))
+}
+
 # Stop the scoop-managed service for $pkg so its shim can be replaced. Returns
 # $true when it's safe to update (stopped, already stopped, or not registered);
 # $false when the stop failed (e.g. no admin token) and the update must be skipped.
@@ -268,7 +280,21 @@ function Install-ScoopPackages($label, $pkgs) {
                         Write-Warn2 "  $p update skipped -- could not stop service"
                     }
                 } else {
-                    Invoke-ScoopServiceUpdateElevated $p
+                    if (Test-ScoopServiceRunning $p) {
+                        # Service is running. Elevate (UAC) only when a newer
+                        # version is actually available — otherwise leave it alone.
+                        if (Test-ScoopAppOutdated $p) {
+                            Invoke-ScoopServiceUpdateElevated $p
+                        } else {
+                            Write-Host "  $p already up to date -- skip (no elevation)"
+                        }
+                    } else {
+                        # Service not running — a plain user-scope update suffices,
+                        # no elevation needed.
+                        Stop-ScoopAppProcesses $p   # clear any stray non-service process
+                        scoop update $p
+                        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+                    }
                 }
             } elseif (Test-ScoopAppRunning $p) {
                 # Interactive/long-running app (nvim, node...): don't kill it,
@@ -1088,6 +1114,48 @@ if (Test-Cmd herdr) {
     }
 } else {
     Write-Warn2 'herdr CLI not on PATH -- skipping herdr agent skill (re-run after herdr is installed)'
+}
+
+# ---------------------------------------------------------------------------
+# 7f) Codex subagents (awesome-codex-subagents) — clone/update into the home
+#     dir and copy selected agents into ~/.codex/agents/ (global, available in
+#     every project). Ships all of 01-core-development plus a curated set of
+#     02-language-specialists.
+# ---------------------------------------------------------------------------
+$CodexAgentsSrc = Join-Path $env:USERPROFILE 'awesome-codex-subagents'
+$CodexAgentsDst = Join-Path $CodexHome 'agents'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $CodexAgentsSrc '.git')) {
+        Write-Step 'Updating awesome-codex-subagents checkout'
+        git -C $CodexAgentsSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            # pull failed — checkout is corrupt; drop it and re-clone below.
+            Write-Warn2 '  awesome-codex-subagents pull failed -- re-cloning'
+            Remove-Item -Recurse -Force $CodexAgentsSrc
+        }
+    }
+    if (-not (Test-Path (Join-Path $CodexAgentsSrc '.git'))) {
+        Write-Step "Cloning awesome-codex-subagents into $CodexAgentsSrc"
+        git clone --depth=1 --quiet https://github.com/VoltAgent/awesome-codex-subagents.git $CodexAgentsSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  awesome-codex-subagents clone failed' }
+    }
+    if (Test-Path (Join-Path $CodexAgentsSrc 'categories')) {
+        Write-Step "Syncing Codex subagents into $CodexAgentsDst"
+        New-Item -ItemType Directory -Force -Path $CodexAgentsDst | Out-Null
+        Copy-Item (Join-Path $CodexAgentsSrc 'categories\01-core-development\*.toml') -Destination $CodexAgentsDst -Force -ErrorAction SilentlyContinue
+        foreach ($name in @('node-specialist', 'javascript-pro', 'fastapi-developer', 'nextjs-developer', 'python-pro', 'typescript-pro', 'vue-expert', 'react-specialist')) {
+            $src = Join-Path $CodexAgentsSrc "categories\02-language-specialists\$name.toml"
+            if (Test-Path $src) {
+                Copy-Item $src -Destination $CodexAgentsDst -Force
+            } else {
+                Write-Warn2 "  missing agent: $name.toml"
+            }
+        }
+    } else {
+        Write-Warn2 '  awesome-codex-subagents/categories missing -- skipping agent copy'
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping Codex subagents install (re-run after git is installed)'
 }
 
 # ---------------------------------------------------------------------------

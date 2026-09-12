@@ -676,6 +676,48 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7f) Codex subagents (awesome-codex-subagents) — clone/update into $HOME and
+#     copy selected agents into ~/.codex/agents/ (global, available in every
+#     project). Ships all of 01-core-development plus a curated set of
+#     02-language-specialists.
+# ---------------------------------------------------------------------------
+CODEX_AGENTS_SRC="$HOME/awesome-codex-subagents"
+CODEX_AGENTS_DST="${CODEX_HOME:-$HOME/.codex}/agents"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CODEX_AGENTS_SRC/.git" ]; then
+    log "Updating awesome-codex-subagents checkout"
+    if ! git -C "$CODEX_AGENTS_SRC" pull --ff-only --quiet 2>/dev/null; then
+      # pull failed — checkout is corrupt (e.g. lost .git/index); drop it and re-clone below.
+      warn "  awesome-codex-subagents pull failed — re-cloning"
+      rm -rf "$CODEX_AGENTS_SRC"
+    fi
+  fi
+  if [ ! -d "$CODEX_AGENTS_SRC/.git" ]; then
+    log "Cloning awesome-codex-subagents into $CODEX_AGENTS_SRC"
+    git clone --depth=1 --quiet https://github.com/VoltAgent/awesome-codex-subagents.git "$CODEX_AGENTS_SRC" \
+      || warn "  awesome-codex-subagents clone failed"
+  fi
+  if [ -d "$CODEX_AGENTS_SRC/categories" ]; then
+    log "Syncing Codex subagents into $CODEX_AGENTS_DST"
+    mkdir -p "$CODEX_AGENTS_DST"
+    cp -f "$CODEX_AGENTS_SRC"/categories/01-core-development/*.toml "$CODEX_AGENTS_DST/" 2>/dev/null \
+      || warn "  failed to copy 01-core-development agents"
+    for name in node-specialist javascript-pro fastapi-developer nextjs-developer python-pro typescript-pro vue-expert react-specialist; do
+      src="$CODEX_AGENTS_SRC/categories/02-language-specialists/$name.toml"
+      if [ -f "$src" ]; then
+        cp -f "$src" "$CODEX_AGENTS_DST/"
+      else
+        warn "  missing agent: $name.toml"
+      fi
+    done
+  else
+    warn "  awesome-codex-subagents/categories missing — skipping agent copy"
+  fi
+else
+  warn "git not on PATH -- skipping Codex subagents install (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
 # 8) mise — install runtimes declared in mise config (if any)
 # ---------------------------------------------------------------------------
 if command -v mise >/dev/null 2>&1; then

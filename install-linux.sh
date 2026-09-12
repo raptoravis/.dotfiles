@@ -175,20 +175,22 @@ fi
 
 # apt 走 7890 代理（Clash 混合端口）：本机网络「直连 IPv4 全断」（连 baidu
 # 都超时），只能走代理出网。国内镜像换阿里云后走代理仍 200，无需 DIRECT
-# 例外（直连不通，加 DIRECT 反而下载超时）。无条件覆盖，清掉可能残留的
-# per-host DIRECT 配置。
+# 例外（直连不通，加 DIRECT 反而下载超时）。已含目标配置则跳过，避免每次
+# 重跑都触发 sudo。
 if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
   exec 3>&- 3<&- 2>/dev/null || true
   APT_PROXY_CONF="/etc/apt/apt.conf.d/01proxy"
-  log "配置 apt 走 7890 代理"
-  sudo tee "$APT_PROXY_CONF" >/dev/null <<'EOF'
+  if [[ -f "$APT_PROXY_CONF" ]] && grep -qF 'http://127.0.0.1:7890' "$APT_PROXY_CONF" 2>/dev/null; then
+    log "apt 已走 7890 代理 — 跳过"
+  else
+    log "配置 apt 走 7890 代理"
+    sudo tee "$APT_PROXY_CONF" >/dev/null <<'EOF'
 Acquire::http::Proxy "http://127.0.0.1:7890";
 Acquire::https::Proxy "http://127.0.0.1:7890";
 EOF
+  fi
 fi
 
-log "Updating apt and installing base packages"
-sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
 APT_PKGS=(
   zsh fzf ripgrep fd-find bat neovim cmake curl git
   build-essential pkg-config libssl-dev fastfetch tmux mosh
@@ -198,8 +200,23 @@ APT_PKGS=(
   nodejs npm
   jq ffmpeg
 )
-sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${APT_PKGS[@]}"
-(( IS_WSL )) && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
+# 只对「尚未安装」的包走 apt（dpkg -s 判断）；全部就绪则完全跳过，避免每次
+# 重跑都触发 sudo。apt-get install 本就不会升级已装包，语义等价。
+MISSING_APT=()
+for pkg in "${APT_PKGS[@]}"; do
+  dpkg -s "$pkg" >/dev/null 2>&1 || MISSING_APT+=("$pkg")
+done
+if (( ${#MISSING_APT[@]} > 0 )); then
+  log "Updating apt and installing missing base packages"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${MISSING_APT[@]}"
+else
+  log "apt base packages already installed — skipping (no sudo)"
+fi
+# wslu 仅 WSL 需要，单独判断并保留原容错（装不上不致命）。
+if (( IS_WSL )) && ! dpkg -s wslu >/dev/null 2>&1; then
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
+fi
 
 # Ensure node/npm are on PATH after apt install.
 # On Debian/Ubuntu the 'nodejs' package provides /usr/bin/nodejs (not /usr/bin/node).
@@ -229,8 +246,12 @@ if command -v tailscale >/dev/null 2>&1; then
   # Start the daemon (systemd). On WSL2 without systemd this is skipped — the
   # Windows host's Tailscale covers the network instead.
   if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl enable --now tailscaled 2>/dev/null \
-      || warn "  tailscaled start failed (WSL2 without systemd? use the Windows host's Tailscale)"
+    if systemctl is-active --quiet tailscaled 2>/dev/null; then
+      log "  tailscaled already running"
+    else
+      sudo systemctl enable --now tailscaled 2>/dev/null \
+        || warn "  tailscaled start failed (WSL2 without systemd? use the Windows host's Tailscale)"
+    fi
   fi
   if tailscale status >/dev/null 2>&1; then
     log "  Tailscale already up"
@@ -917,13 +938,59 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8f) Codex subagents (awesome-codex-subagents) — clone/update into $HOME and
+#     copy selected agents into ~/.codex/agents/ (global, available in every
+#     project). Ships all of 01-core-development plus a curated set of
+#     02-language-specialists.
+# ---------------------------------------------------------------------------
+CODEX_AGENTS_SRC="$HOME/awesome-codex-subagents"
+CODEX_AGENTS_DST="${CODEX_HOME:-$HOME/.codex}/agents"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CODEX_AGENTS_SRC/.git" ]; then
+    log "Updating awesome-codex-subagents checkout"
+    if ! git -C "$CODEX_AGENTS_SRC" pull --ff-only --quiet 2>/dev/null; then
+      # pull failed — checkout is corrupt (e.g. lost .git/index); drop it and re-clone below.
+      warn "  awesome-codex-subagents pull failed — re-cloning"
+      rm -rf "$CODEX_AGENTS_SRC"
+    fi
+  fi
+  if [ ! -d "$CODEX_AGENTS_SRC/.git" ]; then
+    log "Cloning awesome-codex-subagents into $CODEX_AGENTS_SRC"
+    git clone --depth=1 --quiet https://github.com/VoltAgent/awesome-codex-subagents.git "$CODEX_AGENTS_SRC" \
+      || warn "  awesome-codex-subagents clone failed"
+  fi
+  if [ -d "$CODEX_AGENTS_SRC/categories" ]; then
+    log "Syncing Codex subagents into $CODEX_AGENTS_DST"
+    mkdir -p "$CODEX_AGENTS_DST"
+    cp -f "$CODEX_AGENTS_SRC"/categories/01-core-development/*.toml "$CODEX_AGENTS_DST/" 2>/dev/null \
+      || warn "  failed to copy 01-core-development agents"
+    for name in node-specialist javascript-pro fastapi-developer nextjs-developer python-pro typescript-pro vue-expert react-specialist; do
+      src="$CODEX_AGENTS_SRC/categories/02-language-specialists/$name.toml"
+      if [ -f "$src" ]; then
+        cp -f "$src" "$CODEX_AGENTS_DST/"
+      else
+        warn "  missing agent: $name.toml"
+      fi
+    done
+  else
+    warn "  awesome-codex-subagents/categories missing — skipping agent copy"
+  fi
+else
+  warn "git not on PATH -- skipping Codex subagents install (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
 # 9) WSL-only: deploy /etc/wsl.conf and (optionally) set hostname
 # ---------------------------------------------------------------------------
 if (( IS_WSL )); then
   WSL_CONF_SRC="$DOTFILES_DIR/windows/wsl/wsl.conf"
   if [[ -f "$WSL_CONF_SRC" ]]; then
-    log "Deploying $WSL_CONF_SRC -> /etc/wsl.conf"
-    sudo cp "$WSL_CONF_SRC" /etc/wsl.conf
+    if [[ -f /etc/wsl.conf ]] && cmp -s "$WSL_CONF_SRC" /etc/wsl.conf; then
+      log "wsl.conf already up to date — skipping"
+    else
+      log "Deploying $WSL_CONF_SRC -> /etc/wsl.conf"
+      sudo cp "$WSL_CONF_SRC" /etc/wsl.conf
+    fi
   else
     warn "wsl.conf not found at $WSL_CONF_SRC — skipping"
   fi
