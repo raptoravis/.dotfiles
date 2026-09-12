@@ -1417,11 +1417,37 @@ if ($devCurrent -and $devCurrent.$DevModeVal -eq 1) {
 #    Tells dotter which package set to apply without needing a hostname file.
 # ---------------------------------------------------------------------------
 $LocalToml = Join-Path $DotfilesDir '.dotter\local.toml'
+$herdrShellLine = 'herdr_shell = "pwsh.exe"'
 if (Test-Path $LocalToml) {
-    Write-Step '.dotter/local.toml already exists'
+    $tomlLines = @(Get-Content -Path $LocalToml)
+    if ($tomlLines -match '^\s*herdr_shell\s*=') {
+        Write-Step '.dotter/local.toml already has herdr_shell'
+    } else {
+        # Insert herdr_shell under an existing [variables] table if present,
+        # otherwise append a new [variables] table.
+        $varIdx = ($tomlLines | Select-String '^\s*\[variables\]\s*$' | Select-Object -First 1).LineNumber
+        if ($varIdx) {
+            $out = @()
+            $i = 0
+            foreach ($line in $tomlLines) {
+                $out += $line
+                $i++
+                if ($i -eq $varIdx) { $out += $herdrShellLine }
+            }
+            Set-Content -Path $LocalToml -Value $out -Encoding UTF8
+        } else {
+            Set-Content -Path $LocalToml -Value ($tomlLines + @('', '[variables]', $herdrShellLine)) -Encoding UTF8
+        }
+        Write-Step 'Added herdr_shell = "pwsh.exe" to .dotter/local.toml'
+    }
 } else {
     Write-Step 'Creating .dotter/local.toml (packages: common + windows)'
-    Set-Content -Path $LocalToml -Value 'packages = [ "common", "windows" ]' -Encoding UTF8
+    Set-Content -Path $LocalToml -Value @(
+        'packages = [ "common", "windows" ]'
+        ''
+        '[variables]'
+        $herdrShellLine
+    ) -Encoding UTF8
 }
 
 # ---------------------------------------------------------------------------
