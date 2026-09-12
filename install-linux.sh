@@ -197,7 +197,6 @@ APT_PKGS=(
   libfontconfig1-dev libfreetype6-dev libharfbuzz-dev
   libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
   unzip ca-certificates gnupg
-  nodejs npm
   jq ffmpeg
 )
 # 只对「尚未安装」的包走 apt（dpkg -s 判断）；全部就绪则完全跳过，避免每次
@@ -218,22 +217,37 @@ if (( IS_WSL )) && ! dpkg -s wslu >/dev/null 2>&1; then
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
 fi
 
-# Ensure node/npm are on PATH after apt install.
-# On Debian/Ubuntu the 'nodejs' package provides /usr/bin/nodejs (not /usr/bin/node).
-# Create a symlink if only nodejs exists, so 'node' resolves too.
-if ! command -v node >/dev/null 2>&1 && command -v nodejs >/dev/null 2>&1; then
-  sudo ln -sf "$(command -v nodejs)" /usr/local/bin/node
-  log "  symlinked /usr/local/bin/node -> nodejs"
+# Node.js 24 LTS via NodeSource — apt 的 nodejs 太旧（Ubuntu 24.04 仅 18.x），
+# 达不到 dsh(>=22.19)/zg(>=22) 的最低要求；与 macOS(Brewfile `brew node`)/
+# Windows(choco 24.18.0) 保持同一主版本。NodeSource 的 nodejs 包自带 npm，
+# 故上方 APT_PKGS 已移除 `nodejs`/`npm`，避免与 NodeSource 包冲突。
+# Node 24 为当前 Active LTS。幂等：node 主版本 >= 24 即跳过。
+NODE_MAJOR=24
+# WSL interop 会把 Windows 的 node 追加进 PATH（见 cmd_exists_local 注释），而后面
+# npm_global 需要 Linux 本地 node；用 local 判定，避免被 Windows node 24.x 骗过跳过安装。
+node_major=0
+if cmd_exists_local node; then
+  node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+fi
+if (( node_major >= NODE_MAJOR )); then
+  log "Node.js $(node --version) already >= ${NODE_MAJOR} — skipping NodeSource"
+else
+  log "Installing Node.js ${NODE_MAJOR}.x via NodeSource"
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" \
+    | sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY bash - \
+    || warn "  nodesource setup failed (falling through to version check)"
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs \
+    || warn "  nodejs install failed"
 fi
 if command -v node >/dev/null 2>&1; then
   log "node: $(node --version 2>/dev/null || echo '?')"
 else
-  warn "node not on PATH after apt install — consider nodesource.com/setup_22.x for a current Node.js"
+  warn "node not on PATH after install"
 fi
 if command -v npm >/dev/null 2>&1; then
   log "npm:  $(npm --version 2>/dev/null || echo '?')"
 else
-  warn "npm not on PATH after apt install — consider nodesource.com/setup_22.x for a current Node.js"
+  warn "npm not on PATH after install"
 fi
 
 # Tailscale — private mesh network for reaching services (e.g. the PostgreSQL host).
