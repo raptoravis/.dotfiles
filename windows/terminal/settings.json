@@ -22,17 +22,17 @@
             "command": 
             {
                 "action": "newTab",
-                "profile": "Command Prompt"
+                "profile": "WSL (zsh)"
             },
-            "id": "User.newTab.D78C777"
+            "id": "User.newTab.1A46AA41"
         },
         {
             "command": 
             {
                 "action": "newTab",
-                "profile": "WSL (zsh)"
+                "profile": "Command Prompt"
             },
-            "id": "User.newTab.1A46AA41"
+            "id": "User.newTab.D78C777"
         }
     ],
     "copyFormatting": "none",
@@ -49,8 +49,8 @@
     "keybindings": 
     [
         {
-            "id": "User.newTab.26C3ECE2",
-            "keys": "ctrl+shift+1"
+            "id": "Terminal.NextTab",
+            "keys": "ctrl+tab"
         },
         {
             "id": "Terminal.DuplicateTab",
@@ -65,12 +65,8 @@
             "keys": "ctrl+shift+tab"
         },
         {
-            "id": "Terminal.NextTab",
-            "keys": "ctrl+tab"
-        },
-        {
-            "id": "User.closeTab.0",
-            "keys": "ctrl+shift+w"
+            "id": "User.newTab.26C3ECE2",
+            "keys": "ctrl+shift+1"
         },
         {
             "id": "Terminal.FindText",
@@ -81,28 +77,32 @@
             "keys": "ctrl+v"
         },
         {
-            "id": "Terminal.ResetFontSize",
-            "keys": "ctrl+0"
+            "id": "User.closeTab.0",
+            "keys": "ctrl+shift+w"
         },
         {
             "id": "User.newTab.1A46AA41",
             "keys": "ctrl+shift+2"
         },
         {
-            "id": null,
-            "keys": "ctrl+minus"
+            "id": "Terminal.ResetFontSize",
+            "keys": "ctrl+0"
         },
         {
-            "id": null,
-            "keys": "ctrl+plus"
+            "id": "User.newTab.D78C777",
+            "keys": "ctrl+shift+3"
         },
         {
             "id": "Terminal.DuplicatePaneAuto",
             "keys": "alt+shift+d"
         },
         {
-            "id": "User.newTab.D78C777",
-            "keys": "ctrl+shift+3"
+            "id": null,
+            "keys": "ctrl+plus"
+        },
+        {
+            "id": null,
+            "keys": "ctrl+minus"
         },
         {
             "id": "Terminal.ToggleFullscreen",
@@ -164,6 +164,12 @@
                 "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}",
                 "hidden": true,
                 "name": "Windows PowerShell"
+            },
+            {
+                "guid": "{c3b62d0b-7bb8-58c8-967a-97e6619ae444}",
+                "hidden": false,
+                "name": "Ubuntu",
+                "source": "Microsoft.WSL"
             }
         ]
     },
