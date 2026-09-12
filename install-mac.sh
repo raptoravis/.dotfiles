@@ -389,14 +389,15 @@ if command -v npm >/dev/null 2>&1; then
   fi
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
-  # only the ZVEC_GREP_START/END managed blocks. dsh / pi / grok are not
-  # supported zg targets and are skipped.
+  # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+  # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
+  # comment markers). dsh / pi / grok are not supported zg targets and skipped.
   if command -v zg >/dev/null 2>&1; then
     zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
     for t in claude codex opencode; do
       command -v "$t" >/dev/null 2>&1 && zg_targets+=("$t")
     done
-    zg_args=()
+    zg_args=(--force)
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
     if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
@@ -565,18 +566,60 @@ else
   warn "claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)"
 fi
 
+# Ensure a local yunxing checkout is up to date — it's the version reference for
+# the Codex "reinstall only on a new version" check, and the source for the
+# Cursor skills links below.
+YUNXING_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/yunxing"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$YUNXING_SRC/.git" ]; then
+    log "Updating yunxing checkout"
+    if ! git -C "$YUNXING_SRC" pull --ff-only --quiet 2>/dev/null; then
+      warn "  yunxing pull failed — re-cloning"
+      rm -rf "$YUNXING_SRC"
+    fi
+  fi
+  if [ ! -d "$YUNXING_SRC/.git" ]; then
+    log "Cloning yunxing checkout"
+    mkdir -p "$(dirname "$YUNXING_SRC")"
+    git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git "$YUNXING_SRC" \
+      || warn "  yunxing clone failed"
+  fi
+else
+  warn "git not on PATH -- skipping yunxing checkout (Cursor skills + Codex version check)"
+fi
+
 if command -v codex >/dev/null 2>&1; then
-  # A running codex holds its plugin cache/state files open, so `plugin add`
-  # fails with "Access denied" when backing up an existing cache entry. Skip
-  # instead of spamming that misleading error.
-  if pgrep -x codex >/dev/null 2>&1; then
-    warn "codex is running -- skip Codex plugin install (close codex, then re-run)"
+  # Reinstall the Codex plugin only when yunxing has a new version: compare the
+  # installed version (codex plugin list) against the checkout's plugin.json.
+  new_ver="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$YUNXING_SRC/.codex-plugin/plugin.json" 2>/dev/null | head -1)"
+  installed_ver="$(codex plugin list 2>/dev/null | awk '/^yunxing@yunxing[[:space:]]/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+(\.[0-9]+)+$/) {print $i; exit}}')"
+
+  if [ -z "$new_ver" ]; then
+    warn "  could not resolve yunxing version; skipping Codex plugin install"
+  elif [ -n "$installed_ver" ] && [ "$installed_ver" = "$new_ver" ]; then
+    log "  yunxing Codex plugin already up to date ($installed_ver)"
   else
-    log "Installing yunxing Codex plugin (marketplace: yunxing)"
+    if [ -n "$installed_ver" ]; then
+      log "Updating yunxing Codex plugin ($installed_ver -> $new_ver)"
+    else
+      log "Installing yunxing Codex plugin (marketplace: yunxing)"
+    fi
     codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
       || warn "  codex marketplace add failed"
-    codex plugin add yunxing@yunxing >/dev/null 2>&1 \
-      || warn "  codex plugin add failed"
+
+    # `plugin add` can fail with "Access denied" while codex is running (it holds
+    # its plugin cache/state files open). Capture stderr to tell that case apart
+    # from a real error.
+    codex_err="$(codex plugin add yunxing@yunxing 2>&1)"
+    if [ $? -ne 0 ]; then
+      if printf '%s' "$codex_err" | grep -qi 'Access denied'; then
+        warn "  codex plugin add failed: codex is running (close codex, then re-run)"
+      elif [ -n "$codex_err" ]; then
+        warn "  codex plugin add failed: $codex_err"
+      else
+        warn "  codex plugin add failed"
+      fi
+    fi
   fi
 else
   warn "codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)"
@@ -624,33 +667,15 @@ else
 fi
 
 # Cursor — no scriptable plugin install; symlink promoted skills into ~/.cursor/skills/.
-YUNXING_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/yunxing"
-if command -v git >/dev/null 2>&1; then
-  if [ -d "$YUNXING_SRC/.git" ]; then
-    log "Updating yunxing checkout for Cursor skills"
-    if ! git -C "$YUNXING_SRC" pull --ff-only --quiet 2>/dev/null; then
-      # pull failed — checkout is corrupt (e.g. lost .git/index); drop it and re-clone below.
-      warn "  yunxing pull failed — re-cloning"
-      rm -rf "$YUNXING_SRC"
-    fi
-  fi
-  if [ ! -d "$YUNXING_SRC/.git" ]; then
-    log "Cloning yunxing for Cursor skills"
-    mkdir -p "$(dirname "$YUNXING_SRC")"
-    git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git "$YUNXING_SRC" \
-      || warn "  yunxing clone failed"
-  fi
-  if [ -d "$YUNXING_SRC/skills" ]; then
-    log "Linking yunxing skills into ~/.cursor/skills"
-    mkdir -p "$HOME/.cursor/skills"
-    for skill in "$YUNXING_SRC"/skills/engineering/*/SKILL.md "$YUNXING_SRC"/skills/productivity/*/SKILL.md; do
-      [ -e "$skill" ] || continue
-      name="$(basename "$(dirname "$skill")")"
-      ln -sfn "$(dirname "$skill")" "$HOME/.cursor/skills/$name"
-    done
-  fi
-else
-  warn "git not on PATH -- skipping Cursor yunxing skills"
+# YUNXING_SRC is ensured above (shared with the Codex plugin version check).
+if [ -d "$YUNXING_SRC/skills" ]; then
+  log "Linking yunxing skills into ~/.cursor/skills"
+  mkdir -p "$HOME/.cursor/skills"
+  for skill in "$YUNXING_SRC"/skills/engineering/*/SKILL.md "$YUNXING_SRC"/skills/productivity/*/SKILL.md; do
+    [ -e "$skill" ] || continue
+    name="$(basename "$(dirname "$skill")")"
+    ln -sfn "$(dirname "$skill")" "$HOME/.cursor/skills/$name"
+  done
 fi
 
 # ---------------------------------------------------------------------------

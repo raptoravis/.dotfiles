@@ -890,14 +890,15 @@ if (Test-Cmd npm) {
     }
     # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
     # guidance + tool approval + start local server). Idempotent — re-runs update
-    # only the ZVEC_GREP_START/END managed blocks. dsh / pi / grok are not
-    # supported zg targets and are skipped.
+    # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+    # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
+    # comment markers). dsh / pi / grok are not supported zg targets and skipped.
     if (Test-Cmd zg) {
         $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
         foreach ($t in @('claude', 'codex', 'opencode')) {
             if (Test-Cmd $t) { $zgTargets += $t }
         }
-        $zgArgs = @()
+        $zgArgs = @('--force')
         foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
         Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
         & zg install @zgArgs --yes
@@ -1060,18 +1061,65 @@ if (Test-Cmd claude) {
     Write-Warn2 'claude CLI not on PATH -- falling back to settings.json declaration (re-run after claude is installed)'
 }
 
-if (Test-Cmd codex) {
-    # A running codex holds its plugin cache/state files open, so `plugin add`
-    # fails with "Access denied" when backing up an existing cache entry. Skip
-    # instead of spamming that misleading error.
-    if (Get-Process -Name codex -ErrorAction SilentlyContinue) {
-        Write-Warn2 'codex is running -- skip Codex plugin install (close codex, then re-run)'
+# Ensure a local yunxing checkout is up to date — it's the version reference for
+# the Codex "reinstall only on a new version" check, and the source for the
+# Cursor skills links below.
+$YunxingSrc = Join-Path $env:USERPROFILE '.local\share\yunxing'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $YunxingSrc '.git')) {
+        Write-Step 'Updating yunxing checkout'
+        git -C $YunxingSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing pull failed' }
     } else {
-        Write-Step 'Installing yunxing Codex plugin (marketplace: yunxing)'
+        Write-Step 'Cloning yunxing checkout'
+        New-Item -ItemType Directory -Force -Path (Split-Path $YunxingSrc) | Out-Null
+        git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git $YunxingSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing clone failed' }
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping yunxing checkout (Cursor skills + Codex version check)'
+}
+
+if (Test-Cmd codex) {
+    # Reinstall the Codex plugin only when yunxing has a new version: compare the
+    # installed version (codex plugin list) against the checkout's plugin.json.
+    $yunxingNewVer = $null
+    if (Test-Path (Join-Path $YunxingSrc '.codex-plugin\plugin.json')) {
+        $yunxingNewVer = (Get-Content (Join-Path $YunxingSrc '.codex-plugin\plugin.json') -Raw | ConvertFrom-Json).version
+    }
+    $installedVer = $null
+    $listJson = codex plugin list --json 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+    if ($listJson) {
+        $yunxingInst = $listJson.installed | Where-Object { $_.name -eq 'yunxing' -and $_.marketplaceName -eq 'yunxing' }
+        if ($yunxingInst) { $installedVer = $yunxingInst.version }
+    }
+
+    if (-not $yunxingNewVer) {
+        Write-Warn2 '  could not resolve yunxing version; skipping Codex plugin install'
+    } elseif ($installedVer -and $installedVer -eq $yunxingNewVer) {
+        Write-Host "  yunxing Codex plugin already up to date ($installedVer)"
+    } else {
+        if ($installedVer) {
+            Write-Step "Updating yunxing Codex plugin ($installedVer -> $yunxingNewVer)"
+        } else {
+            Write-Step 'Installing yunxing Codex plugin (marketplace: yunxing)'
+        }
         codex plugin marketplace add raptoravis/yunxing 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
-        codex plugin add yunxing@yunxing 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex plugin add failed' }
+
+        # `plugin add` fails with "Access denied" when codex is running (it holds its
+        # plugin cache/state files open on Windows). Capture stderr so we can tell that
+        # case apart from a real error.
+        $codexErr = (codex plugin add yunxing@yunxing 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) {
+            if ($codexErr -match 'Access denied|Access is denied') {
+                Write-Warn2 '  codex plugin add failed: codex is running (close codex, then re-run)'
+            } elseif ($codexErr) {
+                Write-Warn2 "  codex plugin add failed: $codexErr"
+            } else {
+                Write-Warn2 '  codex plugin add failed'
+            }
+        }
     }
 } else {
     Write-Warn2 'codex CLI not on PATH -- skipping Codex plugin install (re-run after codex is installed)'
@@ -1120,35 +1168,21 @@ if (Test-Cmd grok) {
 }
 
 # Cursor — no scriptable plugin install; link promoted skills into ~/.cursor/skills/ (junction, no admin needed).
-$YunxingSrc = Join-Path $env:USERPROFILE '.local\share\yunxing'
-if (Test-Cmd git) {
-    if (Test-Path (Join-Path $YunxingSrc '.git')) {
-        Write-Step 'Updating yunxing checkout for Cursor skills'
-        git -C $YunxingSrc pull --ff-only --quiet 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing pull failed' }
-    } else {
-        Write-Step 'Cloning yunxing for Cursor skills'
-        New-Item -ItemType Directory -Force -Path (Split-Path $YunxingSrc) | Out-Null
-        git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git $YunxingSrc 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing clone failed' }
-    }
-    if (Test-Path (Join-Path $YunxingSrc 'skills')) {
-        Write-Step 'Linking yunxing skills into ~/.cursor/skills'
-        $SkillsDir = Join-Path $env:USERPROFILE '.cursor\skills'
-        New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
-        foreach ($bucket in @('engineering', 'productivity')) {
-            $BucketDir = Join-Path $YunxingSrc "skills\$bucket"
-            if (Test-Path $BucketDir) {
-                foreach ($skillDir in (Get-ChildItem -Directory $BucketDir)) {
-                    $link = Join-Path $SkillsDir $skillDir.Name
-                    if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
-                    New-Item -ItemType Junction -Path $link -Target $skillDir.FullName | Out-Null
-                }
+# $YunxingSrc is ensured above (shared with the Codex plugin version check).
+if (Test-Path (Join-Path $YunxingSrc 'skills')) {
+    Write-Step 'Linking yunxing skills into ~/.cursor/skills'
+    $SkillsDir = Join-Path $env:USERPROFILE '.cursor\skills'
+    New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+    foreach ($bucket in @('engineering', 'productivity')) {
+        $BucketDir = Join-Path $YunxingSrc "skills\$bucket"
+        if (Test-Path $BucketDir) {
+            foreach ($skillDir in (Get-ChildItem -Directory $BucketDir)) {
+                $link = Join-Path $SkillsDir $skillDir.Name
+                if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
+                New-Item -ItemType Junction -Path $link -Target $skillDir.FullName | Out-Null
             }
         }
     }
-} else {
-    Write-Warn2 'git not on PATH -- skipping Cursor yunxing skills'
 }
 
 # ---------------------------------------------------------------------------
