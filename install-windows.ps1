@@ -203,16 +203,40 @@ function Test-ScoopAppOutdated($pkg) {
 # $true when it's safe to update (stopped, already stopped, or not registered);
 # $false when the stop failed (e.g. no admin token) and the update must be skipped.
 function Stop-ScoopService($pkg) {
-    if (-not (Test-ScoopServiceRunning $pkg)) { return $true }
-    sc.exe stop $pkg *>$null
-    return ($LASTEXITCODE -eq 0)
+    $svc = Get-Service -Name $pkg -ErrorAction SilentlyContinue
+    if ($null -eq $svc -or $svc.Status -eq 'Stopped') { return $true }
+
+    try {
+        if ($svc.Status -ne 'StopPending') {
+            Stop-Service -InputObject $svc -ErrorAction Stop
+        }
+        $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        return $true
+    } catch {
+        Write-Warn2 "  could not stop $pkg service: $($_.Exception.Message)"
+        return $false
+    }
 }
 
-# Restart the service we stopped, unless it's not registered or is disabled.
+# Restart the service we stopped and wait until SCM reports it running. Returns
+# $false if startup fails so callers cannot silently leave the service down.
 function Start-ScoopService($pkg) {
     $svc = Get-Service -Name $pkg -ErrorAction SilentlyContinue
-    if ($null -eq $svc -or $svc.StartType -eq 'Disabled') { return }
-    sc.exe start $pkg *>$null
+    if ($null -eq $svc -or $svc.StartType -eq 'Disabled') { return $true }
+
+    try {
+        if ($svc.Status -eq 'StopPending') {
+            $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+        if ($svc.Status -ne 'Running') {
+            Start-Service -InputObject $svc -ErrorAction Stop
+            $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+        }
+        return $true
+    } catch {
+        Write-Warn2 "  could not start $pkg service: $($_.Exception.Message)"
+        return $false
+    }
 }
 
 # Non-admin path: elevate via UAC to run `stop -> update -> start` for a service
@@ -221,7 +245,40 @@ function Start-ScoopService($pkg) {
 function Invoke-ScoopServiceUpdateElevated($pkg) {
     $log = Join-Path $env:TEMP "$pkg-scoop-update.log"
     Remove-Item $log -ErrorAction SilentlyContinue
-    $inner = "& { sc.exe stop $pkg; scoop update $pkg; sc.exe start $pkg; sc.exe query $pkg } *>> '$log'"
+    # Stop-Service/Start-Service return before every transition is necessarily
+    # complete. Explicit waits prevent start racing a still-STOP_PENDING service.
+    # The finally block restores the service even when the package update fails.
+    $inner = @'
+& {
+    $ErrorActionPreference = 'Stop'
+    $pkg = '__PKG__'
+    $svc = Get-Service -Name $pkg -ErrorAction Stop
+    $updateExit = 0
+
+    try {
+        if ($svc.Status -ne 'Stopped') {
+            Stop-Service -InputObject $svc -ErrorAction Stop
+            $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+
+        scoop update $pkg
+        $updateExit = $LASTEXITCODE
+    } finally {
+        $svc = Get-Service -Name $pkg -ErrorAction Stop
+        if ($svc.Status -eq 'StopPending') {
+            $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+        }
+        if ($svc.Status -ne 'Running') {
+            Start-Service -InputObject $svc -ErrorAction Stop
+            $svc.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
+        }
+    }
+
+    sc.exe query $pkg
+    if ($updateExit -ne 0) { exit $updateExit }
+}
+'@.Replace('__PKG__', $pkg)
+    $inner = "$inner *>> '$log'"
     $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
     try {
         $proc = Start-Process -Verb RunAs -Wait -PassThru powershell -ArgumentList '-NoProfile','-EncodedCommand',$enc
@@ -273,9 +330,14 @@ function Install-ScoopPackages($label, $pkgs) {
                 if (Test-Admin) {
                     if (Stop-ScoopService $p) {
                         Stop-ScoopAppProcesses $p   # clear any stray non-service process
-                        scoop update $p
-                        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
-                        Start-ScoopService $p
+                        try {
+                            scoop update $p
+                            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  update failed: $p" }
+                        } finally {
+                            if (-not (Start-ScoopService $p)) {
+                                Write-Warn2 "  $p service remains stopped; start it manually after fixing the error"
+                            }
+                        }
                     } else {
                         Write-Warn2 "  $p update skipped -- could not stop service"
                     }
