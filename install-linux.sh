@@ -217,25 +217,29 @@ if (( IS_WSL )) && ! dpkg -s wslu >/dev/null 2>&1; then
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
 fi
 
-# Node.js 24 LTS via NodeSource — apt 的 nodejs 太旧（Ubuntu 24.04 仅 18.x），
-# 达不到 dsh(>=22.19)/zg(>=22) 的最低要求；与 macOS(Brewfile `brew node`)/
-# Windows(choco 24.18.0) 保持同一主版本。NodeSource 的 nodejs 包自带 npm，
-# 故上方 APT_PKGS 已移除 `nodejs`/`npm`，避免与 NodeSource 包冲突。
-# Node 24 为当前 Active LTS。幂等：node 主版本 >= 24 即跳过。
-NODE_MAJOR=24
+# Node.js 22 via NodeSource — 不用 Node 24：其自带 npm 11 默认拦 install 脚本
+# （allowScripts），会静默跳过 zg/node-llama-cpp/onnxruntime 等原生二进制下载，
+# 装出「能用但缺原生组件」的坏状态；Node 22 自带 npm 10，无此拦截，与其它
+# 能正常装 zg 的 WSL 机器一致。dsh/zg 需 >=22.19，22.x 满足。
+# 注意：仅 Linux 锁 22；macOS(brew node)/Windows(choco 24.18.0) 仍走 24，暂不动。
+# NodeSource 的 nodejs 包自带 npm，故上方 APT_PKGS 已移除 `nodejs`/`npm`。
+# 幂等：node 主版本 == 22 即跳过；已装 24 会显式降级到 22。
+NODE_MAJOR=22
 # WSL interop 会把 Windows 的 node 追加进 PATH（见 cmd_exists_local 注释），而后面
-# npm_global 需要 Linux 本地 node；用 local 判定，避免被 Windows node 24.x 骗过跳过安装。
+# npm_global 需要 Linux 本地 node；用 local 判定，避免被 Windows 侧 node 骗过跳过安装。
 node_major=0
 if cmd_exists_local node; then
   node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 fi
-if (( node_major >= NODE_MAJOR )); then
-  log "Node.js $(node --version) already >= ${NODE_MAJOR} — skipping NodeSource"
+if (( node_major == NODE_MAJOR )); then
+  log "Node.js $(node --version) already ${NODE_MAJOR}.x — skipping NodeSource"
 else
-  log "Installing Node.js ${NODE_MAJOR}.x via NodeSource"
+  log "Installing Node.js ${NODE_MAJOR}.x via NodeSource (from node $(node --version 2>/dev/null || echo none))"
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" \
     | sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY bash - \
     || warn "  nodesource setup failed (falling through to version check)"
+  # 已装更高主版本（如 24）时 apt 不会自动降级，显式 remove 再 install 覆盖。
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq nodejs 2>/dev/null || true
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs \
     || warn "  nodejs install failed"
 fi
@@ -248,6 +252,13 @@ if command -v npm >/dev/null 2>&1; then
   log "npm:  $(npm --version 2>/dev/null || echo '?')"
 else
   warn "npm not on PATH after install"
+fi
+
+# npm 全局 prefix 指到 ~/.local（NodeSource 包的 prefix 是 /usr，root 所有），
+# 免 sudo 装全局包，bin 落到 ~/.local/bin（已在 PATH 前部，先于 Windows node）。
+# 幂等：重跑只覆盖同值。
+if command -v npm >/dev/null 2>&1; then
+  npm config set prefix "$HOME/.local" || warn "  npm prefix config failed"
 fi
 
 # Tailscale — private mesh network for reaching services (e.g. the PostgreSQL host).
@@ -577,11 +588,9 @@ fi
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
-  # npm 全局安装需要 sudo（apt/nodesource node 的 prefix 是 /usr/local，root 所有）；
-  # sudo 默认 env_reset 会清掉代理，而本机直连不通，用 --preserve-env 显式带上代理。
+  # 全局包装到 ~/.local（上方已 `npm config set prefix`），免 sudo；代理 env 天然透传。
   npm_global() {
-    sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY \
-      npm install -g "$@"
+    npm install -g "$@"
   }
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
@@ -661,6 +670,12 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing zg (zvec-grep) via npm"
   fi
   npm_global @zvec/zvec-grep || warn "  zg install/upgrade failed (requires Node.js >= 22)"
+  # npm 半途失败会留下悬空的 ~/.local/bin/zg，command -v 静默回退到 Windows 侧 /mnt/c
+  # 的 zg，直到 `zg index` 才崩（missing @zvec/bindings-linux-x64）。装完立刻跑一次，
+  # 失败就地暴露，而不是留个坏链接等后续才炸。
+  if ! zg --version >/dev/null 2>&1; then
+    warn "  zg unusable after install (-> $(command -v zg 2>/dev/null || echo 'not found')) — likely partial npm install or missing @zvec/bindings-linux-x64"
+  fi
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
@@ -818,8 +833,7 @@ fi
 if command -v npm >/dev/null 2>&1; then
   if ! pnpm --version >/dev/null 2>&1; then
     log "Installing standalone pnpm via npm"
-    sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY \
-      npm install -g pnpm || warn "  pnpm install failed"
+    npm install -g pnpm || warn "  pnpm install failed"
   else
     log "pnpm: $(pnpm --version 2>/dev/null)"
   fi
