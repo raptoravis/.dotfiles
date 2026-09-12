@@ -59,6 +59,10 @@
 
 - 用户已设 `permissions.defaultMode: bypassPermissions`，权限层已全自动
 
+# zvec-grep 搜索默认
+
+- 语义搜索 `zvec_grep_search` 默认传 `freshness: wait_for_fresh`：索引过期时先增量重建、再返回结果，保证命中最新文件；词法 `zvec_grep_rg` 无此参数、始终实时。
+
 <!-- ZVEC_GREP_START -->
 ## zvec-grep
 

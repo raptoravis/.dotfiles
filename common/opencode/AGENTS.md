@@ -55,6 +55,10 @@
 - 仅当用户在同一指令里写了"commit + push + ff-merge"这种连写时，按字面授权范围执行；他说 "commit" 就只 commit 不 push
 - 不影响纯 local 操作（编辑文件 / mkdir / 装依赖 / 跑测试）— 那些可以照常做
 
+# zvec-grep 搜索默认
+
+- 语义搜索 `zvec_grep_search` 默认传 `freshness: wait_for_fresh`：索引过期时先增量重建、再返回结果，保证命中最新文件；词法 `zvec_grep_rg` 无此参数、始终实时。
+
 <!-- ZVEC_GREP_START -->
 ## zvec-grep
 

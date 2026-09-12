@@ -1,0 +1,20 @@
+# `zg query` 默认补 --refresh wait：索引过期时先增量重建、再返回结果，保证命中最新内容。
+# --rg 是词法检索、不支持 refresh（注入会报错），跳过；用户显式传 --refresh 时不覆盖。
+emulate -L zsh
+
+if [[ "$1" != "query" ]]; then
+  command zg "$@"
+  return
+fi
+
+local a has_rg=0 has_refresh=0
+for a in "$@"; do
+  [[ "$a" == "--rg" ]] && has_rg=1
+  [[ "$a" == "--refresh" || "$a" == --refresh=* ]] && has_refresh=1
+done
+
+if (( has_rg || has_refresh )); then
+  command zg "$@"
+else
+  command zg "$1" --refresh wait "${@:2}"
+fi
