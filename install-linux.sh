@@ -109,6 +109,8 @@ if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
   export GLOBAL_AGENT_HTTP_PROXY=http://127.0.0.1:7890
   export GLOBAL_AGENT_HTTPS_PROXY=http://127.0.0.1:7890
   export GLOBAL_AGENT_NO_PROXY=localhost,127.0.0.1
+  # Node 内置 fetch(undici) 默认不认 http(s)_proxy；NODE_USE_ENV_PROXY=1 让它走代理（zg 下模型依赖这个）
+  export NODE_USE_ENV_PROXY=1
   log "检测到 7890 代理 — 设置全局 http(s)_proxy"
 
   # 持久化到 bash 交互 shell（WSL 默认 login shell 是 bash）。zsh 的代理已在
@@ -129,6 +131,7 @@ export ALL_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"
+export NODE_USE_ENV_PROXY=1
 EOF
   fi
 fi
@@ -599,6 +602,26 @@ if command -v npm >/dev/null 2>&1; then
   npm_global() {
     npm install -g "$@"
   }
+  # 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
+  # 已是最新也白跑（dsh 一次 30s+）。这里先比 installed vs latest：未安装或远端有
+  # 新版才真正 install，已是最新则跳过。$1=pkg $2=显示名，其余参数透传给 npm install。
+  npm_install_if_stale() {
+    local pkg="$1" label="$2" inst latest
+    shift 2
+    inst=$(npm list -g --depth=0 "$pkg" 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)
+    if [[ -z "$inst" ]]; then
+      log "Installing $label ($pkg)"
+      npm_global "$pkg" "$@" || warn "  $label install failed"
+      return
+    fi
+    latest=$(npm view "$pkg" version 2>/dev/null)
+    if [[ -n "$latest" && "$inst" != "$latest" ]]; then
+      log "Upgrading $label ($pkg): $inst -> $latest"
+      npm_global "$pkg" "$@" || warn "  $label upgrade failed"
+    else
+      log "  $label ($pkg) @ $inst 已是最新，跳过"
+    fi
+  }
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
     npm_global hostc || warn "  hostc install failed"
@@ -627,60 +650,24 @@ if command -v npm >/dev/null 2>&1; then
   fi
 
   # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
-  # 已装也重新走 npm 升级：`npm install -g` 会拉到 latest，重跑脚本时同步更新。
-  if cmd_exists_local claude; then
-    log "Upgrading Claude Code CLI (@anthropic-ai/claude-code)"
-  else
-    log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
-  fi
-  npm_global @anthropic-ai/claude-code || warn "  claude-code install/upgrade failed"
-  if cmd_exists_local codex; then
-    log "Upgrading Codex CLI (@openai/codex)"
-  else
-    log "Installing Codex CLI (@openai/codex)"
-  fi
-  npm_global @openai/codex || warn "  codex install/upgrade failed"
-  if cmd_exists_local opencode; then
-    log "Upgrading OpenCode CLI (opencode-ai)"
-  else
-    log "Installing OpenCode CLI (opencode-ai)"
-  fi
-  npm_global opencode-ai || warn "  opencode install/upgrade failed"
-  if cmd_exists_local grok; then
-    log "Upgrading Grok CLI (@xai-official/grok)"
-  else
-    log "Installing Grok CLI (@xai-official/grok)"
-  fi
-  npm_global @xai-official/grok || warn "  grok install/upgrade failed"
+  # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
+  npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
+  npm_install_if_stale @openai/codex "Codex CLI"
+  npm_install_if_stale opencode-ai "OpenCode CLI"
+  npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
-  if cmd_exists_local dsh; then
-    log "Upgrading DeepSeek Harness CLI (@deepseek-ai/dsh)"
-  else
-    log "Installing DeepSeek Harness CLI (@deepseek-ai/dsh)"
-  fi
-  npm_global @deepseek-ai/dsh || warn "  dsh (DeepSeek Harness) install/upgrade failed (requires Node.js >= 22.19)"
+  npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-  if cmd_exists_local pi; then
-    log "Upgrading Pi coding agent CLI (@earendil-works/pi-coding-agent)"
-  else
-    log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
-  fi
-  npm_global @earendil-works/pi-coding-agent || warn "  pi install/upgrade failed"
+  npm_install_if_stale @earendil-works/pi-coding-agent "Pi coding agent CLI"
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  # 已装也重新走 npm 升级：`npm install -g` 会拉到 latest，重跑脚本时同步更新。
-  if cmd_exists_local zg; then
-    log "Upgrading zg (zvec-grep) via npm"
-  else
-    log "Installing zg (zvec-grep) via npm"
-  fi
   # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL2 无 GPU 用不上）、
   # node-llama-cpp 默认下预编译 llama.cpp，两者经 Clash 代理都易卡死/超时；skip 跳过。
   # zg 核心搜索走 @zvec/bindings-linux-x64（Rust 绑定），不受影响。
   NODE_LLAMA_CPP_SKIP_DOWNLOAD=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip \
-    npm_global @zvec/zvec-grep || warn "  zg install/upgrade failed (requires Node.js >= 22)"
+    npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)" || warn "  zg install/upgrade failed (requires Node.js >= 22)"
   # npm 半途失败会留下悬空的 ~/.local/bin/zg，command -v 静默回退到 Windows 侧 /mnt/c
   # 的 zg，直到 `zg index` 才崩（missing @zvec/bindings-linux-x64）。装完立刻跑一次，
   # 失败就地暴露，而不是留个坏链接等后续才炸。
@@ -716,6 +703,17 @@ if command -v npm >/dev/null 2>&1; then
         printf '%s\n' "$zg_out" >&2
         warn "  zg install failed (see zg output above)"
       fi
+      # 交互式 CLI 默认连 7999（穿透到 Windows daemon、看不到 WSL 路径 → ROOT_NOT_FOUND），
+      # 把 client.serverUrl 持久化到 ~/.zvec-grep/config.json，指向 WSL daemon(7998)。幂等 merge。
+      ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" node -e '
+        const fs = require("fs");
+        const p = require("path").join(process.env.HOME, ".zvec-grep", "config.json");
+        let cfg = { version: 1 };
+        try { cfg = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+        cfg.client = { ...(cfg.client || {}), serverUrl: process.env.ZVEC_GREP_SERVER_URL };
+        fs.mkdirSync(require("path").dirname(p), { recursive: true });
+        fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + "\n");
+      '
     else
       if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
         printf '%s\n' "$zg_out"

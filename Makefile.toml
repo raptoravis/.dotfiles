@@ -35,13 +35,13 @@ dependencies = [
 ]
 
 [tasks.install-ai-clis]
-description = "Install Claude Code / Codex / OpenCode / Grok CLIs globally via npm"
+description = "Install Claude Code / Codex / OpenCode / Grok CLIs globally via npm (only when newer available)"
 script = [
     "echo --- Installing AI coding CLIs ---",
-    "npm install -g @anthropic-ai/claude-code || echo '  claude-code install failed (need npm on PATH)'",
-    "npm install -g @openai/codex             || echo '  codex install failed'",
-    "npm install -g opencode-ai               || echo '  opencode install failed'",
-    "npm install -g @xai-official/grok         || echo '  grok install failed'",
+    "inst=$(npm list -g --depth=0 @anthropic-ai/claude-code 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @anthropic-ai/claude-code version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @anthropic-ai/claude-code || echo '  claude-code install failed'; fi",
+    "inst=$(npm list -g --depth=0 @openai/codex 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @openai/codex version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @openai/codex || echo '  codex install failed'; fi",
+    "inst=$(npm list -g --depth=0 opencode-ai 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view opencode-ai version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g opencode-ai || echo '  opencode install failed'; fi",
+    "inst=$(npm list -g --depth=0 @xai-official/grok 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @xai-official/grok version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @xai-official/grok || echo '  grok install failed'; fi",
 ]
 
 [tasks.install-rust]

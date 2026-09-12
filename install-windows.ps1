@@ -33,6 +33,26 @@ function Write-Step  ($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn2 ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+# 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
+# 已是最新也白跑。这里先比 installed vs latest：未安装或远端有新版才真正 install。
+function Install-NpmCliIfStale ($pkg, $label) {
+    $inst = npm list -g --depth=0 $pkg 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1
+    if (-not $inst) {
+        Write-Step "Installing $label ($pkg)"
+        npm install -g $pkg
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label install failed" }
+        return
+    }
+    $latest = ((npm view $pkg version 2>$null) | Select-Object -Last 1)
+    if ($latest) { $latest = $latest.Trim() }
+    if ($latest -and ($inst -ne $latest)) {
+        Write-Step "Upgrading $label ($pkg): $inst -> $latest"
+        npm install -g $pkg
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label upgrade failed" }
+    } else {
+        Write-Host "  $label ($pkg) @ $inst 已是最新，跳过"
+    }
+}
 function Test-Admin {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
@@ -847,47 +867,20 @@ if (Test-Cmd npm) {
         Write-Host '  puppeteer already installed'
     }
     # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
-    if (-not (Test-Cmd claude)) {
-        Write-Step 'Installing Claude Code CLI (@anthropic-ai/claude-code)'
-        npm install -g '@anthropic-ai/claude-code'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude-code install failed' }
-    }
-    if (-not (Test-Cmd codex)) {
-        Write-Step 'Installing Codex CLI (@openai/codex)'
-        npm install -g '@openai/codex'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex install failed' }
-    }
-    if (-not (Test-Cmd opencode)) {
-        Write-Step 'Installing OpenCode CLI (opencode-ai)'
-        npm install -g 'opencode-ai'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode install failed' }
-    }
-    if (-not (Test-Cmd grok)) {
-        Write-Step 'Installing Grok CLI (@xai-official/grok)'
-        npm install -g '@xai-official/grok'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok install failed' }
-    }
+    # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
+    Install-NpmCliIfStale '@anthropic-ai/claude-code' 'Claude Code CLI'
+    Install-NpmCliIfStale '@openai/codex' 'Codex CLI'
+    Install-NpmCliIfStale 'opencode-ai' 'OpenCode CLI'
+    Install-NpmCliIfStale '@xai-official/grok' 'Grok CLI'
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
-    if (-not (Test-Cmd dsh)) {
-        Write-Step 'Installing DeepSeek Harness CLI (@deepseek-ai/dsh)'
-        npm install -g '@deepseek-ai/dsh'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh (DeepSeek Harness) install failed (requires Node.js >= 22.19)' }
-    }
+    Install-NpmCliIfStale '@deepseek-ai/dsh' 'DeepSeek Harness CLI'
     # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
     # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-    if (-not (Test-Cmd pi)) {
-        Write-Step 'Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)'
-        npm install -g '@earendil-works/pi-coding-agent'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  pi install failed' }
-    }
+    Install-NpmCliIfStale '@earendil-works/pi-coding-agent' 'Pi coding agent CLI'
     # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
     # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-    if (-not (Test-Cmd zg)) {
-        Write-Step 'Installing zg (zvec-grep) via npm'
-        npm install -g '@zvec/zvec-grep'
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (requires Node.js >= 22)' }
-    }
+    Install-NpmCliIfStale '@zvec/zvec-grep' 'zg (zvec-grep)'
     # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
     # guidance + tool approval + start local server). Idempotent — re-runs update
     # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray

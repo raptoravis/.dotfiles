@@ -326,6 +326,26 @@ fi
 # 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
+  # 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
+  # 已是最新也白跑。这里先比 installed vs latest：未安装或远端有新版才真正 install，
+  # 已是最新则跳过。$1=pkg $2=显示名，其余参数透传给 npm install。
+  npm_install_if_stale() {
+    local pkg="$1" label="$2" inst latest
+    shift 2
+    inst=$(npm list -g --depth=0 "$pkg" 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)
+    if [[ -z "$inst" ]]; then
+      log "Installing $label ($pkg)"
+      npm install -g "$pkg" "$@" || warn "  $label install failed"
+      return
+    fi
+    latest=$(npm view "$pkg" version 2>/dev/null)
+    if [[ -n "$latest" && "$inst" != "$latest" ]]; then
+      log "Upgrading $label ($pkg): $inst -> $latest"
+      npm install -g "$pkg" "$@" || warn "  $label upgrade failed"
+    else
+      log "  $label ($pkg) @ $inst 已是最新，跳过"
+    fi
+  }
   if ! command -v hostc >/dev/null 2>&1; then
     log "Installing hostc (edge tunnel CLI) via npm"
     npm install -g hostc || warn "  hostc install failed"
@@ -353,40 +373,20 @@ if command -v npm >/dev/null 2>&1; then
   fi
 
   # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
-  if ! command -v claude >/dev/null 2>&1; then
-    log "Installing Claude Code CLI (@anthropic-ai/claude-code)"
-    npm install -g @anthropic-ai/claude-code || warn "  claude-code install failed"
-  fi
-  if ! command -v codex >/dev/null 2>&1; then
-    log "Installing Codex CLI (@openai/codex)"
-    npm install -g @openai/codex || warn "  codex install failed"
-  fi
-  if ! command -v opencode >/dev/null 2>&1; then
-    log "Installing OpenCode CLI (opencode-ai)"
-    npm install -g opencode-ai || warn "  opencode install failed"
-  fi
-  if ! command -v grok >/dev/null 2>&1; then
-    log "Installing Grok CLI (@xai-official/grok)"
-    npm install -g @xai-official/grok || warn "  grok install failed"
-  fi
+  # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
+  npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
+  npm_install_if_stale @openai/codex "Codex CLI"
+  npm_install_if_stale opencode-ai "OpenCode CLI"
+  npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
-  if ! command -v dsh >/dev/null 2>&1; then
-    log "Installing DeepSeek Harness CLI (@deepseek-ai/dsh)"
-    npm install -g @deepseek-ai/dsh || warn "  dsh (DeepSeek Harness) install failed (requires Node.js >= 22.19)"
-  fi
+  npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-  if ! command -v pi >/dev/null 2>&1; then
-    log "Installing Pi coding agent CLI (@earendil-works/pi-coding-agent)"
-    npm install -g @earendil-works/pi-coding-agent || warn "  pi install failed"
-  fi
+  npm_install_if_stale @earendil-works/pi-coding-agent "Pi coding agent CLI"
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  if ! command -v zg >/dev/null 2>&1; then
-    log "Installing zg (zvec-grep) via npm"
-    npm install -g @zvec/zvec-grep || warn "  zg install failed (requires Node.js >= 22)"
-  fi
+  npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)"
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray

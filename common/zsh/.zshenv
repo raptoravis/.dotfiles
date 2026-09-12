@@ -49,3 +49,5 @@ export ALL_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
 export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"
+# Node's built-in fetch (undici) ignores http(s)_proxy by default; this makes it honor them.
+export NODE_USE_ENV_PROXY=1
