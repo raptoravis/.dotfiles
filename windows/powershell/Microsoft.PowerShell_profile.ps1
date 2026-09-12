@@ -262,7 +262,7 @@ proxy_on
 $env:UV_INDEX_URL = "https://mirrors.aliyun.com/pypi/simple/"
 $env:UV_LINK_MODE = "copy"
 
-#$env:ANTHROPIC_API_KEY="sk-d86c08e38dce47fda2bfbcd6671ac6de"
+#$env:ANTHROPIC_API_KEY="sk-..."
 #$env:ANTHROPIC_BASE_URL="http://127.0.0.1:8045"
 
 #$env:OLLAMA_HOST="127.0.0.1:8181"
