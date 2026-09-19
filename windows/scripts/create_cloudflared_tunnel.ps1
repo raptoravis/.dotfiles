@@ -104,7 +104,7 @@ $presets = @{
     home = @{
         TunnelName = 'home'
         Routes     = @{
-            'tianyun.ccwu.cc' = 'http://127.0.0.1:50876'
+            'tianyun.ccwu.cc' = 'http://localhost:50876'
             'peifeng.ccwu.cc' = 'http://localhost:39287'
         }
     }
