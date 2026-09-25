@@ -1137,9 +1137,10 @@ if (Test-Cmd opencode) {
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
+# dsh-browser: browser automation plugin; dsh-browser-use: Browser Use Cloud bridge;
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
 if (Test-Cmd dsh) {
-    foreach ($plugin in @('dshmarket', 'dsh-context', 'github:raptoravis/yunxing')) {
+    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-browser', 'dsh-browser-use', 'github:raptoravis/yunxing')) {
         Write-Step "Installing dsh plugin: $plugin"
         dsh plugin --profile web add $plugin 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $plugin failed (may already be installed)" }

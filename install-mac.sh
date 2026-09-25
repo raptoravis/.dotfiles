@@ -643,9 +643,10 @@ fi
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
+# dsh-browser: browser automation plugin; dsh-browser-use: Browser Use Cloud bridge;
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
 if command -v dsh >/dev/null 2>&1; then
-  for plugin in dshmarket dsh-context github:raptoravis/yunxing; do
+  for plugin in dshmarket dsh-context dsh-browser dsh-browser-use github:raptoravis/yunxing; do
     log "Installing dsh plugin: $plugin"
     dsh plugin --profile web add "$plugin" >/dev/null 2>&1 \
       || warn "  dsh plugin add $plugin failed (may already be installed)"
