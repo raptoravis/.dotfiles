@@ -955,13 +955,17 @@ else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
 
-# dsh — DeepSeek Harness bundle (package.json dsh.bundle → cordis.patch.yml).
+# dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
+# dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
+# yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
 if cmd_exists_local dsh; then
-  log "Installing yunxing dsh bundle"
-  dsh plugin --profile web add github:raptoravis/yunxing >/dev/null 2>&1 \
-    || warn "  dsh plugin add failed (may already be installed)"
+  for plugin in dshmarket dsh-context github:raptoravis/yunxing; do
+    log "Installing dsh plugin: $plugin"
+    dsh plugin --profile web add "$plugin" >/dev/null 2>&1 \
+      || warn "  dsh plugin add $plugin failed (may already be installed)"
+  done
 else
-  warn "dsh CLI not on PATH -- skipping dsh yunxing bundle (re-run after dsh is installed)"
+  warn "dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)"
 fi
 
 # Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
