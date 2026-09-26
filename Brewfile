@@ -49,3 +49,6 @@ brew "corepack"
 
 # Fonts
 cask "font-fira-code-nerd-font"
+
+# Screenshot & OCR
+cask "pixpin"
