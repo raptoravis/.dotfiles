@@ -606,6 +606,10 @@ if command -v codex >/dev/null 2>&1; then
     fi
     codex plugin marketplace add raptoravis/yunxing >/dev/null 2>&1 \
       || warn "  codex marketplace add failed"
+    # `add` is idempotent and won't pull newer code, so refresh the marketplace
+    # snapshot first — otherwise `plugin add` installs a stale version.
+    codex plugin marketplace upgrade yunxing >/dev/null 2>&1 \
+      || warn "  codex marketplace upgrade failed"
 
     # `plugin add` can fail with "Access denied" while codex is running (it holds
     # its plugin cache/state files open). Capture stderr to tell that case apart

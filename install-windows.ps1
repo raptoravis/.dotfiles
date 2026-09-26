@@ -521,7 +521,9 @@ if (Test-Cmd winget) {
         'Microsoft.Coreutils',
         # Private networking for reaching services such as the PostgreSQL host
         # without exposing their ports to the public internet.
-        'Tailscale.Tailscale'
+        'Tailscale.Tailscale',
+        # Screenshot / OCR / pin-to-screen tool.
+        'PixPin.PixPin'
     )
     foreach ($id in $WingetApps) {
         $installed = winget list --id $id --source winget --accept-source-agreements 2>$null |
@@ -1100,13 +1102,23 @@ if (Test-Cmd codex) {
         codex plugin marketplace add raptoravis/yunxing 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  codex marketplace add failed' }
 
-        # `plugin add` fails with "Access denied" when codex is running (it holds its
-        # plugin cache/state files open on Windows). Capture stderr so we can tell that
-        # case apart from a real error.
+        # `codex plugin marketplace upgrade` renames the old checkout out of the way, and
+        # `codex plugin add` renames the old cache entry to back it up — both renames are
+        # denied (os error 5) on Windows for git checkouts. Refresh the marketplace
+        # snapshot with an in-place `git pull` (no rename; `marketplace add` above already
+        # cloned it on a fresh machine) and delete the stale cache (re-downloadable).
+        $YunxingMp = Join-Path $CodexHome '.tmp\marketplaces\yunxing'
+        if ((Test-Cmd git) -and (Test-Path (Join-Path $YunxingMp '.git'))) {
+            git -C $YunxingMp pull --ff-only --quiet 2>$null
+        }
+        Remove-Item -Recurse -Force (Join-Path $CodexHome 'plugins\cache\yunxing') -ErrorAction SilentlyContinue
+
+        # Capture stderr so a real error is distinguishable from the rename denial above.
+        # `os error 5` is locale-independent; the localized message is not.
         $codexErr = (codex plugin add yunxing@yunxing 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) {
-            if ($codexErr -match 'Access denied|Access is denied') {
-                Write-Warn2 '  codex plugin add failed: codex is running (close codex, then re-run)'
+            if ($codexErr -match 'os error 5|Access denied|Access is denied') {
+                Write-Warn2 '  codex plugin add failed: os error 5 renaming plugin cache (close codex, then re-run)'
             } elseif ($codexErr) {
                 Write-Warn2 "  codex plugin add failed: $codexErr"
             } else {
