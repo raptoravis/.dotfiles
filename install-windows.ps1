@@ -68,7 +68,7 @@ if ($UninstallAgents) {
         $AgentPackages = @(
             '@anthropic-ai/claude-code',
             '@openai/codex',
-            'opencode-ai',
+            '@opencode/cli',
             '@xai-official/grok',
             '@deepseek-ai/dsh',
             '@deepseek-harness-tui/dsh-tui',
@@ -873,7 +873,7 @@ if (Test-Cmd npm) {
     # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
     Install-NpmCliIfStale '@anthropic-ai/claude-code' 'Claude Code CLI'
     Install-NpmCliIfStale '@openai/codex' 'Codex CLI'
-    Install-NpmCliIfStale 'opencode-ai' 'OpenCode CLI'
+    Install-NpmCliIfStale '@opencode/cli' 'OpenCode CLI'
     Install-NpmCliIfStale '@xai-official/grok' 'Grok CLI'
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
@@ -975,8 +975,9 @@ if (Test-Cmd npm) {
         codex mcp add github --url $GhMcpUrl 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Host "  github MCP already registered for codex (or registration failed — see 'codex mcp list')" }
     }
-    # opencode: merge an `mcp.github` (remote) entry into its JSON
-    # config idempotently.
+    # opencode: merge an `mcp.servers.github` (remote) entry into its JSON
+    # config idempotently. v2 nests MCP servers under mcp.servers (v1 put them
+    # directly under mcp).
     if (Test-Cmd node) {
         function Register-JsonMcp([string]$File, [string]$AddJson) {
             $env:MCP_FILE = $File
@@ -989,8 +990,9 @@ const fs=require("fs"), path=require("path");
 const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD);
 let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){}
 c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{};
+c.mcp.servers=(c.mcp.servers&&typeof c.mcp.servers==="object")?c.mcp.servers:{};
 let changed=false;
-for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } }
+for(const [k,v] of Object.entries(add)){ if(!c.mcp.servers[k]){ c.mcp.servers[k]=v; changed=true; } }
 if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
 '@
             $script | node -
@@ -999,12 +1001,12 @@ if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f,
         }
         # Build the github entry via ConvertTo-Json so a PAT containing quotes or
         # backslashes can't corrupt the JSON (hand-built strings would).
-        $ghMcp = @{ github = @{ type = 'remote'; url = $GhMcpUrl; enabled = $true } }
+        $ghMcp = @{ github = @{ type = 'remote'; url = $GhMcpUrl; oauth = $false } }
         if ($GhMcpPat) { $ghMcp.github.headers = @{ Authorization = "Bearer $GhMcpPat" } }
         $GhRemoteJson = $ghMcp | ConvertTo-Json -Compress -Depth 5
-        $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
-        $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
-        $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
+        $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
+        $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
+        $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
         if (Test-Cmd opencode) {
             Write-Step 'Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
@@ -1136,12 +1138,12 @@ if (Test-Cmd codex) {
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if (Test-Cmd opencode) {
     Write-Step 'Installing yunxing OpenCode plugin'
-    # OpenCode reuses the cached Git dependency for an unchanged module spec,
-    # even with --force. Include HEAD so a new yunxing revision gets a new spec.
+    # Include HEAD so a new yunxing revision gets a new spec (v2 `plugin add`
+    # resolves the git ref each run).
     $yunxingRefLine = git ls-remote https://github.com/raptoravis/yunxing.git HEAD 2>$null | Select-Object -First 1
     $yunxingRef = if ($yunxingRefLine) { ($yunxingRefLine -split '\s+')[0] } else { $null }
     if ($yunxingRef) {
-        opencode plugin --force -g "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxingRef" 2>$null
+        opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxingRef" 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed' }
     } else {
         Write-Warn2 '  could not resolve yunxing HEAD; skipping OpenCode plugin install'

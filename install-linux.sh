@@ -31,7 +31,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui" "@earendil-works/pi-coding-agent"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui" "@earendil-works/pi-coding-agent"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -653,7 +653,7 @@ if command -v npm >/dev/null 2>&1; then
   # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
   npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
   npm_install_if_stale @openai/codex "Codex CLI"
-  npm_install_if_stale opencode-ai "OpenCode CLI"
+  npm_install_if_stale @opencode/cli "OpenCode CLI"
   npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
@@ -798,30 +798,32 @@ if command -v npm >/dev/null 2>&1; then
     codex mcp add github --url "$GH_MCP_URL" 2>/dev/null \
       || log "  github MCP already registered for codex (or registration failed — see 'codex mcp list')"
   fi
-  # opencode: merge an `mcp.github` (remote) entry into its JSON
-  # config idempotently.
+  # opencode: merge an `mcp.servers.github` (remote) entry into its JSON
+  # config idempotently. v2 nests MCP servers under mcp.servers (v1 put them
+  # directly under mcp).
   if command -v node >/dev/null 2>&1; then
-    register_json_mcp() {  # $1=config file  $2=JSON object to merge under .mcp
+    register_json_mcp() {  # $1=config file  $2=JSON object to merge under .mcp.servers
       MCP_FILE="$1" MCP_ADD="$2" node -e '
         const fs=require("fs"), path=require("path");
         const f=process.env.MCP_FILE, add=JSON.parse(process.env.MCP_ADD);
         let c={}; try{ c=JSON.parse(fs.readFileSync(f,"utf8")); }catch(e){}
         c.mcp=(c.mcp&&typeof c.mcp==="object")?c.mcp:{};
+        c.mcp.servers=(c.mcp.servers&&typeof c.mcp.servers==="object")?c.mcp.servers:{};
         let changed=false;
-        for(const [k,v] of Object.entries(add)){ if(!c.mcp[k]){ c.mcp[k]=v; changed=true; } }
+        for(const [k,v] of Object.entries(add)){ if(!c.mcp.servers[k]){ c.mcp.servers[k]=v; changed=true; } }
         if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f, JSON.stringify(c,null,2)+"\n"); }
       ' || warn "  failed to write MCP config to $1"
     }
     # Build the github entry via node's JSON.stringify so a PAT containing quotes
     # or backslashes can't corrupt the JSON (hand-built strings would).
     GH_REMOTE_JSON="$(GH_MCP_URL="$GH_MCP_URL" GH_MCP_PAT="${GH_MCP_PAT:-}" node -e '
-      const o={github:{type:"remote",url:process.env.GH_MCP_URL,enabled:true}};
+      const o={github:{type:"remote",url:process.env.GH_MCP_URL,oauth:false}};
       if(process.env.GH_MCP_PAT){ o.github.headers={Authorization:"Bearer "+process.env.GH_MCP_PAT}; }
       process.stdout.write(JSON.stringify(o));
     ')"
-    CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}}'
-    FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"enabled":true}}'
-    CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"],"enabled":true}}'
+    CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
+    FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
+    CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
     if cmd_exists_local opencode; then
       log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
@@ -948,11 +950,11 @@ fi
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if cmd_exists_local opencode; then
   log "Installing yunxing OpenCode plugin"
-  # OpenCode reuses the cached Git dependency for an unchanged module spec,
-  # even with --force. Include HEAD so a new yunxing revision gets a new spec.
+  # Include HEAD so a new yunxing revision gets a new spec (v2 `plugin add`
+  # resolves the git ref each run).
   yunxing_ref="$(git ls-remote https://github.com/raptoravis/yunxing.git HEAD 2>/dev/null | awk 'NR == 1 { print $1 }')"
   if [[ -n "$yunxing_ref" ]]; then
-    opencode plugin --force -g "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxing_ref" >/dev/null 2>&1 \
+    opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxing_ref" >/dev/null 2>&1 \
       || warn "  opencode plugin install failed"
   else
     warn "  could not resolve yunxing HEAD; skipping OpenCode plugin install"
