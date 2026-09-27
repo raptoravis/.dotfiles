@@ -71,6 +71,7 @@ if ($UninstallAgents) {
             'opencode-ai',
             '@xai-official/grok',
             '@deepseek-ai/dsh',
+            '@deepseek-harness-tui/dsh-tui',
             '@earendil-works/pi-coding-agent'
         )
         foreach ($pkg in $AgentPackages) {
@@ -877,6 +878,8 @@ if (Test-Cmd npm) {
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
     Install-NpmCliIfStale '@deepseek-ai/dsh' 'DeepSeek Harness CLI'
+    # dsh-tui — Claude Code-style interactive TUI front door for dsh. bin: `dsh-tui`.
+    Install-NpmCliIfStale '@deepseek-harness-tui/dsh-tui' 'DeepSeek Harness TUI'
     # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
     # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
     Install-NpmCliIfStale '@earendil-works/pi-coding-agent' 'Pi coding agent CLI'

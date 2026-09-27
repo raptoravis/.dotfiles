@@ -31,7 +31,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@xai-official/grok" "@deepseek-ai/dsh" "@earendil-works/pi-coding-agent"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "opencode-ai" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui" "@earendil-works/pi-coding-agent"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -381,6 +381,8 @@ if command -v npm >/dev/null 2>&1; then
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
   npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
+  # dsh-tui — Claude Code-style interactive TUI front door for dsh. bin: `dsh-tui`.
+  npm_install_if_stale @deepseek-harness-tui/dsh-tui "DeepSeek Harness TUI"
   # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
   # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
   npm_install_if_stale @earendil-works/pi-coding-agent "Pi coding agent CLI"
