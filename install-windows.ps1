@@ -1007,7 +1007,7 @@ if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f,
         if ($GhMcpPat) { $ghMcp.github.headers = @{ Authorization = "Bearer $GhMcpPat" } }
         $GhRemoteJson = $ghMcp | ConvertTo-Json -Compress -Depth 5
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
-        $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
+        $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"timeout":{"startup":120000}}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
         # zg (zvec-grep) — stdio bootstrap; starts/reuses the shared daemon.
         $ZvecLocalJson = '{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
