@@ -1187,10 +1187,31 @@ if (Test-Cmd opencode) {
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
-# dsh-browser: browser automation plugin; dsh-browser-use: Browser Use Cloud bridge;
+# dsh-browser-use: Browser Use Cloud bridge;
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
+#
+# Profiles install per directory, so a profile booted without the yunxing bundle
+# composes no yunxing skill provider and its sessions list no yunxing skills. The
+# skill bundle therefore goes into EVERY profile already on disk — the earlier
+# `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
+# after creating a new profile. The web/UI plugins stay on `web`.
 if (Test-Cmd dsh) {
-    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-browser', 'dsh-browser-use', 'github:raptoravis/yunxing')) {
+    $DshProfilesSeen = 0
+    foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
+        if (-not (Test-Path (Join-Path $DshProfileDir.FullName 'package.json'))) { continue }
+        $DshProfilesSeen++
+        Write-Step "Installing dsh plugin: github:raptoravis/yunxing (profile: $($DshProfileDir.Name))"
+        dsh plugin --profile $DshProfileDir.Name add github:raptoravis/yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
+    }
+    if ($DshProfilesSeen -eq 0) {
+        # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
+        Write-Step 'Installing dsh plugin: github:raptoravis/yunxing (profile: web)'
+        dsh plugin --profile web add github:raptoravis/yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
+    }
+
+    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-browser-use')) {
         Write-Step "Installing dsh plugin: $plugin"
         dsh plugin --profile web add $plugin 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $plugin failed (may already be installed)" }

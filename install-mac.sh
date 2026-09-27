@@ -685,10 +685,32 @@ fi
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
-# dsh-browser: browser automation plugin; dsh-browser-use: Browser Use Cloud bridge;
+# dsh-browser-use: Browser Use Cloud bridge;
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
+#
+# Profiles install per directory, so a profile booted without the yunxing bundle
+# composes no yunxing skill provider and its sessions list no yunxing skills. The
+# skill bundle therefore goes into EVERY profile already on disk — the earlier
+# `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
+# after creating a new profile. The web/UI plugins stay on `web`.
 if command -v dsh >/dev/null 2>&1; then
-  for plugin in dshmarket dsh-context dsh-browser dsh-browser-use github:raptoravis/yunxing; do
+  dsh_profiles_seen=0
+  for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
+    [ -f "${dsh_profile_dir}package.json" ] || continue
+    dsh_profile="$(basename "$dsh_profile_dir")"
+    dsh_profiles_seen=$((dsh_profiles_seen + 1))
+    log "Installing dsh plugin: github:raptoravis/yunxing (profile: $dsh_profile)"
+    dsh plugin --profile "$dsh_profile" add github:raptoravis/yunxing >/dev/null 2>&1 \
+      || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
+  done
+  if [ "$dsh_profiles_seen" -eq 0 ]; then
+    # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
+    log "Installing dsh plugin: github:raptoravis/yunxing (profile: web)"
+    dsh plugin --profile web add github:raptoravis/yunxing >/dev/null 2>&1 \
+      || warn "  dsh plugin add failed on web (may already be installed)"
+  fi
+
+  for plugin in dshmarket dsh-context dsh-browser-use; do
     log "Installing dsh plugin: $plugin"
     dsh plugin --profile web add "$plugin" >/dev/null 2>&1 \
       || warn "  dsh plugin add $plugin failed (may already be installed)"
