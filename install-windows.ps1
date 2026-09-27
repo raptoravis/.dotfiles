@@ -891,9 +891,11 @@ if (Test-Cmd npm) {
     # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
     # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
     # comment markers). dsh / pi / grok are not supported zg targets and skipped.
+    # opencode is wired manually below (opencode v2 reads nested mcp.servers, but
+    # zg 0.2.2 still writes flat v1 mcp.zvec_grep).
     if (Test-Cmd zg) {
         $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
-        foreach ($t in @('claude', 'codex', 'opencode')) {
+        foreach ($t in @('claude', 'codex')) {
             if (Test-Cmd $t) { $zgTargets += $t }
         }
         $zgArgs = @('--force')
@@ -1007,12 +1009,15 @@ if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f,
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
+        # zg (zvec-grep) — stdio bootstrap; starts/reuses the shared daemon.
+        $ZvecLocalJson = '{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
+            if (Test-Cmd zg) { Register-JsonMcp "$HOME\.config\opencode\opencode.json" $ZvecLocalJson }
         }
     }
 } else {

@@ -394,9 +394,11 @@ if command -v npm >/dev/null 2>&1; then
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
   # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
   # comment markers). dsh / pi / grok are not supported zg targets and skipped.
+  # opencode is wired manually below (opencode v2 reads nested mcp.servers, but
+  # zg 0.2.2 still writes flat v1 mcp.zvec_grep).
   if command -v zg >/dev/null 2>&1; then
     zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-    for t in claude codex opencode; do
+    for t in claude codex; do
       command -v "$t" >/dev/null 2>&1 && zg_targets+=("$t")
     done
     zg_args=(--force)
@@ -511,12 +513,15 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
+    # zg (zvec-grep) — stdio bootstrap; starts/reuses the shared daemon.
+    ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
+      command -v zg >/dev/null 2>&1 && register_json_mcp "$HOME/.config/opencode/opencode.json" "$ZVEC_LOCAL_JSON"
     fi
   fi
 else

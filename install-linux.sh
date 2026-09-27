@@ -680,10 +680,11 @@ if command -v npm >/dev/null 2>&1; then
   # guidance + tool approval + start local server). Idempotent — re-runs update
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
   # unmanaged zvec_grep table. dsh / pi / grok are not supported zg targets and
-  # are skipped.
+  # are skipped. opencode is wired manually below (opencode v2 reads nested
+  # mcp.servers, but zg 0.2.2 still writes flat v1 mcp.zvec_grep).
   if cmd_exists_local zg; then
     zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-    for t in claude codex opencode; do
+    for t in claude codex; do
       cmd_exists_local "$t" && zg_targets+=("$t")
     done
     zg_args=(--force)
@@ -824,12 +825,20 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"]}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
+    # zg (zvec-grep) — WSL wires a local HTTP daemon on 7998 (the Windows-side
+    # daemon holds 7999 for Cursor); pure Linux uses the stdio bootstrap.
+    if (( IS_WSL )); then
+      ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"remote","url":"http://127.0.0.1:7998/mcp","timeout":600000,"oauth":false}}'
+    else
+      ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
+    fi
     if cmd_exists_local opencode; then
-      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
+      cmd_exists_local zg && register_json_mcp "$HOME/.config/opencode/opencode.json" "$ZVEC_LOCAL_JSON"
     fi
   fi
 else
