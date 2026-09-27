@@ -602,6 +602,35 @@ if command -v npm >/dev/null 2>&1; then
   npm_global() {
     npm install -g "$@"
   }
+  # semver_lt A B — exit 0 if A < B (npm semver)，否则非 0。用 node（npm 依赖 node）比较，
+  # 预发布标签（-rc/-alpha）也能正确排序，避免把「本地比 latest 新」误判成可升级。
+  semver_lt() {
+    node -e '
+      const n = (v) => {
+        const m = String(v).replace(/^v/, "").split("-");
+        return { core: m[0].split(".").map((x) => +x || 0), pre: m[1] ? m[1].split(".") : [] };
+      };
+      const a = n(process.argv[1]), b = n(process.argv[2]);
+      for (let i = 0; i < 3; i++) { const d = a.core[i] - b.core[i]; if (d) process.exit(d < 0 ? 0 : 1); }
+      const cmp = (x, y) => {
+        for (let i = 0; i < Math.max(x.length, y.length); i++) {
+          if (x[i] === undefined) return -1;
+          if (y[i] === undefined) return 1;
+          if (x[i] === y[i]) continue;
+          const xn = /^\d+$/.test(x[i]), yn = /^\d+$/.test(y[i]);
+          if (xn && yn) return (+x[i]) - (+y[i]);
+          if (xn) return -1;
+          if (yn) return 1;
+          return x[i] < y[i] ? -1 : 1;
+        }
+        return 0;
+      };
+      if (a.pre.length === 0 && b.pre.length === 0) process.exit(1);
+      if (a.pre.length === 0) process.exit(1);
+      if (b.pre.length === 0) process.exit(0);
+      process.exit(cmp(a.pre, b.pre) < 0 ? 0 : 1);
+    ' "$1" "$2" 2>/dev/null
+  }
   # 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
   # 已是最新也白跑（dsh 一次 30s+）。这里先比 installed vs latest：未安装或远端有
   # 新版才真正 install，已是最新则跳过。$1=pkg $2=显示名，其余参数透传给 npm install。
@@ -615,9 +644,11 @@ if command -v npm >/dev/null 2>&1; then
       return
     fi
     latest=$(npm view "$pkg" version 2>/dev/null)
-    if [[ -n "$latest" && "$inst" != "$latest" ]]; then
+    if [[ -n "$latest" ]] && semver_lt "$inst" "$latest"; then
       log "Upgrading $label ($pkg): $inst -> $latest"
       npm_global "$pkg" "$@" || warn "  $label upgrade failed"
+    elif [[ -n "$latest" ]] && semver_lt "$latest" "$inst"; then
+      log "  $label ($pkg) @ $inst 比 latest ($latest) 新，跳过"
     else
       log "  $label ($pkg) @ $inst 已是最新，跳过"
     fi

@@ -35,6 +35,35 @@ function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 # 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
 # 已是最新也白跑。这里先比 installed vs latest：未安装或远端有新版才真正 install。
+function Test-SemverLt($a, $b) {
+    # A < B (npm semver) 判断。用 node 比较（npm 依赖 node），预发布标签也能正确排序，
+    # 避免把「本地比 latest 新」误判成可升级。
+    $js = 'const n = (v) => {
+      const m = String(v).replace(/^v/, "").split("-");
+      return { core: m[0].split(".").map((x) => +x || 0), pre: m[1] ? m[1].split(".") : [] };
+    };
+    const a = n(process.argv[1]), b = n(process.argv[2]);
+    for (let i = 0; i < 3; i++) { const d = a.core[i] - b.core[i]; if (d) process.exit(d < 0 ? 0 : 1); }
+    const cmp = (x, y) => {
+      for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        if (x[i] === undefined) return -1;
+        if (y[i] === undefined) return 1;
+        if (x[i] === y[i]) continue;
+        const xn = /^\d+$/.test(x[i]), yn = /^\d+$/.test(y[i]);
+        if (xn && yn) return (+x[i]) - (+y[i]);
+        if (xn) return -1;
+        if (yn) return 1;
+        return x[i] < y[i] ? -1 : 1;
+      }
+      return 0;
+    };
+    if (a.pre.length === 0 && b.pre.length === 0) process.exit(1);
+    if (a.pre.length === 0) process.exit(1);
+    if (b.pre.length === 0) process.exit(0);
+    process.exit(cmp(a.pre, b.pre) < 0 ? 0 : 1);'
+    node -e $js $a $b 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
 function Install-NpmCliIfStale ($pkg, $label) {
     $inst = npm list -g --depth=0 $pkg 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1
     if (-not $inst) {
@@ -45,10 +74,12 @@ function Install-NpmCliIfStale ($pkg, $label) {
     }
     $latest = ((npm view $pkg version 2>$null) | Select-Object -Last 1)
     if ($latest) { $latest = $latest.Trim() }
-    if ($latest -and ($inst -ne $latest)) {
+    if ($latest -and (Test-SemverLt $inst $latest)) {
         Write-Step "Upgrading $label ($pkg): $inst -> $latest"
         npm install -g $pkg
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label upgrade failed" }
+    } elseif ($latest -and (Test-SemverLt $latest $inst)) {
+        Write-Host "  $label ($pkg) @ $inst 比 latest ($latest) 新，跳过"
     } else {
         Write-Host "  $label ($pkg) @ $inst 已是最新，跳过"
     }
