@@ -1143,16 +1143,13 @@ if (Test-Cmd codex) {
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if (Test-Cmd opencode) {
     Write-Step 'Installing yunxing OpenCode plugin'
-    # Include HEAD so a new yunxing revision gets a new spec (v2 `plugin add`
-    # resolves the git ref each run).
-    $yunxingRefLine = git ls-remote https://github.com/raptoravis/yunxing.git HEAD 2>$null | Select-Object -First 1
-    $yunxingRef = if ($yunxingRefLine) { ($yunxingRefLine -split '\s+')[0] } else { $null }
-    if ($yunxingRef) {
-        opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxingRef" 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin install failed' }
-    } else {
-        Write-Warn2 '  could not resolve yunxing HEAD; skipping OpenCode plugin install'
-    }
+    # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
+    # through `plugin update`. Pinning a full commit hash would give each re-run a
+    # new spec and accumulate duplicate entries.
+    opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin add failed' }
+    opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin update failed' }
 } else {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }

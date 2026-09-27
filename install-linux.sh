@@ -959,15 +959,13 @@ fi
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if cmd_exists_local opencode; then
   log "Installing yunxing OpenCode plugin"
-  # Include HEAD so a new yunxing revision gets a new spec (v2 `plugin add`
-  # resolves the git ref each run).
-  yunxing_ref="$(git ls-remote https://github.com/raptoravis/yunxing.git HEAD 2>/dev/null | awk 'NR == 1 { print $1 }')"
-  if [[ -n "$yunxing_ref" ]]; then
-    opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git#$yunxing_ref" >/dev/null 2>&1 \
-      || warn "  opencode plugin install failed"
-  else
-    warn "  could not resolve yunxing HEAD; skipping OpenCode plugin install"
-  fi
+  # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
+  # through `plugin update`. Pinning a full commit hash would give each re-run a
+  # new spec and accumulate duplicate entries.
+  opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" >/dev/null 2>&1 \
+    || warn "  opencode plugin add failed"
+  opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" >/dev/null 2>&1 \
+    || warn "  opencode plugin update failed"
 else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
