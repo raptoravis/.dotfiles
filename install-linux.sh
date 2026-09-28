@@ -1011,12 +1011,18 @@ fi
 # skill bundle therefore goes into EVERY profile already on disk — the earlier
 # `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
 # after creating a new profile. The web/UI plugins stay on `web`.
+#
+# dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
+# first `dst` run, so it isn't on disk when this loop scans. Pre-install yunxing
+# into it explicitly, or the TUI boots skill-less until the next re-run.
 if cmd_exists_local dsh; then
   dsh_profiles_seen=0
+  dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
     [ -f "${dsh_profile_dir}package.json" ] || continue
     dsh_profile="$(basename "$dsh_profile_dir")"
     dsh_profiles_seen=$((dsh_profiles_seen + 1))
+    [ "$dsh_profile" = "dsh-tui" ] && dsh_tui_covered=1
     log "Installing dsh plugin: github:raptoravis/yunxing (profile: $dsh_profile)"
     dsh plugin --profile "$dsh_profile" add github:raptoravis/yunxing >/dev/null 2>&1 \
       || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
@@ -1026,6 +1032,11 @@ if cmd_exists_local dsh; then
     log "Installing dsh plugin: github:raptoravis/yunxing (profile: web)"
     dsh plugin --profile web add github:raptoravis/yunxing >/dev/null 2>&1 \
       || warn "  dsh plugin add failed on web (may already be installed)"
+  fi
+  if [ "$dsh_tui_covered" -eq 0 ]; then
+    log "Installing dsh plugin: github:raptoravis/yunxing (profile: dsh-tui)"
+    dsh plugin --profile dsh-tui add github:raptoravis/yunxing >/dev/null 2>&1 \
+      || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
   fi
 
   for plugin in dshmarket dsh-context dsh-browser-use; do

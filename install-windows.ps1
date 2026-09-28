@@ -1195,11 +1195,17 @@ if (Test-Cmd opencode) {
 # skill bundle therefore goes into EVERY profile already on disk — the earlier
 # `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
 # after creating a new profile. The web/UI plugins stay on `web`.
+#
+# dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
+# first `dst` run, so it isn't on disk when this loop scans. Pre-install yunxing
+# into it explicitly, or the TUI boots skill-less until the next re-run.
 if (Test-Cmd dsh) {
     $DshProfilesSeen = 0
+    $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
         if (-not (Test-Path (Join-Path $DshProfileDir.FullName 'package.json'))) { continue }
         $DshProfilesSeen++
+        if ($DshProfileDir.Name -eq 'dsh-tui') { $DshTuiCovered = $true }
         Write-Step "Installing dsh plugin: github:raptoravis/yunxing (profile: $($DshProfileDir.Name))"
         dsh plugin --profile $DshProfileDir.Name add github:raptoravis/yunxing 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
@@ -1209,6 +1215,11 @@ if (Test-Cmd dsh) {
         Write-Step 'Installing dsh plugin: github:raptoravis/yunxing (profile: web)'
         dsh plugin --profile web add github:raptoravis/yunxing 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
+    }
+    if (-not $DshTuiCovered) {
+        Write-Step 'Installing dsh plugin: github:raptoravis/yunxing (profile: dsh-tui)'
+        dsh plugin --profile dsh-tui add github:raptoravis/yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
     }
 
     foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-browser-use')) {
