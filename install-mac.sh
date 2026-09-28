@@ -358,17 +358,35 @@ if command -v npm >/dev/null 2>&1; then
       process.exit(cmp(a.pre, b.pre) < 0 ? 0 : 1);
     ' "$1" "$2" 2>/dev/null
   }
+  # npm 全局 bin 目录 (/opt/homebrew/bin) 与 brew cask 共享同一路径。若某 AI CLI 的二进制
+  # 已被 brew cask 占用（符号链接指向 Caskroom），npm install -g 会 EEXIST。安装前先卸载
+  # 冲突的 cask，保持所有 AI CLI 统一由 npm 管理。
+  clear_brew_cask_conflict() {
+    command -v brew >/dev/null 2>&1 || return 0
+    local cask bin link
+    case "$1" in
+      @anthropic-ai/claude-code) cask=claude-code; bin=claude ;;
+      *) return 0 ;;
+    esac
+    link=$(command -v "$bin" 2>/dev/null)
+    [[ -n "$link" && -L "$link" ]] || return 0
+    [[ "$(readlink "$link")" == *"Caskroom/${cask}"* ]] || return 0
+    log "  ${cask} 由 brew cask 管理，卸载后改由 npm 接管"
+    brew uninstall --cask "$cask" || warn "  brew uninstall --cask ${cask} failed"
+  }
   npm_install_if_stale() {
     local pkg="$1" label="$2" inst latest
     shift 2
     inst=$(npm list -g --depth=0 "$pkg" 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)
     if [[ -z "$inst" ]]; then
+      clear_brew_cask_conflict "$pkg"
       log "Installing $label ($pkg)"
       npm install -g "$pkg" "$@" || warn "  $label install failed"
       return
     fi
     latest=$(npm view "$pkg" version 2>/dev/null)
     if [[ -n "$latest" ]] && semver_lt "$inst" "$latest"; then
+      clear_brew_cask_conflict "$pkg"
       log "Upgrading $label ($pkg): $inst -> $latest"
       npm install -g "$pkg" "$@" || warn "  $label upgrade failed"
     elif [[ -n "$latest" ]] && semver_lt "$latest" "$inst"; then
