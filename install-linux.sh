@@ -998,6 +998,20 @@ if cmd_exists_local opencode; then
     opencode service set port 49375 >/dev/null 2>&1 \
       || warn "  opencode service set port 49375 failed"
   fi
+  # 清理 opencode v1 遗留的 `plugin` 单数键（pin 到 commit hash 的残留）。v2 用
+  # `plugins` 复数键，`opencode plugin remove` 只认复数键，旧 pin 条目会留成坏记录
+  # （该 commit 的 yunxing 缺 default export），让 `plugin check`/`update` 遍历时失败。
+  OC_CFG="$HOME/.config/opencode/opencode.json"
+  if [ -f "$OC_CFG" ] && command -v node >/dev/null 2>&1; then
+    OC_CFG="$OC_CFG" node -e '
+      const fs=require("fs");
+      let c; try{ c=JSON.parse(fs.readFileSync(process.env.OC_CFG,"utf8")); }catch(e){ process.exit(0); }
+      if(c && typeof c==="object" && Object.prototype.hasOwnProperty.call(c,"plugin")){
+        delete c.plugin; fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n");
+        console.error("==> removed legacy opencode `plugin` key (v1 pinned residue)");
+      }
+    ' || warn "  failed to clean legacy opencode \`plugin\` key"
+  fi
   log "Installing yunxing OpenCode plugin"
   # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
   # through `plugin update`. Pinning a full commit hash would give each re-run a
