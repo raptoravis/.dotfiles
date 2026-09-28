@@ -989,6 +989,15 @@ fi
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if cmd_exists_local opencode; then
+  # WSL2 mirrored networking: a Windows-side opencode background server holds
+  # 127.0.0.1:49374 (the v2 binary's hardcoded default service port), so WSL's
+  # opencode must pick a different port or every `opencode` — including the
+  # `plugin add/update` below, which spawns the service — times out binding it.
+  # Pure Linux and macOS keep the default. Idempotent; `set` only rewrites port.
+  if (( IS_WSL )); then
+    opencode service set port 49375 >/dev/null 2>&1 \
+      || warn "  opencode service set port 49375 failed"
+  fi
   log "Installing yunxing OpenCode plugin"
   # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
   # through `plugin update`. Pinning a full commit hash would give each re-run a
