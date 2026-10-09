@@ -1208,38 +1208,47 @@ if (Test-Cmd opencode) {
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
-# yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
+# yunxing: local skill bundle via GitHub shorthand; modlens: vision/tools bundle
+# (image → structured JSON evidence). `add` is non-idempotent, warn on repeat.
 #
-# Profiles install per directory, so a profile booted without the yunxing bundle
-# composes no yunxing skill provider and its sessions list no yunxing skills. The
-# skill bundle therefore goes into EVERY profile already on disk — the earlier
-# `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
-# after creating a new profile. The web/UI plugins stay on `web`.
+# Profiles install per directory, so a profile booted without these skill bundles
+# composes no yunxing/modlens skill provider and its sessions list no yunxing or
+# modlens skills. The bundles therefore go into EVERY profile already on disk — the
+# earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
+# Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
-# first `dst` run, so it isn't on disk when this loop scans. Pre-install yunxing
-# into it explicitly, or the TUI boots skill-less until the next re-run.
+# first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
+# bundles into it explicitly, or the TUI boots skill-less until the next re-run.
 if (Test-Cmd dsh) {
+    # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
+    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
         if (-not (Test-Path (Join-Path $DshProfileDir.FullName 'package.json'))) { continue }
         $DshProfilesSeen++
         if ($DshProfileDir.Name -eq 'dsh-tui') { $DshTuiCovered = $true }
-        Write-Step "Installing dsh plugin: github:raptoravis/yunxing (profile: $($DshProfileDir.Name))"
-        dsh plugin --profile $DshProfileDir.Name add github:raptoravis/yunxing 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
+        foreach ($DshBundle in $DshBundles) {
+            Write-Step "Installing dsh plugin: $DshBundle (profile: $($DshProfileDir.Name))"
+            dsh plugin --profile $DshProfileDir.Name add $DshBundle 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
+        }
     }
     if ($DshProfilesSeen -eq 0) {
         # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
-        Write-Step 'Installing dsh plugin: github:raptoravis/yunxing (profile: web)'
-        dsh plugin --profile web add github:raptoravis/yunxing 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
+        foreach ($DshBundle in $DshBundles) {
+            Write-Step "Installing dsh plugin: $DshBundle (profile: web)"
+            dsh plugin --profile web add $DshBundle 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
+        }
     }
     if (-not $DshTuiCovered) {
-        Write-Step 'Installing dsh plugin: github:raptoravis/yunxing (profile: dsh-tui)'
-        dsh plugin --profile dsh-tui add github:raptoravis/yunxing 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
+        foreach ($DshBundle in $DshBundles) {
+            Write-Step "Installing dsh plugin: $DshBundle (profile: dsh-tui)"
+            dsh plugin --profile dsh-tui add $DshBundle 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
+        }
     }
 
     foreach ($plugin in @('dshmarket', 'dsh-context')) {

@@ -740,18 +740,21 @@ fi
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
-# yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
+# yunxing: local skill bundle via GitHub shorthand; modlens: vision/tools bundle
+# (image → structured JSON evidence). `add` is non-idempotent, warn on repeat.
 #
-# Profiles install per directory, so a profile booted without the yunxing bundle
-# composes no yunxing skill provider and its sessions list no yunxing skills. The
-# skill bundle therefore goes into EVERY profile already on disk — the earlier
-# `web`-only loop left the TUI profile, the everyday entry point, skill-less. Re-run
-# after creating a new profile. The web/UI plugins stay on `web`.
+# Profiles install per directory, so a profile booted without these skill bundles
+# composes no yunxing/modlens skill provider and its sessions list no yunxing or
+# modlens skills. The bundles therefore go into EVERY profile already on disk — the
+# earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
+# Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
-# first `dst` run, so it isn't on disk when this loop scans. Pre-install yunxing
-# into it explicitly, or the TUI boots skill-less until the next re-run.
+# first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
+# bundles into it explicitly, or the TUI boots skill-less until the next re-run.
 if command -v dsh >/dev/null 2>&1; then
+  # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
@@ -759,20 +762,26 @@ if command -v dsh >/dev/null 2>&1; then
     dsh_profile="$(basename "$dsh_profile_dir")"
     dsh_profiles_seen=$((dsh_profiles_seen + 1))
     [ "$dsh_profile" = "dsh-tui" ] && dsh_tui_covered=1
-    log "Installing dsh plugin: github:raptoravis/yunxing (profile: $dsh_profile)"
-    dsh plugin --profile "$dsh_profile" add github:raptoravis/yunxing >/dev/null 2>&1 \
-      || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
+    for dsh_bundle in $dsh_bundles; do
+      log "Installing dsh plugin: $dsh_bundle (profile: $dsh_profile)"
+      dsh plugin --profile "$dsh_profile" add "$dsh_bundle" >/dev/null 2>&1 \
+        || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
+    done
   done
   if [ "$dsh_profiles_seen" -eq 0 ]; then
     # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
-    log "Installing dsh plugin: github:raptoravis/yunxing (profile: web)"
-    dsh plugin --profile web add github:raptoravis/yunxing >/dev/null 2>&1 \
-      || warn "  dsh plugin add failed on web (may already be installed)"
+    for dsh_bundle in $dsh_bundles; do
+      log "Installing dsh plugin: $dsh_bundle (profile: web)"
+      dsh plugin --profile web add "$dsh_bundle" >/dev/null 2>&1 \
+        || warn "  dsh plugin add failed on web (may already be installed)"
+    done
   fi
   if [ "$dsh_tui_covered" -eq 0 ]; then
-    log "Installing dsh plugin: github:raptoravis/yunxing (profile: dsh-tui)"
-    dsh plugin --profile dsh-tui add github:raptoravis/yunxing >/dev/null 2>&1 \
-      || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
+    for dsh_bundle in $dsh_bundles; do
+      log "Installing dsh plugin: $dsh_bundle (profile: dsh-tui)"
+      dsh plugin --profile dsh-tui add "$dsh_bundle" >/dev/null 2>&1 \
+        || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
+    done
   fi
 
   for plugin in dshmarket dsh-context; do
