@@ -1220,6 +1220,24 @@ if (Test-Cmd opencode) {
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
+function Update-DshYunxing ([string]$Profile) {
+    # Re-adding an unchanged Git spec can retain its locked commit.
+    Write-Step "Updating yunxing dsh plugin (profile: $Profile)"
+    dsh plugin --profile $Profile update yunxing --latest
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn2 "  yunxing update failed on $Profile; installed skills may be stale"
+        return
+    }
+    $PackageFile = Join-Path $DshHome "profiles\$Profile\node_modules\yunxing\package.json"
+    try {
+        $Version = (Get-Content -LiteralPath $PackageFile -Raw -ErrorAction Stop | ConvertFrom-Json).version
+        if (-not $Version) { throw 'missing package version' }
+        Write-Host "  yunxing dsh plugin version: $Version (profile: $Profile)"
+    } catch {
+        Write-Warn2 "  could not verify yunxing installation on $Profile"
+    }
+}
+
 if (Test-Cmd dsh) {
     # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
     $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens')
@@ -1234,6 +1252,7 @@ if (Test-Cmd dsh) {
             dsh plugin --profile $DshProfileDir.Name add $DshBundle 2>$null
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
         }
+        Update-DshYunxing $DshProfileDir.Name
     }
     if ($DshProfilesSeen -eq 0) {
         # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
@@ -1242,6 +1261,7 @@ if (Test-Cmd dsh) {
             dsh plugin --profile web add $DshBundle 2>$null
             if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
         }
+        Update-DshYunxing 'web'
     }
     if (-not $DshTuiCovered) {
         foreach ($DshBundle in $DshBundles) {
@@ -1249,6 +1269,7 @@ if (Test-Cmd dsh) {
             dsh plugin --profile dsh-tui add $DshBundle 2>$null
             if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
         }
+        Update-DshYunxing 'dsh-tui'
     }
 
     foreach ($plugin in @('dshmarket', 'dsh-context')) {

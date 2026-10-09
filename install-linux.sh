@@ -1061,6 +1061,22 @@ fi
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
+update_dsh_yunxing() {
+  local profile="$1" version package_file
+  # Re-adding an unchanged Git spec can retain its locked commit.
+  log "Updating yunxing dsh plugin (profile: $profile)"
+  if ! dsh plugin --profile "$profile" update yunxing --latest; then
+    warn "  yunxing update failed on $profile; installed skills may be stale"
+    return
+  fi
+  package_file="${DSH_HOME:-$HOME/.dsh}/profiles/$profile/node_modules/yunxing/package.json"
+  if version="$(node -e 'const fs = require("fs"); const version = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).version; if (!version) process.exit(1); console.log(version);' "$package_file" 2>/dev/null)"; then
+    log "  yunxing dsh plugin version: $version (profile: $profile)"
+  else
+    warn "  could not verify yunxing installation on $profile"
+  fi
+}
+
 if cmd_exists_local dsh; then
   # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
   dsh_bundles="github:raptoravis/yunxing @liustack/modlens"
@@ -1076,6 +1092,7 @@ if cmd_exists_local dsh; then
       dsh plugin --profile "$dsh_profile" add "$dsh_bundle" >/dev/null 2>&1 \
         || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
     done
+    update_dsh_yunxing "$dsh_profile"
   done
   if [ "$dsh_profiles_seen" -eq 0 ]; then
     # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
@@ -1084,6 +1101,7 @@ if cmd_exists_local dsh; then
       dsh plugin --profile web add "$dsh_bundle" >/dev/null 2>&1 \
         || warn "  dsh plugin add failed on web (may already be installed)"
     done
+    update_dsh_yunxing web
   fi
   if [ "$dsh_tui_covered" -eq 0 ]; then
     for dsh_bundle in $dsh_bundles; do
@@ -1091,6 +1109,7 @@ if cmd_exists_local dsh; then
       dsh plugin --profile dsh-tui add "$dsh_bundle" >/dev/null 2>&1 \
         || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
     done
+    update_dsh_yunxing dsh-tui
   fi
 
   for plugin in dshmarket dsh-context; do
