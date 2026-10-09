@@ -64,6 +64,22 @@ function Test-SemverLt($a, $b) {
     node -e $js $a $b 2>$null | Out-Null
     return ($LASTEXITCODE -eq 0)
 }
+function Test-SemverSafeUpgrade($a, $b) {
+    # A→B 是否安全自动升级：B 非预发布，且仅同 minor 的 patch 级（0.x 的 minor 视为破坏性）。
+    # 预发布 latest 与跨 minor/major 的跳跃都判为不安全，避免 dsh/dsh-tui 耦合包被 latest
+    # 各自拉到不兼容的版本线。
+    $js = 'const n = (v) => {
+      const m = String(v).replace(/^v/, "").split("-");
+      return { core: m[0].split(".").map((x) => +x || 0), pre: m[1] };
+    };
+    const a = n(process.argv[1]), b = n(process.argv[2]);
+    if (b.pre) process.exit(1);
+    if (a.core[0] !== b.core[0]) process.exit(1);
+    if (a.core[0] === 0 && a.core[1] !== b.core[1]) process.exit(1);
+    process.exit(0);'
+    node -e $js $a $b 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
 function Install-NpmCliIfStale ($pkg, $label) {
     $inst = npm list -g --depth=0 $pkg 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1
     if (-not $inst) {
@@ -75,9 +91,13 @@ function Install-NpmCliIfStale ($pkg, $label) {
     $latest = ((npm view $pkg version 2>$null) | Select-Object -Last 1)
     if ($latest) { $latest = $latest.Trim() }
     if ($latest -and (Test-SemverLt $inst $latest)) {
-        Write-Step "Upgrading $label ($pkg): $inst -> $latest"
-        npm install -g $pkg
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label upgrade failed" }
+        if (Test-SemverSafeUpgrade $inst $latest) {
+            Write-Step "Upgrading $label ($pkg): $inst -> $latest"
+            npm install -g $pkg
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label upgrade failed" }
+        } else {
+            Write-Host "  $label ($pkg) @ $inst → $latest 跨 minor/major 或为预发布，跳过自动升级"
+        }
     } elseif ($latest -and (Test-SemverLt $latest $inst)) {
         Write-Host "  $label ($pkg) @ $inst 比 latest ($latest) 新，跳过"
     } else {
@@ -1187,7 +1207,7 @@ if (Test-Cmd opencode) {
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
-# dsh-browser-use: Browser Use Cloud bridge;
+# dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
 #
 # Profiles install per directory, so a profile booted without the yunxing bundle
@@ -1222,10 +1242,31 @@ if (Test-Cmd dsh) {
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
     }
 
-    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-browser-use')) {
+    foreach ($plugin in @('dshmarket', 'dsh-context')) {
         Write-Step "Installing dsh plugin: $plugin"
         dsh plugin --profile web add $plugin 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $plugin failed (may already be installed)" }
+    }
+
+    # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
+    # dsh 0.2.0-rc — its peer @deepseek-ai/dsh-tools ^0.1.0-rc.6 pins it to 0.1.x.
+    # Drop it so the web profile isn't denied at startup; re-add once upstream
+    # ships a 0.2.0-rc-compatible build.
+    if (dsh plugin --profile web list 2>$null | Select-String -Quiet 'dsh-browser-use') {
+        Write-Step 'Removing incompatible dsh plugin: dsh-browser-use'
+        dsh plugin --profile web remove dsh-browser-use 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin remove dsh-browser-use failed' }
+    }
+
+    # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
+    # profile's @deepseek-harness-tui/dsh-tui bundle, so re-add the bundle at the
+    # installed launcher version whenever the profile already exists (it is lazily
+    # bootstrapped on first `dst`, so skip when absent).
+    $DshTuiLauncher = (npm list -g --depth=0 '@deepseek-harness-tui/dsh-tui' 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1)
+    if ($DshTuiLauncher -and (Test-Path (Join-Path $DshHome 'profiles\dsh-tui\package.json'))) {
+        Write-Step "Syncing dsh-tui bundle to launcher $DshTuiLauncher"
+        dsh plugin --profile dsh-tui add "@deepseek-harness-tui/dsh-tui@$DshTuiLauncher" 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$DshTuiLauncher failed (may already be synced)" }
     }
 } else {
     Write-Warn2 'dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)'

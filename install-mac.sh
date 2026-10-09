@@ -358,6 +358,24 @@ if command -v npm >/dev/null 2>&1; then
       process.exit(cmp(a.pre, b.pre) < 0 ? 0 : 1);
     ' "$1" "$2" 2>/dev/null
   }
+  # semver_safe_upgrade A B — exit 0 if A→B is a safe auto-upgrade: B is not a
+  # pre-release, and the bump stays within the same minor line (for 0.x the minor
+  # is breaking, so 0.x only auto-upgrades patch). Pre-release latest and any
+  # minor/major jump are treated as unsafe — keeps coupled dsh/dsh-tui from being
+  # pulled by `latest` onto incompatible version lines.
+  semver_safe_upgrade() {
+    node -e '
+      const n = (v) => {
+        const m = String(v).replace(/^v/, "").split("-");
+        return { core: m[0].split(".").map((x) => +x || 0), pre: m[1] };
+      };
+      const a = n(process.argv[1]), b = n(process.argv[2]);
+      if (b.pre) process.exit(1);
+      if (a.core[0] !== b.core[0]) process.exit(1);
+      if (a.core[0] === 0 && a.core[1] !== b.core[1]) process.exit(1);
+      process.exit(0);
+    ' "$1" "$2" 2>/dev/null
+  }
   # npm 全局 bin 目录 (/opt/homebrew/bin) 与 brew cask 共享同一路径。若某 AI CLI 的二进制
   # 已被 brew cask 占用（符号链接指向 Caskroom），npm install -g 会 EEXIST。安装前先卸载
   # 冲突的 cask，保持所有 AI CLI 统一由 npm 管理。
@@ -386,9 +404,13 @@ if command -v npm >/dev/null 2>&1; then
     fi
     latest=$(npm view "$pkg" version 2>/dev/null)
     if [[ -n "$latest" ]] && semver_lt "$inst" "$latest"; then
-      clear_brew_cask_conflict "$pkg"
-      log "Upgrading $label ($pkg): $inst -> $latest"
-      npm install -g "$pkg" "$@" || warn "  $label upgrade failed"
+      if semver_safe_upgrade "$inst" "$latest"; then
+        clear_brew_cask_conflict "$pkg"
+        log "Upgrading $label ($pkg): $inst -> $latest"
+        npm install -g "$pkg" "$@" || warn "  $label upgrade failed"
+      else
+        log "  $label ($pkg) @ $inst → $latest 跨 minor/major 或为预发布，跳过自动升级"
+      fi
     elif [[ -n "$latest" ]] && semver_lt "$latest" "$inst"; then
       log "  $label ($pkg) @ $inst 比 latest ($latest) 新，跳过"
     else
@@ -717,7 +739,7 @@ fi
 
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
-# dsh-browser-use: Browser Use Cloud bridge;
+# dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
 # yunxing: local bundle via GitHub shorthand. `add` is non-idempotent, warn on repeat.
 #
 # Profiles install per directory, so a profile booted without the yunxing bundle
@@ -753,11 +775,32 @@ if command -v dsh >/dev/null 2>&1; then
       || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
   fi
 
-  for plugin in dshmarket dsh-context dsh-browser-use; do
+  for plugin in dshmarket dsh-context; do
     log "Installing dsh plugin: $plugin"
     dsh plugin --profile web add "$plugin" >/dev/null 2>&1 \
       || warn "  dsh plugin add $plugin failed (may already be installed)"
   done
+
+  # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
+  # dsh 0.2.0-rc — its peer @deepseek-ai/dsh-tools ^0.1.0-rc.6 pins it to 0.1.x.
+  # Drop it so the web profile isn't denied at startup; re-add once upstream
+  # ships a 0.2.0-rc-compatible build.
+  if dsh plugin --profile web list 2>/dev/null | grep -q 'dsh-browser-use'; then
+    log "Removing incompatible dsh plugin: dsh-browser-use"
+    dsh plugin --profile web remove dsh-browser-use >/dev/null 2>&1 \
+      || warn "  dsh plugin remove dsh-browser-use failed"
+  fi
+
+  # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
+  # profile's @deepseek-harness-tui/dsh-tui bundle, so re-add the bundle at the
+  # installed launcher version whenever the profile already exists (it is lazily
+  # bootstrapped on first `dst`, so skip when absent).
+  dsh_tui_launcher="$(npm list -g --depth=0 @deepseek-harness-tui/dsh-tui 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)"
+  if [ -n "$dsh_tui_launcher" ] && [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/dsh-tui/package.json" ]; then
+    log "Syncing dsh-tui bundle to launcher $dsh_tui_launcher"
+    dsh plugin --profile dsh-tui add "@deepseek-harness-tui/dsh-tui@$dsh_tui_launcher" >/dev/null 2>&1 \
+      || warn "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$dsh_tui_launcher failed (may already be synced)"
+  fi
 else
   warn "dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)"
 fi
