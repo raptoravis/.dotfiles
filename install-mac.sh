@@ -884,6 +884,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7e2) chinese-novelist skill (raptoravis/chinese-novelist-skill) — a plain
+#      directory skill (SKILL.md + references/ + scripts/) installed into each
+#      coding agent's global skills dir as a symlink to a shared checkout.
+#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base).
+# ---------------------------------------------------------------------------
+CHINESE_NOVELIST_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/chinese-novelist-skill"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CHINESE_NOVELIST_SRC/.git" ]; then
+    log "Updating chinese-novelist-skill checkout"
+    if ! git -C "$CHINESE_NOVELIST_SRC" pull --ff-only --quiet 2>/dev/null; then
+      warn "  chinese-novelist-skill pull failed — re-cloning"
+      rm -rf "$CHINESE_NOVELIST_SRC"
+    fi
+  fi
+  if [ ! -d "$CHINESE_NOVELIST_SRC/.git" ]; then
+    log "Cloning chinese-novelist-skill into $CHINESE_NOVELIST_SRC"
+    mkdir -p "$(dirname "$CHINESE_NOVELIST_SRC")"
+    git clone --depth=1 --quiet https://github.com/raptoravis/chinese-novelist-skill.git "$CHINESE_NOVELIST_SRC" \
+      || warn "  chinese-novelist-skill clone failed"
+  fi
+  if [ -f "$CHINESE_NOVELIST_SRC/SKILL.md" ]; then
+    log "Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor)"
+    for dest in \
+      "$HOME/.claude/skills/chinese-novelist" \
+      "${CODEX_HOME:-$HOME/.codex}/skills/chinese-novelist" \
+      "$HOME/.grok/skills/chinese-novelist" \
+      "${DSH_HOME:-$HOME/.dsh}/skills/chinese-novelist" \
+      "$HOME/.config/opencode/skills/chinese-novelist" \
+      "$HOME/.cursor/skills/chinese-novelist"; do
+      mkdir -p "$(dirname "$dest")"
+      rm -rf "$dest"
+      ln -sfn "$CHINESE_NOVELIST_SRC" "$dest"
+    done
+  else
+    warn "  chinese-novelist-skill/SKILL.md missing — skipping agent links"
+  fi
+else
+  warn "git not on PATH -- skipping chinese-novelist skill (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
 # 7f) Codex subagents (awesome-codex-subagents) — clone/update into $HOME and
 #     copy selected agents into ~/.codex/agents/ (global, available in every
 #     project). Ships all of 01-core-development plus a curated set across

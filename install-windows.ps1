@@ -1364,6 +1364,46 @@ if (Test-Cmd herdr) {
 }
 
 # ---------------------------------------------------------------------------
+# 7e2) chinese-novelist skill (raptoravis/chinese-novelist-skill) — a plain
+#      directory skill (SKILL.md + references/ + scripts/) installed into each
+#      coding agent's global skills dir as a junction to a shared checkout.
+#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base).
+# ---------------------------------------------------------------------------
+$NovelistSrc = Join-Path $env:USERPROFILE '.local\share\chinese-novelist-skill'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $NovelistSrc '.git')) {
+        Write-Step 'Updating chinese-novelist-skill checkout'
+        git -C $NovelistSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  chinese-novelist-skill pull failed' }
+    } else {
+        Write-Step 'Cloning chinese-novelist-skill checkout'
+        New-Item -ItemType Directory -Force -Path (Split-Path $NovelistSrc) | Out-Null
+        git clone --depth=1 --quiet https://github.com/raptoravis/chinese-novelist-skill.git $NovelistSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  chinese-novelist-skill clone failed' }
+    }
+    if (Test-Path (Join-Path $NovelistSrc 'SKILL.md')) {
+        Write-Step 'Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor)'
+        $novelistSkillDirs = @(
+            (Join-Path $env:USERPROFILE '.claude\skills\chinese-novelist'),
+            (Join-Path $CodexHome 'skills\chinese-novelist'),
+            (Join-Path $env:USERPROFILE '.grok\skills\chinese-novelist'),
+            (Join-Path $DshHome 'skills\chinese-novelist'),
+            (Join-Path $env:USERPROFILE '.config\opencode\skills\chinese-novelist'),
+            (Join-Path $env:USERPROFILE '.cursor\skills\chinese-novelist')
+        )
+        foreach ($link in $novelistSkillDirs) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $link) | Out-Null
+            if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
+            New-Item -ItemType Junction -Path $link -Target $NovelistSrc | Out-Null
+        }
+    } else {
+        Write-Warn2 '  chinese-novelist-skill/SKILL.md missing -- skipping agent links'
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping chinese-novelist skill (re-run after git is installed)'
+}
+
+# ---------------------------------------------------------------------------
 # 7f) Codex subagents (awesome-codex-subagents) — clone/update into the home
 #     dir and copy selected agents into ~/.codex/agents/ (global, available in
 #     every project). Ships all of 01-core-development plus a curated set across
