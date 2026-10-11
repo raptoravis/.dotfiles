@@ -905,15 +905,17 @@ else
   warn "grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)"
 fi
 
-# Cursor — no scriptable plugin install; symlink promoted skills into ~/.cursor/skills/.
-# YUNXING_SRC is ensured above (shared with the Codex plugin version check).
+# Cursor & omp — no scriptable plugin install; symlink promoted skills into
+# ~/.cursor/skills/ and omp's global skills dir ~/.omp/agent/skills (one level
+# deep). YUNXING_SRC is ensured above (shared with the Codex plugin version check).
 if [ -d "$YUNXING_SRC/skills" ]; then
-  log "Linking yunxing skills into ~/.cursor/skills"
-  mkdir -p "$HOME/.cursor/skills"
+  log "Linking yunxing skills into ~/.cursor/skills and ~/.omp/agent/skills"
+  mkdir -p "$HOME/.cursor/skills" "$HOME/.omp/agent/skills"
   for skill in "$YUNXING_SRC"/skills/engineering/*/SKILL.md "$YUNXING_SRC"/skills/productivity/*/SKILL.md; do
     [ -e "$skill" ] || continue
     name="$(basename "$(dirname "$skill")")"
     ln -sfn "$(dirname "$skill")" "$HOME/.cursor/skills/$name"
+    ln -sfn "$(dirname "$skill")" "$HOME/.omp/agent/skills/$name"
   done
 fi
 
@@ -924,7 +926,7 @@ fi
 #     Written directly per-agent: grok isn't covered by the `npx skills` CLI.
 # ---------------------------------------------------------------------------
 if command -v herdr >/dev/null 2>&1; then
-  log "Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor)"
+  log "Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor/omp)"
   herdr_skill_dir() { # $1 = target skill dir
     mkdir -p "$1"
     herdr --skill > "$1/SKILL.md" 2>/dev/null \
@@ -935,6 +937,7 @@ if command -v herdr >/dev/null 2>&1; then
   herdr_skill_dir "$HOME/.grok/skills/herdr"
   herdr_skill_dir "$HOME/.config/opencode/skills/herdr"
   herdr_skill_dir "$HOME/.cursor/skills/herdr"
+  herdr_skill_dir "$HOME/.omp/agent/skills/herdr"
 else
   warn "herdr CLI not on PATH -- skipping herdr agent skill (re-run after herdr is installed)"
 fi
@@ -961,14 +964,15 @@ if command -v git >/dev/null 2>&1; then
       || warn "  chinese-novelist-skill clone failed"
   fi
   if [ -f "$CHINESE_NOVELIST_SRC/SKILL.md" ]; then
-    log "Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor)"
+    log "Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor/omp)"
     for dest in \
       "$HOME/.claude/skills/chinese-novelist" \
       "${CODEX_HOME:-$HOME/.codex}/skills/chinese-novelist" \
       "$HOME/.grok/skills/chinese-novelist" \
       "${DSH_HOME:-$HOME/.dsh}/skills/chinese-novelist" \
       "$HOME/.config/opencode/skills/chinese-novelist" \
-      "$HOME/.cursor/skills/chinese-novelist"; do
+      "$HOME/.cursor/skills/chinese-novelist" \
+      "$HOME/.omp/agent/skills/chinese-novelist"; do
       mkdir -p "$(dirname "$dest")"
       rm -rf "$dest"
       ln -sfn "$CHINESE_NOVELIST_SRC" "$dest"

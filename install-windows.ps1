@@ -1365,19 +1365,25 @@ if (Test-Cmd grok) {
     Write-Warn2 'grok CLI not on PATH -- skipping Grok plugin install (re-run after grok is installed)'
 }
 
-# Cursor — no scriptable plugin install; link promoted skills into ~/.cursor/skills/ (junction, no admin needed).
-# $YunxingSrc is ensured above (shared with the Codex plugin version check).
+# Cursor & omp — no scriptable plugin install; link promoted skills into
+# ~/.cursor/skills/ and omp's global skills dir ~/.omp/agent/skills (one level
+# deep). $YunxingSrc is ensured above (shared with the Codex plugin version check).
 if (Test-Path (Join-Path $YunxingSrc 'skills')) {
-    Write-Step 'Linking yunxing skills into ~/.cursor/skills'
-    $SkillsDir = Join-Path $env:USERPROFILE '.cursor\skills'
-    New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
-    foreach ($bucket in @('engineering', 'productivity')) {
-        $BucketDir = Join-Path $YunxingSrc "skills\$bucket"
-        if (Test-Path $BucketDir) {
-            foreach ($skillDir in (Get-ChildItem -Directory $BucketDir)) {
-                $link = Join-Path $SkillsDir $skillDir.Name
-                if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
-                New-Item -ItemType Junction -Path $link -Target $skillDir.FullName | Out-Null
+    Write-Step 'Linking yunxing skills into ~/.cursor/skills and ~/.omp/agent/skills'
+    $SkillsDirs = @(
+        (Join-Path $env:USERPROFILE '.cursor\skills'),
+        (Join-Path $env:USERPROFILE '.omp\agent\skills')
+    )
+    foreach ($SkillsDir in $SkillsDirs) {
+        New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+        foreach ($bucket in @('engineering', 'productivity')) {
+            $BucketDir = Join-Path $YunxingSrc "skills\$bucket"
+            if (Test-Path $BucketDir) {
+                foreach ($skillDir in (Get-ChildItem -Directory $BucketDir)) {
+                    $link = Join-Path $SkillsDir $skillDir.Name
+                    if (Test-Path $link) { cmd /c rmdir "$link" 2>$null }
+                    New-Item -ItemType Junction -Path $link -Target $skillDir.FullName | Out-Null
+                }
             }
         }
     }
@@ -1390,13 +1396,14 @@ if (Test-Path (Join-Path $YunxingSrc 'skills')) {
 #     Written directly per-agent: grok isn't covered by the `npx skills` CLI.
 # ---------------------------------------------------------------------------
 if (Test-Cmd herdr) {
-    Write-Step 'Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor)'
+    Write-Step 'Installing herdr skill into coding agents (claude/codex/grok/opencode/cursor/omp)'
     $herdrSkillDirs = @(
         (Join-Path $env:USERPROFILE '.claude\skills\herdr'),
         (Join-Path $CodexHome 'skills\herdr'),
         (Join-Path $env:USERPROFILE '.grok\skills\herdr'),
         (Join-Path $env:USERPROFILE '.config\opencode\skills\herdr'),
-        (Join-Path $env:USERPROFILE '.cursor\skills\herdr')
+        (Join-Path $env:USERPROFILE '.cursor\skills\herdr'),
+        (Join-Path $env:USERPROFILE '.omp\agent\skills\herdr')
     )
     foreach ($dir in $herdrSkillDirs) {
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
@@ -1429,14 +1436,15 @@ if (Test-Cmd git) {
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  chinese-novelist-skill clone failed' }
     }
     if (Test-Path (Join-Path $NovelistSrc 'SKILL.md')) {
-        Write-Step 'Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor)'
+        Write-Step 'Linking chinese-novelist skill into coding agents (claude/codex/grok/dsh/opencode/cursor/omp)'
         $novelistSkillDirs = @(
             (Join-Path $env:USERPROFILE '.claude\skills\chinese-novelist'),
             (Join-Path $CodexHome 'skills\chinese-novelist'),
             (Join-Path $env:USERPROFILE '.grok\skills\chinese-novelist'),
             (Join-Path $DshHome 'skills\chinese-novelist'),
             (Join-Path $env:USERPROFILE '.config\opencode\skills\chinese-novelist'),
-            (Join-Path $env:USERPROFILE '.cursor\skills\chinese-novelist')
+            (Join-Path $env:USERPROFILE '.cursor\skills\chinese-novelist'),
+            (Join-Path $env:USERPROFILE '.omp\agent\skills\chinese-novelist')
         )
         foreach ($link in $novelistSkillDirs) {
             New-Item -ItemType Directory -Force -Path (Split-Path $link) | Out-Null
