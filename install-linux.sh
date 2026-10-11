@@ -706,6 +706,8 @@ if command -v npm >/dev/null 2>&1; then
   # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
   npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
   npm_install_if_stale @openai/codex "Codex CLI"
+  # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
+  npm_install_if_stale oh-my-codex "oh-my-codex (omx CLI)"
   npm_install_if_stale @opencode/cli "OpenCode CLI"
   npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
@@ -1046,11 +1048,49 @@ else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
 
+# oh-my-claudecode + oh-my-codex (Yeachan-Heo)
+#   oh-my-claudecode — Claude Code multi-agent plugin. Marketplace name "omc"
+#   (from .claude-plugin/marketplace.json), plugin selector
+#   "oh-my-claudecode@omc"; same install shape as yunxing.
+#   oh-my-codex — Codex orchestration layer. The npm package (installed above)
+#   ships the `omx` CLI; `omx setup --scope user` wires the plugin + hooks into
+#   the user's codex config (idempotent; re-run keeps it current).
+# Claude Code — oh-my-claudecode plugin.
+if cmd_exists_local claude; then
+  log "Installing oh-my-claudecode Claude Code plugin (marketplace: omc)"
+  claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
+    || warn "  claude marketplace add oh-my-claudecode failed (may already be registered)"
+  # `install` is idempotent and won't pull newer code; refresh + `update` to keep current.
+  claude plugin marketplace update omc >/dev/null 2>&1 \
+    || warn "  claude marketplace update omc failed"
+  if claude plugin list 2>/dev/null | grep -q 'oh-my-claudecode@omc'; then
+    claude plugin update oh-my-claudecode@omc >/dev/null 2>&1 \
+      || warn "  claude plugin update oh-my-claudecode failed"
+  else
+    claude plugin install oh-my-claudecode@omc >/dev/null 2>&1 \
+      || warn "  claude plugin install oh-my-claudecode failed (may already be enabled)"
+  fi
+else
+  warn "claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)"
+fi
+
+# Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
+# user's codex config (idempotent; re-run keeps it current).
+if cmd_exists_local codex && cmd_exists_local omx; then
+  log "Wiring oh-my-codex into Codex (omx setup --scope user)"
+  omx setup --scope user >/dev/null 2>&1 \
+    || warn "  omx setup --scope user failed"
+else
+  warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
+fi
+
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
 # yunxing: local skill bundle via GitHub shorthand; modlens: vision/tools bundle
-# (image → structured JSON evidence). `add` is non-idempotent, warn on repeat.
+# (image → structured JSON evidence); dsh-agent-teams: multi-agent team
+# collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams).
+# `add` is non-idempotent, warn on repeat.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
@@ -1079,7 +1119,7 @@ update_dsh_yunxing() {
 
 if cmd_exists_local dsh; then
   # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
