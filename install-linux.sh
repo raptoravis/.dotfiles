@@ -18,7 +18,7 @@ for arg in "$@"; do
       cat <<EOF
 Usage: $0 [--uninstallagents]
   --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
-                     DeepSeek Harness, Pi) and remove their config dirs.
+                     DeepSeek Harness, omp) and remove their config dirs.
 EOF
       exit 0
       ;;
@@ -31,7 +31,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui" "@earendil-works/pi-coding-agent"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -46,7 +46,7 @@ if (( UNINSTALL_AGENTS )); then
     "$HOME/.config/opencode"
     "$HOME/.grok"
     "${DSH_HOME:-$HOME/.dsh}"
-    "$HOME/.pi"
+    "$HOME/.omp"
     "$HOME/.agents"
     "$HOME/.cache/dotfiles/agent-plugins"
     "$HOME/.cache/opencode"
@@ -62,6 +62,12 @@ if (( UNINSTALL_AGENTS )); then
       log "  skip (not found): $d"
     fi
   done
+
+  # omp binary (curl installer → ~/.local/bin); config dir removed above
+  if [[ -f "$HOME/.local/bin/omp" || -L "$HOME/.local/bin/omp" ]]; then
+    log "  rm -f $HOME/.local/bin/omp"
+    rm -f "$HOME/.local/bin/omp"
+  fi
 
   log "Agent uninstall complete."
   exit 0
@@ -595,6 +601,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8b3) omp — coding agent with the IDE wired in (native Rust core). bin: `omp`,
+#      config under ~/.omp. Supersedes the retired Pi coding agent.
+# ---------------------------------------------------------------------------
+if ! command -v omp >/dev/null 2>&1; then
+  log "Installing omp (coding agent)"
+  curl -fsSL https://omp.sh/install | sh || warn "  omp install failed"
+  # omp installs to ~/.local/bin (overridable via PI_INSTALL_DIR)
+  [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+else
+  log "omp already installed"
+fi
+
+# ---------------------------------------------------------------------------
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if command -v npm >/dev/null 2>&1; then
@@ -702,7 +721,7 @@ if command -v npm >/dev/null 2>&1; then
     log "puppeteer already installed"
   fi
 
-  # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
+  # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness)
   # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
   npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
   npm_install_if_stale @openai/codex "Codex CLI"
@@ -715,9 +734,6 @@ if command -v npm >/dev/null 2>&1; then
   npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
   # dsh-tui — Claude Code 风格交互式 TUI 入口（dsh 前端）。bin: `dsh-tui`。
   npm_install_if_stale @deepseek-harness-tui/dsh-tui "DeepSeek Harness TUI"
-  # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
-  # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-  npm_install_if_stale @earendil-works/pi-coding-agent "Pi coding agent CLI"
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
   # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL2 无 GPU 用不上）、
@@ -734,7 +750,7 @@ if command -v npm >/dev/null 2>&1; then
   # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
   # guidance + tool approval + start local server). Idempotent — re-runs update
   # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-  # unmanaged zvec_grep table. dsh / pi / grok are not supported zg targets and
+  # unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
   # are skipped. opencode is wired manually below (opencode v2 reads nested
   # mcp.servers, but zg 0.2.2 still writes flat v1 mcp.zvec_grep).
   if cmd_exists_local zg; then

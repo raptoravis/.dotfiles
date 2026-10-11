@@ -17,7 +17,7 @@ param(
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
     # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
-    # DeepSeek Harness, Pi) and remove their config directories.
+    # DeepSeek Harness, omp) and remove their config directories.
     [switch]$UninstallAgents
 )
 
@@ -122,8 +122,7 @@ if ($UninstallAgents) {
             '@opencode/cli',
             '@xai-official/grok',
             '@deepseek-ai/dsh',
-            '@deepseek-harness-tui/dsh-tui',
-            '@earendil-works/pi-coding-agent'
+            '@deepseek-harness-tui/dsh-tui'
         )
         foreach ($pkg in $AgentPackages) {
             Write-Step "  npm uninstall -g $pkg"
@@ -144,7 +143,8 @@ if ($UninstallAgents) {
         (Join-Path $env:USERPROFILE '.config\opencode'),
         (Join-Path $env:USERPROFILE '.grok'),
         $DshHome,
-        (Join-Path $env:USERPROFILE '.pi'),
+        (Join-Path $env:USERPROFILE '.omp'),
+        (Join-Path $env:LOCALAPPDATA 'omp'),
         (Join-Path $env:USERPROFILE '.agents'),
         (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'),
         (Join-Path $env:USERPROFILE '.cache\opencode'),
@@ -886,6 +886,18 @@ if (-not (Test-Cmd herdr)) {
 }
 
 # ---------------------------------------------------------------------------
+# 7b3) omp — coding agent with the IDE wired in (Windows-native). bin: `omp`,
+#      config under ~/.omp. Supersedes the retired Pi coding agent.
+# ---------------------------------------------------------------------------
+if (-not (Test-Cmd omp)) {
+    Write-Step 'Installing omp (coding agent)'
+    irm 'https://omp.sh/install.ps1' | iex
+    if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
+} else {
+    Write-Host '  omp already installed'
+}
+
+# ---------------------------------------------------------------------------
 # 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
 # ---------------------------------------------------------------------------
 if (Test-Cmd npm) {
@@ -920,7 +932,7 @@ if (Test-Cmd npm) {
     } else {
         Write-Host '  puppeteer already installed'
     }
-    # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness / Pi)
+    # AI coding CLIs (Claude Code / Codex / OpenCode / Grok / DeepSeek Harness)
     # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
     Install-NpmCliIfStale '@anthropic-ai/claude-code' 'Claude Code CLI'
     Install-NpmCliIfStale '@openai/codex' 'Codex CLI'
@@ -933,9 +945,6 @@ if (Test-Cmd npm) {
     Install-NpmCliIfStale '@deepseek-ai/dsh' 'DeepSeek Harness CLI'
     # dsh-tui — Claude Code-style interactive TUI front door for dsh. bin: `dsh-tui`.
     Install-NpmCliIfStale '@deepseek-harness-tui/dsh-tui' 'DeepSeek Harness TUI'
-    # Pi — earendil-works coding agent CLI (unified LLM API, agent loop, TUI). bin: `pi`.
-    # Skills are loaded from ~/.pi/agent/skills/ and ~/.agents/skills/.
-    Install-NpmCliIfStale '@earendil-works/pi-coding-agent' 'Pi coding agent CLI'
     # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
     # for humans and agents. bin: `zg`. Requires Node.js >= 22.
     Install-NpmCliIfStale '@zvec/zvec-grep' 'zg (zvec-grep)'
@@ -943,7 +952,7 @@ if (Test-Cmd npm) {
     # guidance + tool approval + start local server). Idempotent — re-runs update
     # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
     # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
-    # comment markers). dsh / pi / grok are not supported zg targets and skipped.
+    # comment markers). dsh / omp / grok are not supported zg targets and skipped.
     # opencode is wired manually below (opencode v2 reads nested mcp.servers, but
     # zg 0.2.2 still writes flat v1 mcp.zvec_grep).
     if (Test-Cmd zg) {
