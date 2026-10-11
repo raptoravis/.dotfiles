@@ -63,3 +63,7 @@ windows/bin/LiteMonitor_v1.2.4-win-x64/HardwareHistory.json
 .reasonix/
 reasonix.toml
 .zvec-grep/
+
+# OMC (oh-my-claudecode) runtime artifacts
+.omc/
+.omx/
