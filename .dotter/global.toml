@@ -43,7 +43,11 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/wezterm/wezterm.lua" = { target = "~/.config/wezterm/wezterm.lua", type = "template" }
 
 [windows.files]
-"windows/wsl/.wslconfig" = "~/.wslconfig"
+# ~/.wslconfig is intentionally NOT mapped here: dotter symlinks, and WSL refuses
+# to read a config reached through a reparse point on another volume
+# ("未能打开配置文件 … 因为它包含不受信任的装入点") — the repo commonly lives on
+# D: while the profile lives on C:, so networkingMode=mirrored silently never
+# applied. install-windows.ps1 deploys it as a real copy instead.
 "windows/terminal/settings.json" = "~/scoop/apps/windows-terminal/current/settings/settings.json"
 
 [mac.files]

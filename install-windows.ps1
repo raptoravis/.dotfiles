@@ -1811,6 +1811,48 @@ if (Test-Cmd dotter) {
 }
 
 # ---------------------------------------------------------------------------
+# 10b) ~/.wslconfig — real copy, never a symlink.
+#      WSL refuses to read a config that resolves through a reparse point on
+#      another volume:
+#        wsl: 未能打开配置文件 C:\Users\<you>\.wslconfig，无法遍历该路径，因为它们包含不受信任的装入点
+#      and silently keeps the default `nat` networking, so
+#      `networkingMode=mirrored` never applied (127.0.0.1 then does not reach the
+#      Windows host — Clash proxies, port workarounds etc. all break). dotter no
+#      longer maps this file (see .dotter/global.toml); deploy a real copy here,
+#      AFTER dotter, so a stale dotter cache can't leave it deleted or linked.
+# ---------------------------------------------------------------------------
+$WslConfigSrc = Join-Path $DotfilesDir 'windows\wsl\.wslconfig'
+$WslConfigDst = Join-Path $env:USERPROFILE '.wslconfig'
+function Get-FileSha256 ([string]$Path) {
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        return ([BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path))) -replace '-', '')
+    } catch { return '' }
+}
+if (Test-Path $WslConfigSrc) {
+    $WslConfigExisting = Get-Item $WslConfigDst -Force -ErrorAction SilentlyContinue
+    $WslConfigLinked = [bool]($WslConfigExisting -and $WslConfigExisting.LinkType)
+    $WslConfigStale = -not $WslConfigExisting -or $WslConfigLinked
+    if (-not $WslConfigStale) {
+        $WslConfigStale = (Get-FileSha256 $WslConfigSrc) -ne (Get-FileSha256 $WslConfigDst)
+    }
+    if ($WslConfigStale) {
+        if ($WslConfigLinked) {
+            Write-Step 'Replacing symlinked ~/.wslconfig with a real copy (WSL cannot read it across volumes)'
+        } else {
+            Write-Step 'Deploying ~/.wslconfig (real copy)'
+        }
+        Remove-Item $WslConfigDst -Force -ErrorAction SilentlyContinue
+        Copy-Item $WslConfigSrc $WslConfigDst -Force
+        Write-Warn2 '  .wslconfig updated — run `wsl --shutdown` so WSL applies the new networking settings'
+    } else {
+        Write-Step '~/.wslconfig already up to date (real file)'
+    }
+} else {
+    Write-Warn2 'windows\wsl\.wslconfig not found — skipping ~/.wslconfig deploy'
+}
+
+# ---------------------------------------------------------------------------
 # 11) Windows Terminal settings directory (Scoop portable mode).
 #     Scoop-installed windows-terminal >= 1.17 uses portable mode; settings
 #     live under the app dir rather than the packaged LocalState folder.

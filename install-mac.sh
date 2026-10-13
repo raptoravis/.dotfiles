@@ -1180,11 +1180,21 @@ if command -v git >/dev/null 2>&1; then
   set_git http.postBuffer  524288000
   set_git core.compression 0
   set_git core.quotepath   false
-  # Proxy — only set if 127.0.0.1:7890 is actually reachable
+  # Proxy — set only while 127.0.0.1:7890 answers (Clash on this Mac); clear a
+  # stale dotfiles value otherwise (git honours http.proxy even when nothing
+  # listens → every fetch fails with "Failed to connect ... via 127.0.0.1").
   if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
     exec 3>&- 3<&- 2>/dev/null || true
     set_git http.proxy  http://127.0.0.1:7890
     set_git https.proxy http://127.0.0.1:7890
+  else
+    for _k in http.proxy https.proxy; do
+      case "$(git config --global --get "$_k" 2>/dev/null)" in
+        *127.0.0.1:7890*) git config --global --unset "$_k" 2>/dev/null \
+          && log "cleared git $_k (7890 proxy unreachable)";;
+      esac
+    done
+    unset _k
   fi
   unset -f set_git
 fi

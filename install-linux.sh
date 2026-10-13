@@ -119,45 +119,95 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 0) 网络代理 — 检测 Clash 7890 端口，设置全局代理环境变量，让 curl/git/wget/
-#    npm/go 等自动走代理。TUN 模式对 https(443) 超时，走 7890 由 Clash 规则
-#    分流（国内直连 / 海外走节点）秒通。
+# 0) 网络代理 — 探测 Clash 7890：通就设全局代理（curl/git/wget/npm/go 自动走
+#    代理），不通就清掉继承来的 7890 代理变量直连。代理只在「Clash 在本机监听」
+#    时有意义：macOS / 纯 Linux 与 Clash 同机；WSL 下 127.0.0.1 只有在 mirrored
+#    网络模式（.wslconfig: networkingMode=mirrored）里才是 Windows 宿主回环，
+#    NAT 模式下它是 WSL 自己 —— 此时继承来的 7890 代理会让 curl/go/npm/git 全部
+#    connection refused（直连反而正常）。
 # ---------------------------------------------------------------------------
-if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
-  exec 3>&- 3<&- 2>/dev/null || true
-  export http_proxy=http://127.0.0.1:7890
-  export https_proxy=http://127.0.0.1:7890
-  export HTTP_PROXY=http://127.0.0.1:7890
-  export HTTPS_PROXY=http://127.0.0.1:7890
+PROXY_URL="http://127.0.0.1:7890"
+proxy_port_reachable() { (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; }
+# 只清我们自己设的那份（指向 127.0.0.1:7890），不动调用方自带的代理。
+proxy_env_clear() {
+  local _v
+  for _v in http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY \
+            GLOBAL_AGENT_HTTP_PROXY GLOBAL_AGENT_HTTPS_PROXY; do
+    case "${!_v:-}" in *127.0.0.1:7890*) unset "$_v" ;; esac
+  done
+  case "${NODE_USE_ENV_PROXY:-}" in 1) unset NODE_USE_ENV_PROXY ;; esac
+}
+if proxy_port_reachable; then
+  export http_proxy="$PROXY_URL"
+  export https_proxy="$PROXY_URL"
+  export HTTP_PROXY="$PROXY_URL"
+  export HTTPS_PROXY="$PROXY_URL"
+  export all_proxy="$PROXY_URL"
+  export ALL_PROXY="$PROXY_URL"
   export no_proxy=localhost,127.0.0.1
   export NO_PROXY=localhost,127.0.0.1
   # global-agent（原生模块安装器如 onnxruntime-node）只认 GLOBAL_AGENT_*，不设则绕过代理直连、TUN 下卡死
-  export GLOBAL_AGENT_HTTP_PROXY=http://127.0.0.1:7890
-  export GLOBAL_AGENT_HTTPS_PROXY=http://127.0.0.1:7890
+  export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
+  export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
   export GLOBAL_AGENT_NO_PROXY=localhost,127.0.0.1
   # Node 内置 fetch(undici) 默认不认 http(s)_proxy；NODE_USE_ENV_PROXY=1 让它走代理（zg 下模型依赖这个）
   export NODE_USE_ENV_PROXY=1
   log "检测到 7890 代理 — 设置全局 http(s)_proxy"
+else
+  proxy_env_clear
+  if (( IS_WSL )); then
+    warn "未检测到 7890 代理（WSL 网络模式: $(wslinfo --networking-mode 2>/dev/null || echo unknown)，127.0.0.1 不是 Windows 宿主）— 已清除继承的代理变量，直连出网"
+    warn "  需要走代理时：Windows 侧 Clash 打开 Allow LAN 后改连宿主 IP，或让 .wslconfig 的 networkingMode=mirrored 生效（wsl --shutdown 后重开）"
+  else
+    warn "未检测到 7890 代理（Clash 未运行？）— 已清除继承的代理变量，直连出网"
+  fi
+fi
 
-  # 持久化到 bash 交互 shell（WSL 默认 login shell 是 bash）。zsh 的代理已在
-  # common/zsh/.zshenv 持久化，但 bash 的 ~/.bashrc 没有——补上，让 gh/curl/
-  # git 等 CLI 在 bash 里也自动走 7890。幂等：已含 PROXY_URL 则跳过。
-  if [[ -f "$HOME/.bashrc" ]] && ! grep -q 'PROXY_URL=' "$HOME/.bashrc" 2>/dev/null; then
-    log "持久化代理到 ~/.bashrc"
-    cat >> "$HOME/.bashrc" <<'EOF'
+# 持久化到 bash 交互 shell（WSL 默认 login shell 是 bash）。zsh 的代理已在
+# common/zsh/.zshenv 持久化，bash 的 ~/.bashrc 没有 —— 补上「探测后启用」的
+# 块，让 gh/curl/git 等 CLI 在 bash 里同样自动适配，Clash 没开时不残留失效代理。
+# 幂等：带标记的新块已存在则跳过；旧静态 exports 版（mirrors 注释开头）会先被
+# 剥掉再写入，避免机器上遗留的死代理继续生效。
+bashrc_file="$HOME/.bashrc"
+if [[ -f "$bashrc_file" ]]; then
+  if grep -qF '# >>> dotfiles proxy >>>' "$bashrc_file" 2>/dev/null; then
+    log "~/.bashrc 代理块已是最新 — 跳过"
+  else
+    if grep -qF 'mirrors common/zsh/.zshenv' "$bashrc_file" 2>/dev/null; then
+      log "替换 ~/.bashrc 里的旧代理块（静态 exports）"
+      bashrc_tmp="$(mktemp)"
+      awk '/mirrors common\/zsh\/\.zshenv/ {skip=1}
+           skip && /^export NODE_USE_ENV_PROXY=1$/ {skip=0; next}
+           !skip' "$bashrc_file" > "$bashrc_tmp" \
+        && cat "$bashrc_tmp" > "$bashrc_file"
+      rm -f "$bashrc_tmp"
+    fi
+    log "写入 ~/.bashrc 代理块（探测后启用）"
+    cat >> "$bashrc_file" <<'EOF'
 
-# Proxy (Clash / mihomo default port 7890) — mirrors common/zsh/.zshenv
-export PROXY_URL="http://127.0.0.1:7890"
-export http_proxy="$PROXY_URL"
-export https_proxy="$PROXY_URL"
-export all_proxy="$PROXY_URL"
-export HTTP_PROXY="$PROXY_URL"
-export HTTPS_PROXY="$PROXY_URL"
-export ALL_PROXY="$PROXY_URL"
-export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
-export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
-export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"
-export NODE_USE_ENV_PROXY=1
+# >>> dotfiles proxy >>>
+# Clash / mihomo 7890 — 仅在端口真的应答时启用；否则清掉继承的失效值直连。
+# mirrors common/zsh/.zshenv。WSL 下需 mirrored 网络模式 127.0.0.1 才等于宿主回环。
+if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
+  exec 3>&- 3<&- 2>/dev/null || true
+  export PROXY_URL="http://127.0.0.1:7890"
+  export http_proxy="$PROXY_URL"
+  export https_proxy="$PROXY_URL"
+  export all_proxy="$PROXY_URL"
+  export HTTP_PROXY="$PROXY_URL"
+  export HTTPS_PROXY="$PROXY_URL"
+  export ALL_PROXY="$PROXY_URL"
+  export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
+  export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
+  export GLOBAL_AGENT_NO_PROXY="localhost,127.0.0.1"
+  export NODE_USE_ENV_PROXY=1
+else
+  for _v in http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY GLOBAL_AGENT_HTTP_PROXY GLOBAL_AGENT_HTTPS_PROXY; do
+    case "${!_v:-}" in *127.0.0.1:7890*) unset "$_v" ;; esac
+  done
+  unset _v GLOBAL_AGENT_NO_PROXY NODE_USE_ENV_PROXY
+fi
+# <<< dotfiles proxy <<<
 EOF
   fi
 fi
@@ -209,13 +259,11 @@ EOF
   fi
 fi
 
-# apt 走 7890 代理（Clash 混合端口）：本机网络「直连 IPv4 全断」（连 baidu
-# 都超时），只能走代理出网。国内镜像换阿里云后走代理仍 200，无需 DIRECT
-# 例外（直连不通，加 DIRECT 反而下载超时）。已含目标配置则跳过，避免每次
-# 重跑都触发 sudo。
-if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
-  exec 3>&- 3<&- 2>/dev/null || true
-  APT_PROXY_CONF="/etc/apt/apt.conf.d/01proxy"
+# apt 走 7890 代理（Clash 混合端口）：只在 7890 真的应答时才写，否则把历史
+# 写入的 apt 代理清掉 —— 失效的 apt 代理会让 `apt update` 连阿里云镜像也
+# connection refused（直连能通）。已含目标配置则跳过，避免每次重跑都触发 sudo。
+APT_PROXY_CONF="/etc/apt/apt.conf.d/01proxy"
+if proxy_port_reachable; then
   if [[ -f "$APT_PROXY_CONF" ]] && grep -qF 'http://127.0.0.1:7890' "$APT_PROXY_CONF" 2>/dev/null; then
     log "apt 已走 7890 代理 — 跳过"
   else
@@ -225,6 +273,9 @@ Acquire::http::Proxy "http://127.0.0.1:7890";
 Acquire::https::Proxy "http://127.0.0.1:7890";
 EOF
   fi
+elif [[ -f "$APT_PROXY_CONF" ]] && grep -qF 'http://127.0.0.1:7890' "$APT_PROXY_CONF" 2>/dev/null; then
+  log "清除失效的 apt 代理配置 ($APT_PROXY_CONF)"
+  sudo rm -f "$APT_PROXY_CONF"
 fi
 
 APT_PKGS=(
@@ -1521,11 +1572,20 @@ if command -v git >/dev/null 2>&1; then
   set_git http.postBuffer  524288000
   set_git core.compression 0
   set_git core.quotepath   false
-  # Proxy — only set if 127.0.0.1:7890 is actually reachable
-  if (exec 3<>/dev/tcp/127.0.0.1/7890) 2>/dev/null; then
-    exec 3>&- 3<&- 2>/dev/null || true
-    set_git http.proxy  http://127.0.0.1:7890
-    set_git https.proxy http://127.0.0.1:7890
+  # Proxy — set only while 127.0.0.1:7890 answers; clear a stale dotfiles value
+  # otherwise (git honours http.proxy even when nothing listens → every fetch
+  # fails with "Failed to connect ... via 127.0.0.1").
+  if proxy_port_reachable; then
+    set_git http.proxy  "$PROXY_URL"
+    set_git https.proxy "$PROXY_URL"
+  else
+    for _k in http.proxy https.proxy; do
+      case "$(git config --global --get "$_k" 2>/dev/null)" in
+        *127.0.0.1:7890*) git config --global --unset "$_k" 2>/dev/null \
+          && log "cleared git $_k (7890 proxy unreachable)";;
+      esac
+    done
+    unset _k
   fi
   unset -f set_git
 fi

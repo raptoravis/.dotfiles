@@ -21,6 +21,12 @@ Create/edit `C:\Users\<your-user>\.wslconfig`:
 networkingMode=mirrored
 ```
 
+> It must be a **real file**, not a symlink/junction: WSL refuses to read a
+> config reached through a reparse point on another volume (`wsl: 未能打开配置文件
+> C:\Users\<you>\.wslconfig，无法遍历该路径，因为它包含不受信任的装入点`) and then
+> silently stays on the default `nat` mode. `install-windows.ps1` deploys it as a
+> real copy (dotter intentionally does not map this file).
+
 Restart WSL from PowerShell:
 
 ```powershell
