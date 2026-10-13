@@ -478,36 +478,6 @@ if command -v npm >/dev/null 2>&1; then
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
   npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)"
-  # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-  # guidance + tool approval + start local server). Idempotent — re-runs update
-  # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-  # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
-  # comment markers). dsh / omp / grok are not supported zg targets and skipped.
-  # opencode is wired manually below (opencode v2 reads nested mcp.servers, but
-  # zg 0.2.2 still writes flat v1 mcp.zvec_grep).
-  if command -v zg >/dev/null 2>&1; then
-    zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-    for t in claude codex; do
-      command -v "$t" >/dev/null 2>&1 && zg_targets+=("$t")
-    done
-    zg_args=(--force)
-    for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
-    log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
-      printf '%s\n' "$zg_out"
-    else
-      case "$zg_out" in
-        *EADDRINUSE*)
-          log "  zg daemon already running — daemon start skipped (benign)";;
-        *conflicting*|*unmanaged*)
-          printf '%s\n' "$zg_out" >&2
-          warn "  zg install failed: MCP config conflict needs cleanup (see zg output above)";;
-        *)
-          printf '%s\n' "$zg_out" >&2
-          warn "  zg install failed (see zg output above)";;
-      esac
-    fi
-  fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -793,6 +763,42 @@ if command -v claude >/dev/null 2>&1; then
   fi
 else
   warn "claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)"
+fi
+
+# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
+# guidance + tool approval + start local server). Idempotent — re-runs update
+# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
+# skipped. opencode is wired manually above.
+#
+# MUST run after the codex MCP/plugin registration above and before `omx setup`
+# below: `codex mcp add` re-serializes config.toml and drops trailing comment
+# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
+# trust END marker and make `omx setup` refuse to reconcile its trust state.
+# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
+# absorbing zg's markers.
+if command -v zg >/dev/null 2>&1; then
+  zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
+  for t in claude codex; do
+    command -v "$t" >/dev/null 2>&1 && zg_targets+=("$t")
+  done
+  zg_args=(--force)
+  for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
+  log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
+  if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
+    printf '%s\n' "$zg_out"
+  else
+    case "$zg_out" in
+      *EADDRINUSE*)
+        log "  zg daemon already running — daemon start skipped (benign)";;
+      *conflicting*|*unmanaged*)
+        printf '%s\n' "$zg_out" >&2
+        warn "  zg install failed: MCP config conflict needs cleanup (see zg output above)";;
+      *)
+        printf '%s\n' "$zg_out" >&2
+        warn "  zg install failed (see zg output above)";;
+    esac
+  fi
 fi
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the

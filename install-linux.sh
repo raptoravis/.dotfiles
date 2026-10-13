@@ -847,61 +847,6 @@ if command -v npm >/dev/null 2>&1; then
   if ! zg --version >/dev/null 2>&1; then
     warn "  zg unusable after install (-> $(command -v zg 2>/dev/null || echo 'not found')) — likely partial npm install or missing @zvec/bindings-linux-x64"
   fi
-  # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-  # guidance + tool approval + start local server). Idempotent — re-runs update
-  # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-  # unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
-  # are skipped. opencode is wired manually below (opencode v2 reads nested
-  # mcp.servers, but zg 0.2.2 still writes flat v1 mcp.zvec_grep).
-  if cmd_exists_local zg; then
-    zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-    for t in claude codex; do
-      cmd_exists_local "$t" && zg_targets+=("$t")
-    done
-    zg_args=(--force)
-    for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
-    log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-    if (( IS_WSL )); then
-      # WSL mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
-      # (serving Cursor) and cannot see WSL paths, so stdio would collide on 7999.
-      # Run a separate WSL daemon on 7998 and wire agents over HTTP instead.
-      zg_port=7998
-      if ! zg_on_out=$(zg server on --listen "127.0.0.1:$zg_port" 2>&1); then
-        printf '%s\n' "$zg_on_out" >&2
-        warn "  zg daemon (127.0.0.1:$zg_port) failed to start"
-      fi
-      if zg_out=$(ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" \
-          zg install "${zg_args[@]}" --mcp-transport http --yes 2>&1); then
-        printf '%s\n' "$zg_out"
-      else
-        printf '%s\n' "$zg_out" >&2
-        warn "  zg install failed (see zg output above)"
-      fi
-      # 交互式 CLI 默认连 7999（穿透到 Windows daemon、看不到 WSL 路径 → ROOT_NOT_FOUND），
-      # 把 client.serverUrl 持久化到 ~/.zvec-grep/config.json，指向 WSL daemon(7998)。幂等 merge。
-      ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" node -e '
-        const fs = require("fs");
-        const p = require("path").join(process.env.HOME, ".zvec-grep", "config.json");
-        let cfg = { version: 1 };
-        try { cfg = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
-        cfg.client = { ...(cfg.client || {}), serverUrl: process.env.ZVEC_GREP_SERVER_URL };
-        fs.mkdirSync(require("path").dirname(p), { recursive: true });
-        fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + "\n");
-      '
-    else
-      if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
-        printf '%s\n' "$zg_out"
-      else
-        case "$zg_out" in
-          *EADDRINUSE*)
-            log "  zg daemon already running — daemon start skipped";;
-          *)
-            printf '%s\n' "$zg_out" >&2
-            warn "  zg install failed (see zg output above)";;
-        esac
-      fi
-    fi
-  fi
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -1202,6 +1147,68 @@ if cmd_exists_local claude; then
   fi
 else
   warn "claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)"
+fi
+
+# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
+# guidance + tool approval + start local server). Idempotent — re-runs update
+# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
+# are skipped. opencode is wired manually above.
+#
+# MUST run after the codex MCP/plugin registration above and before `omx setup`
+# below: `codex mcp add` re-serializes config.toml and drops trailing comment
+# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
+# trust END marker and make `omx setup` refuse to reconcile its trust state.
+# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
+# absorbing zg's markers.
+if cmd_exists_local zg; then
+  zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
+  for t in claude codex; do
+    cmd_exists_local "$t" && zg_targets+=("$t")
+  done
+  zg_args=(--force)
+  for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
+  log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
+  if (( IS_WSL )); then
+    # WSL mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
+    # (serving Cursor) and cannot see WSL paths, so stdio would collide on 7999.
+    # Run a separate WSL daemon on 7998 and wire agents over HTTP instead.
+    zg_port=7998
+    if ! zg_on_out=$(zg server on --listen "127.0.0.1:$zg_port" 2>&1); then
+      printf '%s\n' "$zg_on_out" >&2
+      warn "  zg daemon (127.0.0.1:$zg_port) failed to start"
+    fi
+    if zg_out=$(ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" \
+        zg install "${zg_args[@]}" --mcp-transport http --yes 2>&1); then
+      printf '%s\n' "$zg_out"
+    else
+      printf '%s\n' "$zg_out" >&2
+      warn "  zg install failed (see zg output above)"
+    fi
+    # 交互式 CLI 默认连 7999（穿透到 Windows daemon、看不到 WSL 路径 → ROOT_NOT_FOUND），
+    # 把 client.serverUrl 持久化到 ~/.zvec-grep/config.json，指向 WSL daemon(7998)。幂等 merge。
+    ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" node -e '
+      const fs = require("fs");
+      const p = require("path").join(process.env.HOME, ".zvec-grep", "config.json");
+      let cfg = { version: 1 };
+      try { cfg = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+      cfg.client = { ...(cfg.client || {}), serverUrl: process.env.ZVEC_GREP_SERVER_URL };
+      fs.mkdirSync(require("path").dirname(p), { recursive: true });
+      fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + "\n");
+    '
+  else
+    if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
+      printf '%s\n' "$zg_out"
+    else
+      case "$zg_out" in
+        *EADDRINUSE*)
+          log "  zg daemon already running — daemon start skipped";;
+        *)
+          printf '%s\n' "$zg_out" >&2
+          warn "  zg install failed (see zg output above)";;
+      esac
+    fi
+  fi
 fi
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the

@@ -948,24 +948,6 @@ if (Test-Cmd npm) {
     # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
     # for humans and agents. bin: `zg`. Requires Node.js >= 22.
     Install-NpmCliIfStale '@zvec/zvec-grep' 'zg (zvec-grep)'
-    # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-    # guidance + tool approval + start local server). Idempotent — re-runs update
-    # only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-    # unmanaged zvec_grep table (codex rewrites config.toml and drops the TOML
-    # comment markers). dsh / omp / grok are not supported zg targets and skipped.
-    # opencode is wired manually below (opencode v2 reads nested mcp.servers, but
-    # zg 0.2.2 still writes flat v1 mcp.zvec_grep).
-    if (Test-Cmd zg) {
-        $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
-        foreach ($t in @('claude', 'codex')) {
-            if (Test-Cmd $t) { $zgTargets += $t }
-        }
-        $zgArgs = @('--force')
-        foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
-        Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
-        & zg install @zgArgs --yes
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)' }
-    }
 
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
@@ -1244,6 +1226,30 @@ if (Test-Cmd claude) {
     }
 } else {
     Write-Warn2 'claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)'
+}
+
+# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
+# guidance + tool approval + start local server). Idempotent — re-runs update
+# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
+# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
+# skipped. opencode is wired manually above.
+#
+# MUST run after the codex MCP/plugin registration above and before `omx setup`
+# below: `codex mcp add` re-serializes config.toml and drops trailing comment
+# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
+# trust END marker and make `omx setup` refuse to reconcile its trust state.
+# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
+# absorbing zg's markers.
+if (Test-Cmd zg) {
+    $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
+    foreach ($t in @('claude', 'codex')) {
+        if (Test-Cmd $t) { $zgTargets += $t }
+    }
+    $zgArgs = @('--force')
+    foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
+    Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
+    & zg install @zgArgs --yes
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)' }
 }
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
