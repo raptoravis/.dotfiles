@@ -1242,9 +1242,15 @@ if (Test-Cmd claude) {
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
 # user's codex config (idempotent; re-run keeps it current).
+#
+# stdin + stdout are detached from the console because `omx setup` only prompts
+# when BOTH are terminals (persisted-preference review, legacy vs plugin skill
+# delivery). Detached, it reuses the choices recorded in .\.omx\setup-scope.json,
+# so an existing install is kept as-is instead of blocking on a prompt the
+# suppression below would hide.
 if ((Test-Cmd codex) -and (Test-Cmd omx)) {
-    Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user)'
-    omx setup --scope user 2>$null
+    Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)'
+    $null | omx setup --scope user 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Warn2 '  omx setup --scope user failed' }
 } else {
     Write-Warn2 'codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)'

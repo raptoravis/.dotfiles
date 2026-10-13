@@ -783,9 +783,15 @@ fi
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
 # user's codex config (idempotent; re-run keeps it current).
+#
+# stdin + stdout are detached from the TTY because `omx setup` only prompts when
+# BOTH are terminals (persisted-preference review, legacy vs plugin skill
+# delivery). Detached, it reuses the choices recorded in ./.omx/setup-scope.json,
+# so an existing install is kept as-is instead of blocking on a prompt that the
+# redirection below would hide.
 if command -v codex >/dev/null 2>&1 && command -v omx >/dev/null 2>&1; then
-  log "Wiring oh-my-codex into Codex (omx setup --scope user)"
-  omx setup --scope user >/dev/null 2>&1 \
+  log "Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)"
+  omx setup --scope user </dev/null >/dev/null 2>&1 \
     || warn "  omx setup --scope user failed"
 else
   warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
