@@ -813,6 +813,21 @@ if command -v npm >/dev/null 2>&1; then
   # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
   npm_install_if_stale oh-my-codex "oh-my-codex (omx CLI)"
   npm_install_if_stale @opencode/cli "OpenCode CLI"
+  # d3c8e51 之前 Grok CLI 由 x.ai 的 curl 脚本安装，它在 ~/.local/bin 留下一条
+  # grok -> ~/.grok/bin/grok 软链——而 npm 全局 prefix 正是 ~/.local，bin 目录
+  # 就是同一个 ~/.local/bin。npm 只接管自己创建的 bin 链接，遇到这条外部软链会
+  # EEXIST: file already exists 直接失败（`npm ls -g` 又看不到该包，于是每次都
+  # 判定「未安装」→ 每次重跑都重装、每次都失败）。装前清掉任何不归 npm 管的
+  # grok shim；随后的 postinstall 会重建 ~/.grok/bin/grok-<ver> 和正确的 bin 链接。
+  _grok_bin="$(npm prefix -g 2>/dev/null)/bin/grok"
+  if [[ -e "$_grok_bin" || -L "$_grok_bin" ]]; then
+    _grok_target="$(readlink -f "$_grok_bin" 2>/dev/null)"
+    if [[ -z "$_grok_target" || "$_grok_target" != "$(npm root -g 2>/dev/null)"/* ]]; then
+      log "  清理非 npm 安装遗留的 grok shim ($_grok_bin${_grok_target:+ -> $_grok_target})"
+      rm -f "$_grok_bin"
+    fi
+  fi
+  unset _grok_bin _grok_target
   npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
