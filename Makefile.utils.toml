@@ -123,12 +123,12 @@ mac_alias = "brew-doctor"
 windows_alias = "scoop-doctor"
 linux_alias = "linux-pkg-info"
 
-# ---------- Linux/WSL2: apt ----------
+# ---------- Linux/WSL: apt ----------
 
 [tasks.linux-pkg-info]
 condition = { platforms = ["linux"] }
 script = [
-    "echo '--- Linux/WSL2 uses apt ---'",
+    "echo '--- Linux/WSL uses apt ---'",
     "echo 'Use apt directly: sudo apt update && sudo apt upgrade'",
 ]
 
@@ -287,7 +287,7 @@ script = [
     "  command -v scoop >/dev/null 2>&1 && echo '✓ scoop installed' || echo '✗ scoop not found'",
     "fi",
     "if grep -qi 'microsoft\\|wsl' /proc/version 2>/dev/null; then",
-    "  echo '✓ WSL2 detected'",
+    "  echo '✓ WSL detected'",
     "  command -v wslview >/dev/null 2>&1 && echo '✓ wslu installed' || echo '✗ wslu not found (install: sudo apt install wslu)'",
     "  command -v zsh >/dev/null 2>&1 && echo '✓ zsh installed' || echo '✗ zsh not found'",
     "fi",

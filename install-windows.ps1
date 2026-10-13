@@ -6,7 +6,7 @@
 #
 # Idempotent: safe to re-run. Mirrors `cargo make init` for Windows host.
 # This script targets the Windows host (Scoop, native GUI apps). For the
-# WSL2 / unix backend layer, run install-linux.sh inside WSL2.
+# WSL / unix backend layer, run install-linux.sh inside WSL.
 
 [CmdletBinding()]
 param(
@@ -1841,4 +1841,4 @@ Write-Host ''
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host '============================================================' -ForegroundColor Cyan
 Write-Host ''
-Write-Host 'Next: install WSL2 with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray
+Write-Host 'Next: install WSL with `wsl --install`, open Ubuntu, then run install-linux.sh inside WSL.' -ForegroundColor DarkGray

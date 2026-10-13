@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# install-linux.sh — Linux / WSL2 dotfiles & dev environment bootstrap
+# install-linux.sh — Linux / WSL dotfiles & dev environment bootstrap
 #
 # Usage:
 #   ./install-linux.sh                       # full silent install
 #   DOTFILES_DIR=~/code/dotfiles ./install-linux.sh
 #   SET_HOSTNAME=my-wsl ./install-linux.sh   # optional WSL hostname
 #
-# Idempotent: safe to re-run. Mirrors `cargo make init` for Linux/WSL2.
+# Idempotent: safe to re-run. Mirrors `cargo make init` for Linux/WSL.
 
 set -uo pipefail
 
@@ -78,6 +78,18 @@ ZSH_CUSTOM_DIR="${ZSH:-$HOME/.config/zsh/ohmyzsh}"
 IS_WSL=0
 grep -qi 'microsoft\|wsl' /proc/version 2>/dev/null && IS_WSL=1
 
+# WSL engine release (e.g. 3.0.1.0), read from the host binary through interop.
+# The distro kernel stays tagged `-microsoft-standard-WSL2` even on a WSL 3
+# engine, and `wsl --status` only reports the per-distro version (2), so the
+# kernel string cannot tell the engine release. Interop returns the host
+# console's UTF-16 text, hence the NUL strip; empty on pre-store WSL, which has
+# no `wsl.exe --version`.
+WSL_RELEASE=""
+if (( IS_WSL )) && command -v wsl.exe >/dev/null 2>&1; then
+  WSL_RELEASE="$(wsl.exe --version 2>/dev/null | tr -d '\0\r' \
+    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+fi
+
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
@@ -93,10 +105,18 @@ cmd_exists_local() {
 }
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  err "Linux/WSL2 only. Detected: $(uname -s)"
+  err "Linux/WSL only. Detected: $(uname -s)"
   exit 1
 fi
-(( IS_WSL )) && log "WSL2 detected" || log "Pure Linux detected"
+if (( IS_WSL )); then
+  if [[ -n "$WSL_RELEASE" ]]; then
+    log "WSL detected (engine $WSL_RELEASE)"
+  else
+    log "WSL detected (engine version unavailable; kernel $(uname -r))"
+  fi
+else
+  log "Pure Linux detected"
+fi
 
 # ---------------------------------------------------------------------------
 # 0) 网络代理 — 检测 Clash 7890 端口，设置全局代理环境变量，让 curl/git/wget/
@@ -284,14 +304,14 @@ if ! command -v tailscale >/dev/null 2>&1; then
 fi
 
 if command -v tailscale >/dev/null 2>&1; then
-  # Start the daemon (systemd). On WSL2 without systemd this is skipped — the
+  # Start the daemon (systemd). On WSL without systemd this is skipped — the
   # Windows host's Tailscale covers the network instead.
   if command -v systemctl >/dev/null 2>&1; then
     if systemctl is-active --quiet tailscaled 2>/dev/null; then
       log "  tailscaled already running"
     else
       sudo systemctl enable --now tailscaled 2>/dev/null \
-        || warn "  tailscaled start failed (WSL2 without systemd? use the Windows host's Tailscale)"
+        || warn "  tailscaled start failed (WSL without systemd? use the Windows host's Tailscale)"
     fi
   fi
   if tailscale status >/dev/null 2>&1; then
@@ -316,7 +336,7 @@ if (( ! IS_WSL )) && ! command -v wezterm >/dev/null 2>&1; then
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wezterm || warn "  wezterm install failed"
 fi
 
-# VS Code — only on bare Linux (WSL2 uses the Windows host's VS Code via code
+# VS Code — only on bare Linux (WSL uses the Windows host's VS Code via code
 # command, which resolves through the Windows PATH in WSL interop).
 if (( ! IS_WSL )) && ! command -v code >/dev/null 2>&1; then
   log "Installing VS Code via Microsoft apt repo"
@@ -328,7 +348,7 @@ if (( ! IS_WSL )) && ! command -v code >/dev/null 2>&1; then
   sudo env DEBIAN_FRONTEND=noninteractive apt-get update -qq
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq code || warn "  VS Code install failed"
 elif (( IS_WSL )); then
-  log "  WSL2 detected — VS Code available via Windows host (code .)"
+  log "  WSL detected — VS Code available via Windows host (code .)"
 fi
 
 # GitHub CLI (gh) — Ubuntu/Debian's apt `gh` lags behind upstream by months;
@@ -736,7 +756,7 @@ if command -v npm >/dev/null 2>&1; then
   npm_install_if_stale @deepseek-harness-tui/dsh-tui "DeepSeek Harness TUI"
   # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL2 无 GPU 用不上）、
+  # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL 无 GPU 用不上）、
   # node-llama-cpp 默认下预编译 llama.cpp，两者经 Clash 代理都易卡死/超时；skip 跳过。
   # zg 核心搜索走 @zvec/bindings-linux-x64（Rust 绑定），不受影响。
   NODE_LLAMA_CPP_SKIP_DOWNLOAD=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip \
@@ -762,7 +782,7 @@ if command -v npm >/dev/null 2>&1; then
     for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
     log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
     if (( IS_WSL )); then
-      # WSL2 mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
+      # WSL mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
       # (serving Cursor) and cannot see WSL paths, so stdio would collide on 7999.
       # Run a separate WSL daemon on 7998 and wire agents over HTTP instead.
       zg_port=7998
@@ -1029,7 +1049,7 @@ fi
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if cmd_exists_local opencode; then
-  # WSL2 mirrored networking: a Windows-side opencode background server holds
+  # WSL mirrored networking: a Windows-side opencode background server holds
   # 127.0.0.1:49374 (the v2 binary's hardcoded default service port), so WSL's
   # opencode must pick a different port or every `opencode` — including the
   # `plugin add/update` below, which spawns the service — times out binding it.
