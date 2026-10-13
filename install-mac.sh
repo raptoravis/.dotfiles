@@ -747,10 +747,24 @@ if command -v opencode >/dev/null 2>&1; then
   # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
   # through `plugin update`. Pinning a full commit hash would give each re-run a
   # new spec and accumulate duplicate entries.
-  opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" >/dev/null 2>&1 \
-    || warn "  opencode plugin add failed"
-  opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" >/dev/null 2>&1 \
-    || warn "  opencode plugin update failed"
+  # Capture stderr so a transient failure (e.g. git fetch/network) is visible
+  # instead of a bare warning — mirrors the codex section below.
+  oc_err="$(opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1)"
+  if [ $? -ne 0 ]; then
+    if [ -n "$oc_err" ]; then
+      warn "  opencode plugin add failed: $oc_err"
+    else
+      warn "  opencode plugin add failed"
+    fi
+  fi
+  oc_err="$(opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1)"
+  if [ $? -ne 0 ]; then
+    if [ -n "$oc_err" ]; then
+      warn "  opencode plugin update failed: $oc_err"
+    else
+      warn "  opencode plugin update failed"
+    fi
+  fi
 else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi

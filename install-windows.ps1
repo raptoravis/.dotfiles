@@ -1208,10 +1208,16 @@ if (Test-Cmd opencode) {
     # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
     # through `plugin update`. Pinning a full commit hash would give each re-run a
     # new spec and accumulate duplicate entries.
-    opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin add failed' }
-    opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  opencode plugin update failed' }
+    $ocErr = (opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        if ($ocErr) { Write-Warn2 "  opencode plugin add failed: $ocErr" }
+        else { Write-Warn2 '  opencode plugin add failed' }
+    }
+    $ocErr = (opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        if ($ocErr) { Write-Warn2 "  opencode plugin update failed: $ocErr" }
+        else { Write-Warn2 '  opencode plugin update failed' }
+    }
 } else {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
