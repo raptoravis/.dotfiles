@@ -805,8 +805,16 @@ fi
 # redirection below would hide.
 if command -v codex >/dev/null 2>&1 && command -v omx >/dev/null 2>&1; then
   log "Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)"
-  omx setup --scope user </dev/null >/dev/null 2>&1 \
-    || warn "  omx setup --scope user failed"
+  # Capture stderr so a real failure (e.g. a corrupted OMX hook trust state in
+  # config.toml) is visible instead of a bare warning.
+  omx_err="$(omx setup --scope user </dev/null 2>&1)"
+  if [ $? -ne 0 ]; then
+    if [ -n "$omx_err" ]; then
+      warn "  omx setup --scope user failed: $omx_err"
+    else
+      warn "  omx setup --scope user failed"
+    fi
+  fi
 else
   warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
 fi

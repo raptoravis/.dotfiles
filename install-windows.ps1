@@ -1256,8 +1256,11 @@ if (Test-Cmd claude) {
 # suppression below would hide.
 if ((Test-Cmd codex) -and (Test-Cmd omx)) {
     Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)'
-    $null | omx setup --scope user 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  omx setup --scope user failed' }
+    $omxErr = ($null | omx setup --scope user 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        if ($omxErr) { Write-Warn2 "  omx setup --scope user failed: $omxErr" }
+        else { Write-Warn2 '  omx setup --scope user failed' }
+    }
 } else {
     Write-Warn2 'codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)'
 }
