@@ -85,9 +85,23 @@ grep -qi 'microsoft\|wsl' /proc/version 2>/dev/null && IS_WSL=1
 # console's UTF-16 text, hence the NUL strip; empty on pre-store WSL, which has
 # no `wsl.exe --version`.
 WSL_RELEASE=""
-if (( IS_WSL )) && command -v wsl.exe >/dev/null 2>&1; then
-  WSL_RELEASE="$(wsl.exe --version 2>/dev/null | tr -d '\0\r' \
-    | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+WSL_EXE=""
+if (( IS_WSL )); then
+  # Resolve by name first, then fall back to the host mount: with
+  # `[interop] appendWindowsPath=false`, or when the caller pastes a sanitised
+  # PATH, the Windows dirs never reach PATH and interop still works by path.
+  WSL_EXE="$(command -v wsl.exe 2>/dev/null || true)"
+  if [[ -z "$WSL_EXE" ]]; then
+    for _cand in /mnt/[a-z]/Windows/System32/wsl.exe \
+                 /mnt/[a-z]/windows/System32/wsl.exe; do
+      [[ -f "$_cand" ]] && { WSL_EXE="$_cand"; break; }
+    done
+    unset _cand
+  fi
+  if [[ -n "$WSL_EXE" ]]; then
+    WSL_RELEASE="$("$WSL_EXE" --version 2>/dev/null | tr -d '\0\r' \
+      | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+  fi
 fi
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
