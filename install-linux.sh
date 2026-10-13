@@ -1294,6 +1294,86 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8e3) taste-skill (Leonxlnx/taste-skill) — anti-slop frontend design skills
+#      (design taste, image-to-code, image generation, redesign, output
+#      discipline). Multi-skill repo: every skills/<folder>/SKILL.md is linked
+#      one level deep into each coding agent's global skills dir, named after
+#      the frontmatter `name:` — the upstream install name, which differs from
+#      the folder (taste-skill -> design-taste-frontend, soft-skill ->
+#      high-end-visual-design) — falling back to the folder name.
+#      dsh reads ~/.dsh/skills through its filesystem skill provider
+#      (@deepseek-ai/dsh-base); the dst (dsh-tui) profile bundles dsh-base too,
+#      so a single link covers both.
+# ---------------------------------------------------------------------------
+TASTE_SKILL_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/taste-skill"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$TASTE_SKILL_SRC/.git" ]; then
+    log "Updating taste-skill checkout"
+    if ! git -C "$TASTE_SKILL_SRC" pull --ff-only --quiet 2>/dev/null; then
+      warn "  taste-skill pull failed — re-cloning"
+      rm -rf "$TASTE_SKILL_SRC"
+    fi
+  fi
+  if [ ! -d "$TASTE_SKILL_SRC/.git" ]; then
+    log "Cloning taste-skill into $TASTE_SKILL_SRC"
+    mkdir -p "$(dirname "$TASTE_SKILL_SRC")"
+    git clone --depth=1 --quiet https://github.com/Leonxlnx/taste-skill.git "$TASTE_SKILL_SRC" \
+      || warn "  taste-skill clone failed"
+  fi
+  taste_skill_dests=(
+    "$HOME/.claude/skills"
+    "${CODEX_HOME:-$HOME/.codex}/skills"
+    "$HOME/.grok/skills"
+    "${DSH_HOME:-$HOME/.dsh}/skills"
+    "$HOME/.config/opencode/skills"
+    "$HOME/.cursor/skills"
+    "$HOME/.omp/agent/skills"
+  )
+  taste_skill_names=" "
+  taste_skill_count=0
+  for taste_skill_md in "$TASTE_SKILL_SRC"/skills/*/SKILL.md; do
+    [ -e "$taste_skill_md" ] || continue
+    taste_skill_dir="$(dirname "$taste_skill_md")"
+    # Frontmatter `name:` is the upstream install name; fall back to the folder
+    # name when it is missing or unusable as a path component.
+    taste_skill_name="$(awk 'NR>1 && /^---[[:space:]]*$/ {exit} /^name:[[:space:]]*/ {sub(/^name:[[:space:]]*/, ""); print; exit}' "$taste_skill_md" | tr -d '\r"' | sed 's/[[:space:]]*$//')"
+    case "$taste_skill_name" in
+      ''|*[!A-Za-z0-9._-]*) taste_skill_name="$(basename "$taste_skill_dir")" ;;
+    esac
+    taste_skill_names="$taste_skill_names$taste_skill_name "
+    for dest in "${taste_skill_dests[@]}"; do
+      mkdir -p "$dest"
+      rm -rf "$dest/$taste_skill_name"
+      ln -sfn "$taste_skill_dir" "$dest/$taste_skill_name"
+    done
+    taste_skill_count=$((taste_skill_count + 1))
+  done
+  if [ "$taste_skill_count" -eq 0 ]; then
+    warn "  taste-skill/skills/*/SKILL.md missing — skipping agent links"
+  else
+    log "Linked $taste_skill_count taste-skill skills into claude/codex/grok/dsh(dst)/opencode/cursor/omp"
+    # Drop links left by an earlier run for a skill upstream no longer ships: a
+    # removed/renamed skill would stay behind as a dangling symlink and the
+    # agent would then list a skill it cannot read.
+    for dest in "${taste_skill_dests[@]}"; do
+      for dest_entry in "$dest"/*; do
+        [ -L "$dest_entry" ] || continue
+        case "$(readlink "$dest_entry" 2>/dev/null)" in
+          "$TASTE_SKILL_SRC"/*) ;;
+          *) continue ;;
+        esac
+        case "$taste_skill_names" in
+          *" $(basename "$dest_entry") "*) ;;
+          *) rm -f "$dest_entry"; log "  removed stale taste-skill link: ${dest_entry##*/}" ;;
+        esac
+      done
+    done
+  fi
+else
+  warn "git not on PATH -- skipping taste-skill (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
 # 8f) Codex subagents (awesome-codex-subagents) — clone/update into $HOME and
 #     copy selected agents into ~/.codex/agents/ (global, available in every
 #     project). Ships all of 01-core-development plus a curated set across

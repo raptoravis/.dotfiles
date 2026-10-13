@@ -1459,6 +1459,85 @@ if (Test-Cmd git) {
 }
 
 # ---------------------------------------------------------------------------
+# 7e3) taste-skill (Leonxlnx/taste-skill) — anti-slop frontend design skills
+#      (design taste, image-to-code, image generation, redesign, output
+#      discipline). Multi-skill repo: every skills\<folder>\SKILL.md is linked
+#      one level deep into each coding agent's global skills dir, named after
+#      the frontmatter `name:` — the upstream install name, which differs from
+#      the folder (taste-skill -> design-taste-frontend, soft-skill ->
+#      high-end-visual-design) — falling back to the folder name.
+#      dsh reads ~\.dsh\skills through its filesystem skill provider
+#      (@deepseek-ai/dsh-base); the dst (dsh-tui) profile bundles dsh-base too,
+#      so a single link covers both.
+# ---------------------------------------------------------------------------
+$TasteSkillSrc = Join-Path $env:USERPROFILE '.local\share\taste-skill'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $TasteSkillSrc '.git')) {
+        Write-Step 'Updating taste-skill checkout'
+        git -C $TasteSkillSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  taste-skill pull failed' }
+    } else {
+        Write-Step 'Cloning taste-skill checkout'
+        New-Item -ItemType Directory -Force -Path (Split-Path $TasteSkillSrc) | Out-Null
+        git clone --depth=1 --quiet https://github.com/Leonxlnx/taste-skill.git $TasteSkillSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  taste-skill clone failed' }
+    }
+    $tasteSkillAgentDirs = @(
+        (Join-Path $env:USERPROFILE '.claude\skills'),
+        (Join-Path $CodexHome 'skills'),
+        (Join-Path $env:USERPROFILE '.grok\skills'),
+        (Join-Path $DshHome 'skills'),
+        (Join-Path $env:USERPROFILE '.config\opencode\skills'),
+        (Join-Path $env:USERPROFILE '.cursor\skills'),
+        (Join-Path $env:USERPROFILE '.omp\agent\skills')
+    )
+    $tasteSkillSrcDirs = @()
+    $tasteSkillsRoot = Join-Path $TasteSkillSrc 'skills'
+    if (Test-Path $tasteSkillsRoot) {
+        $tasteSkillSrcDirs = @(Get-ChildItem -Path $tasteSkillsRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') })
+    }
+    $tasteSkillNames = @()
+    foreach ($SkillDir in $tasteSkillSrcDirs) {
+        # Frontmatter `name:` is the upstream install name; fall back to the
+        # folder name when it is missing or unusable as a path component.
+        $name = ''
+        foreach ($line in (Get-Content (Join-Path $SkillDir.FullName 'SKILL.md') -TotalCount 20)) {
+            if ($line -match '^name:\s*(.+?)\s*$') { $name = $Matches[1].Trim('"', "'"); break }
+        }
+        if (-not $name -or $name -notmatch '^[A-Za-z0-9._-]+$') { $name = $SkillDir.Name }
+        $tasteSkillNames += $name
+        foreach ($dir in $tasteSkillAgentDirs) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $link = Join-Path $dir $name
+            # `rmdir` drops a junction (dangling ones included) without touching
+            # its target — Remove-Item -Recurse would follow it and delete the
+            # shared checkout.
+            cmd /c rmdir "$link" 2>$null | Out-Null
+            New-Item -ItemType Junction -Path $link -Target $SkillDir.FullName | Out-Null
+        }
+    }
+    if ($tasteSkillNames.Count -eq 0) {
+        Write-Warn2 '  taste-skill\skills\*\SKILL.md missing -- skipping agent links'
+    } else {
+        Write-Step "Linked $($tasteSkillNames.Count) taste-skill skills into coding agents (claude/codex/grok/dsh/dst/opencode/cursor/omp)"
+        # Drop junctions left by an earlier run for a skill upstream no longer
+        # ships: a removed/renamed skill would stay behind as a dangling
+        # junction and the agent would then list a skill it cannot read.
+        foreach ($dir in $tasteSkillAgentDirs) {
+            $stale = @(Get-ChildItem -Path $dir -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.LinkType -eq 'Junction' -and (@($_.Target) -join ';') -like "$TasteSkillSrc\*" -and $tasteSkillNames -notcontains $_.Name })
+            foreach ($entry in $stale) {
+                cmd /c rmdir "$($entry.FullName)" 2>$null | Out-Null
+                Write-Step "  removed stale taste-skill link: $($entry.Name)"
+            }
+        }
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping taste-skill (re-run after git is installed)'
+}
+
+# ---------------------------------------------------------------------------
 # 7f) Codex subagents (awesome-codex-subagents) — clone/update into the home
 #     dir and copy selected agents into ~/.codex/agents/ (global, available in
 #     every project). Ships all of 01-core-development plus a curated set across
