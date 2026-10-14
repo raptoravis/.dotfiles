@@ -709,16 +709,22 @@ if command -v opencode >/dev/null 2>&1; then
     OC_CFG="$OC_CFG" node -e '
       const fs=require("fs");
       let c; try{ c=JSON.parse(fs.readFileSync(process.env.OC_CFG,"utf8")); }catch(e){ process.exit(0); }
-      if(c && typeof c==="object" && Object.prototype.hasOwnProperty.call(c,"plugin")){
-        delete c.plugin; fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n");
-        console.error("==> removed legacy opencode `plugin` key (v1 pinned residue)");
+      if(!c || typeof c!=="object") process.exit(0);
+      let changed=false;
+      if(Object.prototype.hasOwnProperty.call(c,"plugin")){ delete c.plugin; changed=true; }
+      if(Array.isArray(c.plugins)){
+        const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&s.startsWith("yunxing")&&s.includes("#"))))];
+        if(next.length!==c.plugins.length){ c.plugins=next; changed=true; }
       }
-    ' || warn "  failed to clean legacy opencode \`plugin\` key"
+      if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n"); console.error("==> cleaned legacy/pinned opencode plugin entries"); }
+    ' || warn "  failed to clean legacy opencode plugin entries"
   fi
   log "Installing yunxing OpenCode plugin"
-  # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
-  # through `plugin update`. Pinning a full commit hash would give each re-run a
-  # new spec and accumulate duplicate entries.
+  # Unpinned spec: `add` is idempotent only for an exact match — a pinned
+  # `#hash` entry from a prior run is treated as a different plugin and would
+  # accumulate duplicates, so the cleanup above strips those first. Upgrades go
+  # through `plugin update` with no target (updates all outdated plugins), which
+  # never fails with "not configured" on a spec mismatch.
   # Capture stderr so a transient failure (e.g. git fetch/network) is visible
   # instead of a bare warning — mirrors the codex section below.
   oc_err="$(opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1)"
@@ -729,7 +735,7 @@ if command -v opencode >/dev/null 2>&1; then
       warn "  opencode plugin add failed"
     fi
   fi
-  oc_err="$(opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1)"
+  oc_err="$(opencode plugin update 2>&1)"
   if [ $? -ne 0 ]; then
     if [ -n "$oc_err" ]; then
       warn "  opencode plugin update failed: $oc_err"
