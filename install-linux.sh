@@ -689,14 +689,16 @@ fi
 # 8b3) omp — coding agent with the IDE wired in (native Rust core). bin: `omp`,
 #      config under ~/.omp. Supersedes the retired Pi coding agent.
 # ---------------------------------------------------------------------------
-if ! command -v omp >/dev/null 2>&1; then
-  log "Installing omp (coding agent)"
-  curl -fsSL https://omp.sh/install | sh || warn "  omp install failed"
-  # omp installs to ~/.local/bin (overridable via PI_INSTALL_DIR)
-  [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
+# 安装器是幂等的：binary 模式命中 latest/${TARGET}?channel=stable，source 模式
+# `bun install -g` 拉 latest。未装过 → 安装；已装过 → 同样跑安装器更新到最新。
+if command -v omp >/dev/null 2>&1; then
+  log "Updating omp (coding agent) to latest"
 else
-  log "omp already installed"
+  log "Installing omp (coding agent)"
 fi
+curl -fsSL https://omp.sh/install | sh || warn "  omp install failed"
+# omp installs to ~/.local/bin (overridable via PI_INSTALL_DIR)
+[[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
 
 # ---------------------------------------------------------------------------
 # 8c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
