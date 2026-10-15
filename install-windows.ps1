@@ -1118,8 +1118,13 @@ if (Test-Cmd git) {
     if (Test-Path (Join-Path $YunxingSrc '.git')) {
         Write-Step 'Updating yunxing checkout'
         git -C $YunxingSrc pull --ff-only --quiet 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  yunxing pull failed' }
-    } else {
+        if ($LASTEXITCODE -ne 0) {
+            # pull failed -- checkout has local changes or is corrupt; drop it and re-clone below.
+            Write-Warn2 '  yunxing pull failed -- re-cloning'
+            Remove-Item -Recurse -Force $YunxingSrc
+        }
+    }
+    if (-not (Test-Path (Join-Path $YunxingSrc '.git'))) {
         Write-Step 'Cloning yunxing checkout'
         New-Item -ItemType Directory -Force -Path (Split-Path $YunxingSrc) | Out-Null
         git clone --depth=1 --quiet https://github.com/raptoravis/yunxing.git $YunxingSrc 2>$null
