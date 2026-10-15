@@ -832,7 +832,11 @@ fi
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
 # yunxing: local skill bundle via GitHub shorthand; modlens: vision/tools bundle
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
-# collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams).
+# collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
+# dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
+# The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
+# ~/.dsh/skills is already built into dsh via @deepseek-ai/dsh-base, so it is
+# not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
 # `add` is non-idempotent, warn on repeat.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
@@ -862,7 +866,7 @@ update_dsh_yunxing() {
 
 if command -v dsh >/dev/null 2>&1; then
   # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do

@@ -1276,7 +1276,11 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
 # yunxing: local skill bundle via GitHub shorthand; modlens: vision/tools bundle
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
-# collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams).
+# collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
+# dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
+# The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
+# ~\.dsh\skills is already built into dsh via @deepseek-ai/dsh-base, so it is
+# not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
 # `add` is non-idempotent, warn on repeat.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
@@ -1308,7 +1312,7 @@ function Update-DshYunxing ([string]$Profile) {
 
 if (Test-Cmd dsh) {
     # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
-    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams')
+    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
