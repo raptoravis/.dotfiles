@@ -1187,15 +1187,39 @@ if (Test-Cmd codex) {
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if (Test-Cmd opencode) {
     Write-Step 'Installing yunxing OpenCode plugin'
-    # Unpinned spec: `add` is idempotent (no duplicate entries), and upgrades go
-    # through `plugin update`. Pinning a full commit hash would give each re-run a
-    # new spec and accumulate duplicate entries.
+    # Strip opencode v1's singular `plugin` key and any pinned `#hash` yunxing
+    # entry from `plugins`. `opencode plugin remove` only reads the plural key, and
+    # the pinned commit lacks a default export, so it breaks `plugin check`/`update`
+    # iteration; a pinned spec also makes `plugin add` accumulate duplicates.
+    $ocCfgPath = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
+    if ((Test-Cmd node) -and (Test-Path $ocCfgPath)) {
+        $env:OC_CFG = $ocCfgPath
+        $ocCleanup = @'
+const fs=require("fs");
+let c; try{ c=JSON.parse(fs.readFileSync(process.env.OC_CFG,"utf8")); }catch(e){ process.exit(0); }
+if(!c || typeof c!=="object") process.exit(0);
+let changed=false;
+if(Object.prototype.hasOwnProperty.call(c,"plugin")){ delete c.plugin; changed=true; }
+if(Array.isArray(c.plugins)){
+  const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&s.startsWith("yunxing")&&s.includes("#"))))];
+  if(next.length!==c.plugins.length){ c.plugins=next; changed=true; }
+}
+if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n"); console.error("==> cleaned legacy/pinned opencode plugin entries"); }
+'@
+        $ocCleanup | node -
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed to clean legacy opencode plugin entries' }
+        Remove-Item Env:OC_CFG -ErrorAction SilentlyContinue
+    }
+    # Unpinned spec: `add` is idempotent only for an exact match — the cleanup above
+    # strips pinned `#hash` entries so `add` won't accumulate duplicates. Upgrades go
+    # through `plugin update` with no target (updates all outdated plugins), which
+    # never fails with "not configured" on a spec mismatch.
     $ocErr = (opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         if ($ocErr) { Write-Warn2 "  opencode plugin add failed: $ocErr" }
         else { Write-Warn2 '  opencode plugin add failed' }
     }
-    $ocErr = (opencode plugin update "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1 | Out-String).Trim()
+    $ocErr = (opencode plugin update 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         if ($ocErr) { Write-Warn2 "  opencode plugin update failed: $ocErr" }
         else { Write-Warn2 '  opencode plugin update failed' }
