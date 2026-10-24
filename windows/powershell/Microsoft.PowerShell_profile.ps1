@@ -7,7 +7,8 @@ Import-Module PSReadLine
 # Predictive intellisense (PredictionSource/PredictionViewStyle) needs PSReadLine
 # >= 2.1.0; Windows PowerShell 5.1 ships 2.0.0, which lacks both params (and the
 # binding error bypasses -ErrorAction since it happens at the call site).
-if ([version](Get-Module PSReadLine).Version -ge [version]"2.1.0") {
+if ([version](Get-Module PSReadLine).Version -ge [version]"2.1.0" -and
+    $Host.UI.SupportsVirtualTerminal -and -not [Console]::IsOutputRedirected) {
     Set-PSReadLineOption -PredictionSource History
     # ListView renders a dropdown that needs WindowWidth >= 50 and WindowHeight >= 5;
     # in narrower consoles (e.g. herdr splits) PSReadLine prints a warning and falls
@@ -268,8 +269,8 @@ $env:UV_LINK_MODE = "copy"
 #$env:OLLAMA_HOST="127.0.0.1:8181"
 
 # ---------------------------------------------------------------------------
-# Starship prompt — must run before the prompt wrapper below so Set-Title
-# can wrap starship's `prompt` function.
+# Starship prompt. Its pre-command hook below updates the window title and
+# prompt context without replacing Starship's own prompt function.
 # ---------------------------------------------------------------------------
 if (Get-Command starship -ErrorAction SilentlyContinue) {
     Invoke-Expression (& starship init powershell)
@@ -298,10 +299,9 @@ function Set-Title() {
     $global:LASTEXITCODE = $origLEC
 }
 
-# Wrap the existing prompt (default PowerShell prompt, or whatever was set
-# upstream) so Set-Title runs on every prompt redraw.
-$Script:_origPrompt = (Get-Command prompt -ErrorAction SilentlyContinue).ScriptBlock
-function prompt {
+# Called by Starship before it renders each prompt. Also used by the fallback
+# prompt when Starship is unavailable.
+function Update-PromptContext {
     # OSC 9;9 — report CWD to Windows Terminal for duplicate tab/pane & session restore.
     # Only emit inside Windows Terminal (WT_SESSION is set by WT).
     if ($env:WT_SESSION) {
@@ -339,9 +339,13 @@ function prompt {
     if ($global:_cachedZgHint) {
         Write-Host "[zg] 此项目还没索引，跑 zg index 建一次（agent 也能用了）" -ForegroundColor Yellow
     }
-    if ($Script:_origPrompt) {
-        & $Script:_origPrompt
-    } else {
+}
+
+if (Get-Command starship -ErrorAction SilentlyContinue) {
+    function Invoke-Starship-PreCommand { Update-PromptContext }
+} else {
+    function prompt {
+        Update-PromptContext
         "PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) "
     }
 }
