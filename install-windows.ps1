@@ -1405,6 +1405,39 @@ function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$D
     }
 }
 
+# pnpm prints "Issues with peer dependencies found" after every plugin operation
+# because each profile sets autoInstallPeers: false: an out-of-tree bundle
+# declares the host runtime (@deepseek-ai/*) and React as peers, and the running
+# dsh supplies both from its own module tree, so pnpm can never resolve them
+# inside the profile. Record that as expected in the profile's pnpm settings so
+# `dsh plugin` runs stop flagging it. Nothing real is hidden: dsh's own startup
+# check (engines.dsh / @deepseek-ai peer ranges) still refuses an incompatible
+# bundle, as it did for dsh-builtin-browser 0.1.22 on dsh 0.2.x.
+# peerDependencyRules survives later plugin operations — the plugin manager edits
+# pnpm-workspace.yaml key by key and never regenerates the file.
+function Set-DshProfilePeerRules ([string]$Profile) {
+    $Workspace = Join-Path $DshHome "profiles\$Profile\pnpm-workspace.yaml"
+    if (-not (Test-Path $Workspace)) { return }
+    $Content = (Get-Content $Workspace -Raw).TrimEnd()
+    if ($Content -match '(?m)^peerDependencyRules:') { return }
+    $Rules = @(
+        'peerDependencyRules:'
+        '  ignoreMissing:'
+        "    - '@deepseek-ai/*'"
+        '    - react'
+        '    - react-dom'
+    )
+    # dsh-tui renders with React 19 while dsh-working-activity, its own
+    # dependency, still declares React 18; allow the installed major instead of
+    # forcing a second React copy into the profile.
+    $ReactManifest = Join-Path $DshHome "profiles\$Profile\node_modules\react\package.json"
+    if (Test-Path $ReactManifest) {
+        $ReactMajor = (Get-Content $ReactManifest -Raw | ConvertFrom-Json).version.Split('.')[0]
+        $Rules += @('  allowedVersions:', "    'dsh-working-activity>react': '^$ReactMajor'")
+    }
+    Set-Content -Path $Workspace -Value ($Content + "`n`n" + ($Rules -join "`n") + "`n") -NoNewline
+}
+
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
     $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'dsh-bot')
@@ -1417,6 +1450,7 @@ if (Test-Cmd dsh) {
         if ($DshProfileDir.Name -eq 'desktop') { continue }
         $DshProfilesSeen++
         if ($DshProfileDir.Name -eq 'dsh-tui') { $DshTuiCovered = $true }
+        Set-DshProfilePeerRules $DshProfileDir.Name
         foreach ($DshBundle in $DshBundles) {
             Install-OrUpdate-DshPlugin $DshProfileDir.Name $DshBundle
         }
@@ -1426,15 +1460,20 @@ if (Test-Cmd dsh) {
         foreach ($DshBundle in $DshBundles) {
             Install-OrUpdate-DshPlugin 'web' $DshBundle
         }
+        Set-DshProfilePeerRules 'web'
     }
     if (-not $DshTuiCovered) {
         foreach ($DshBundle in $DshBundles) {
             Install-OrUpdate-DshPlugin 'dsh-tui' $DshBundle
         }
+        Set-DshProfilePeerRules 'dsh-tui'
     }
 
     $DesktopProfile = Join-Path $DshHome 'profiles\desktop\package.json'
     if (Test-Path $DesktopProfile) {
+        # Electron owns this profile, but its pnpm settings live in the same file
+        # the bundled command reads; record the expected peers before updating.
+        Set-DshProfilePeerRules 'desktop'
         $DesktopInstall = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
             Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } |
             Select-Object -First 1 -ExpandProperty InstallLocation

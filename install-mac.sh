@@ -1004,6 +1004,41 @@ dsh_plugin_install_or_update() {
   fi
 }
 
+# pnpm prints "Issues with peer dependencies found" after every plugin operation
+# because each profile sets autoInstallPeers: false: an out-of-tree bundle
+# declares the host runtime (@deepseek-ai/*) and React as peers, and the running
+# dsh supplies both from its own module tree, so pnpm can never resolve them
+# inside the profile. Record that as expected in the profile's pnpm settings so
+# `dsh plugin` runs stop flagging it. Nothing real is hidden: dsh's own startup
+# check (engines.dsh / @deepseek-ai peer ranges) still refuses an incompatible
+# bundle, as it did for dsh-builtin-browser 0.1.22 on dsh 0.2.x.
+# peerDependencyRules survives later plugin operations — the plugin manager edits
+# pnpm-workspace.yaml key by key and never regenerates the file.
+dsh_profile_peer_rules() {
+  local profile="$1" home="${DSH_HOME:-$HOME/.dsh}" workspace rules react_manifest react_major
+  workspace="$home/profiles/$profile/pnpm-workspace.yaml"
+  [ -f "$workspace" ] || return 0
+  grep -qE '^peerDependencyRules:' "$workspace" && return 0
+  rules="peerDependencyRules:
+  ignoreMissing:
+    - '@deepseek-ai/*'
+    - react
+    - react-dom"
+  # dsh-tui renders with React 19 while dsh-working-activity, its own dependency,
+  # still declares React 18; allow the installed major instead of forcing a
+  # second React copy into the profile.
+  react_manifest="$home/profiles/$profile/node_modules/react/package.json"
+  if [ -f "$react_manifest" ]; then
+    react_major="$(sed -n 's/.*"version": *"\([0-9][0-9]*\)\..*/\1/p' "$react_manifest" | head -1)"
+    if [ -n "$react_major" ]; then
+      rules="$rules
+  allowedVersions:
+    'dsh-working-activity>react': '^$react_major'"
+    fi
+  fi
+  printf '\n%s\n' "$rules" >> "$workspace"
+}
+
 if command -v dsh >/dev/null 2>&1; then
   # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
   dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen dsh-bot"
@@ -1016,6 +1051,7 @@ if command -v dsh >/dev/null 2>&1; then
     [ "$dsh_profile" = "desktop" ] && continue
     dsh_profiles_seen=$((dsh_profiles_seen + 1))
     [ "$dsh_profile" = "dsh-tui" ] && dsh_tui_covered=1
+    dsh_profile_peer_rules "$dsh_profile"
     for dsh_bundle in $dsh_bundles; do
       dsh_plugin_install_or_update "$dsh_profile" "$dsh_bundle"
     done
@@ -1025,11 +1061,13 @@ if command -v dsh >/dev/null 2>&1; then
     for dsh_bundle in $dsh_bundles; do
       dsh_plugin_install_or_update web "$dsh_bundle"
     done
+    dsh_profile_peer_rules web
   fi
   if [ "$dsh_tui_covered" -eq 0 ]; then
     for dsh_bundle in $dsh_bundles; do
       dsh_plugin_install_or_update dsh-tui "$dsh_bundle"
     done
+    dsh_profile_peer_rules dsh-tui
   fi
 
   for plugin in dshmarket dsh-context; do
@@ -1068,6 +1106,9 @@ if [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/package.json" ]; then
     [ -x "$dsh_desktop_command" ] && break
   done
   if [ -x "$dsh_desktop_command" ]; then
+    # Electron owns this profile, but its pnpm settings live in the same file the
+    # bundled command reads; record the expected peers before updating.
+    dsh_profile_peer_rules desktop
     dsh_plugin_install_or_update desktop github:raptoravis/yunxing "$dsh_desktop_command"
   else
     warn "  DeepSeek Harness Desktop command not found -- skipping desktop yunxing plugin"
