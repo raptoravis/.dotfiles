@@ -840,75 +840,82 @@ fi
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
+# dsh-skills-manager: install/manage skills (global or workspace scope); dsh-mnemon:
+# composable view-based context/memory; dsh-image-gen: image generation (Gemini/OpenAI/
+# Seedream/DashScope/ComfyUI); dsh-im: unified IM bridge (session/command/notify/approval);
+# dsh-bot: headless agent runner (cron/webhooks/queues, run logs, retries, CI exit codes).
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~/.dsh/skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
-# `add` is non-idempotent, warn on repeat.
+# Each bundle is installed if absent and updated to latest if present.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
-# modlens skills. The bundles therefore go into EVERY profile already on disk — the
+# modlens skills. The bundles therefore go into every CLI profile already on disk — the
 # earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
-update_dsh_yunxing() {
-  local profile="$1" version package_file
-  # Re-adding an unchanged Git spec can retain its locked commit.
-  log "Updating yunxing dsh plugin (profile: $profile)"
-  if ! dsh plugin --profile "$profile" update yunxing --latest; then
-    warn "  yunxing update failed on $profile; installed skills may be stale"
-    return
-  fi
-  package_file="${DSH_HOME:-$HOME/.dsh}/profiles/$profile/node_modules/yunxing/package.json"
-  if version="$(node -e 'const fs = require("fs"); const version = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).version; if (!version) process.exit(1); console.log(version);' "$package_file" 2>/dev/null)"; then
-    log "  yunxing dsh plugin version: $version (profile: $profile)"
+# Canonical name under which a spec is recorded in package.json, used to detect an
+# installed plugin. `github:user/repo` installs under the bare repo name; scoped
+# (`@scope/name`) and bare npm specs keep their own name.
+dsh_plugin_name() {
+  case "$1" in
+    github:*) printf '%s' "${1##*/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
+# delegates to pnpm add — fine for registry specs, but git specs pin a commit and
+# re-adding retains that lock, so present plugins always go through
+# `dsh plugin update <name> --latest`.
+dsh_plugin_install_or_update() {
+  local profile="$1" spec="$2" dsh_command="${3:-dsh}" name
+  name="$(dsh_plugin_name "$spec")"
+  if "$dsh_command" plugin --profile "$profile" list 2>/dev/null | grep -qF "$name@"; then
+    log "Updating dsh plugin: $spec (profile: $profile)"
+    "$dsh_command" plugin --profile "$profile" update "$name" --latest >/dev/null 2>&1 \
+      || warn "  dsh plugin update $name failed on $profile"
   else
-    warn "  could not verify yunxing installation on $profile"
+    log "Installing dsh plugin: $spec (profile: $profile)"
+    "$dsh_command" plugin --profile "$profile" add "$spec" >/dev/null 2>&1 \
+      || warn "  dsh plugin add $spec failed on $profile"
   fi
 }
 
 if command -v dsh >/dev/null 2>&1; then
-  # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack"
+  # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-skills-manager dsh-mnemon dsh-image-gen dsh-im dsh-bot"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
     [ -f "${dsh_profile_dir}package.json" ] || continue
     dsh_profile="$(basename "$dsh_profile_dir")"
+    # The npm CLI cannot manage the Electron-owned desktop profile.
+    [ "$dsh_profile" = "desktop" ] && continue
     dsh_profiles_seen=$((dsh_profiles_seen + 1))
     [ "$dsh_profile" = "dsh-tui" ] && dsh_tui_covered=1
     for dsh_bundle in $dsh_bundles; do
-      log "Installing dsh plugin: $dsh_bundle (profile: $dsh_profile)"
-      dsh plugin --profile "$dsh_profile" add "$dsh_bundle" >/dev/null 2>&1 \
-        || warn "  dsh plugin add failed on $dsh_profile (may already be installed)"
+      dsh_plugin_install_or_update "$dsh_profile" "$dsh_bundle"
     done
-    update_dsh_yunxing "$dsh_profile"
   done
   if [ "$dsh_profiles_seen" -eq 0 ]; then
     # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
     for dsh_bundle in $dsh_bundles; do
-      log "Installing dsh plugin: $dsh_bundle (profile: web)"
-      dsh plugin --profile web add "$dsh_bundle" >/dev/null 2>&1 \
-        || warn "  dsh plugin add failed on web (may already be installed)"
+      dsh_plugin_install_or_update web "$dsh_bundle"
     done
-    update_dsh_yunxing web
   fi
   if [ "$dsh_tui_covered" -eq 0 ]; then
     for dsh_bundle in $dsh_bundles; do
-      log "Installing dsh plugin: $dsh_bundle (profile: dsh-tui)"
-      dsh plugin --profile dsh-tui add "$dsh_bundle" >/dev/null 2>&1 \
-        || warn "  dsh plugin add failed on dsh-tui (may already be installed)"
+      dsh_plugin_install_or_update dsh-tui "$dsh_bundle"
     done
-    update_dsh_yunxing dsh-tui
   fi
 
   for plugin in dshmarket dsh-context; do
-    log "Installing dsh plugin: $plugin"
-    dsh plugin --profile web add "$plugin" >/dev/null 2>&1 \
-      || warn "  dsh plugin add $plugin failed (may already be installed)"
+    dsh_plugin_install_or_update web "$plugin"
   done
 
   # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
@@ -935,13 +942,29 @@ else
   warn "dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)"
 fi
 
+# The Desktop profile is Electron-owned and requires the command in its app bundle.
+# It can be managed independently of an npm dsh installation.
+if [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/package.json" ]; then
+  for dsh_app in "/Applications/DeepSeek Harness.app" "$HOME/Applications/DeepSeek Harness.app"; do
+    dsh_desktop_command="$dsh_app/Contents/Resources/runtime/cli/bin/dsh"
+    [ -x "$dsh_desktop_command" ] && break
+  done
+  if [ -x "$dsh_desktop_command" ]; then
+    dsh_plugin_install_or_update desktop github:raptoravis/yunxing "$dsh_desktop_command"
+  else
+    warn "  DeepSeek Harness Desktop command not found -- skipping desktop yunxing plugin"
+  fi
+fi
+
 # Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
 # marketplace plugin name (fails); use GitHub shorthand (user/repo) to install
 # directly. install is non-idempotent (repeat errors "already installed"), so
-# guard with `grok plugin list`.
+# guard with `grok plugin list`: installed → update, absent → install.
 if command -v grok >/dev/null 2>&1; then
   if grok plugin list 2>/dev/null | grep -q 'yunxing'; then
-    log "grok yunxing plugin already installed"
+    log "Updating yunxing Grok plugin"
+    grok plugin update yunxing >/dev/null 2>&1 \
+      || warn "  grok plugin update failed"
   else
     log "Installing yunxing Grok plugin (raptoravis/yunxing)"
     grok plugin install raptoravis/yunxing --trust >/dev/null 2>&1 \

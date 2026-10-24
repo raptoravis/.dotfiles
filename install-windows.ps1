@@ -1307,10 +1307,14 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
+# dsh-skills-manager: install/manage skills (global or workspace scope); dsh-mnemon:
+# composable view-based context/memory; dsh-image-gen: image generation (Gemini/OpenAI/
+# Seedream/DashScope/ComfyUI); dsh-im: unified IM bridge (session/command/notify/approval);
+# dsh-bot: headless agent runner (cron/webhooks/queues, run logs, retries, CI exit codes).
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~\.dsh\skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
-# `add` is non-idempotent, warn on repeat.
+# Each bundle is installed if absent and updated to latest if present.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
@@ -1321,62 +1325,72 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
-function Update-DshYunxing ([string]$Profile) {
-    # Re-adding an unchanged Git spec can retain its locked commit.
-    Write-Step "Updating yunxing dsh plugin (profile: $Profile)"
-    dsh plugin --profile $Profile update yunxing --latest
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn2 "  yunxing update failed on $Profile; installed skills may be stale"
-        return
-    }
-    $PackageFile = Join-Path $DshHome "profiles\$Profile\node_modules\yunxing\package.json"
-    try {
-        $Version = (Get-Content -LiteralPath $PackageFile -Raw -ErrorAction Stop | ConvertFrom-Json).version
-        if (-not $Version) { throw 'missing package version' }
-        Write-Host "  yunxing dsh plugin version: $Version (profile: $Profile)"
-    } catch {
-        Write-Warn2 "  could not verify yunxing installation on $Profile"
+function Get-DshPluginName ([string]$Spec) {
+    if ($Spec -like 'github:*') { return ($Spec -split '/')[-1] }
+    return $Spec
+}
+
+# Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
+# delegates to pnpm add — fine for registry specs, but git specs pin a commit and
+# re-adding retains that lock, so present plugins always go through
+# `dsh plugin update <name> --latest`.
+function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$DshCommand = 'dsh') {
+    $Name = Get-DshPluginName $Spec
+    if (& $DshCommand plugin --profile $Profile list 2>$null | Select-String -SimpleMatch -Quiet "$Name@") {
+        Write-Step "Updating dsh plugin: $Spec (profile: $Profile)"
+        & $DshCommand plugin --profile $Profile update $Name --latest 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin update $Name failed on $Profile" }
+    } else {
+        Write-Step "Installing dsh plugin: $Spec (profile: $Profile)"
+        & $DshCommand plugin --profile $Profile add $Spec 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $Spec failed on $Profile" }
     }
 }
 
 if (Test-Cmd dsh) {
-    # Skill/tool bundles that must live in EVERY profile (skills are per-profile).
-    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack')
+    # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
+    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-skills-manager', 'dsh-mnemon', 'dsh-image-gen', 'dsh-im', 'dsh-bot')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
         if (-not (Test-Path (Join-Path $DshProfileDir.FullName 'package.json'))) { continue }
+        # The npm CLI rejects the Electron-owned desktop profile. Its bundled
+        # command handles that profile below using the Desktop installation runtime.
+        if ($DshProfileDir.Name -eq 'desktop') { continue }
         $DshProfilesSeen++
         if ($DshProfileDir.Name -eq 'dsh-tui') { $DshTuiCovered = $true }
         foreach ($DshBundle in $DshBundles) {
-            Write-Step "Installing dsh plugin: $DshBundle (profile: $($DshProfileDir.Name))"
-            dsh plugin --profile $DshProfileDir.Name add $DshBundle 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add failed on $($DshProfileDir.Name) (may already be installed)" }
+            Install-OrUpdate-DshPlugin $DshProfileDir.Name $DshBundle
         }
-        Update-DshYunxing $DshProfileDir.Name
     }
     if ($DshProfilesSeen -eq 0) {
         # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
         foreach ($DshBundle in $DshBundles) {
-            Write-Step "Installing dsh plugin: $DshBundle (profile: web)"
-            dsh plugin --profile web add $DshBundle 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on web (may already be installed)' }
+            Install-OrUpdate-DshPlugin 'web' $DshBundle
         }
-        Update-DshYunxing 'web'
     }
     if (-not $DshTuiCovered) {
         foreach ($DshBundle in $DshBundles) {
-            Write-Step "Installing dsh plugin: $DshBundle (profile: dsh-tui)"
-            dsh plugin --profile dsh-tui add $DshBundle 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin add failed on dsh-tui (may already be installed)' }
+            Install-OrUpdate-DshPlugin 'dsh-tui' $DshBundle
         }
-        Update-DshYunxing 'dsh-tui'
+    }
+
+    $DesktopProfile = Join-Path $DshHome 'profiles\desktop\package.json'
+    if (Test-Path $DesktopProfile) {
+        $DesktopInstall = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } |
+            Select-Object -First 1 -ExpandProperty InstallLocation
+        if (-not $DesktopInstall) { $DesktopInstall = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness' }
+        $DesktopDsh = Join-Path $DesktopInstall 'resources\runtime\cli\bin\dsh.cmd'
+        if (Test-Path $DesktopDsh) {
+            Install-OrUpdate-DshPlugin 'desktop' 'github:raptoravis/yunxing' $DesktopDsh
+        } else {
+            Write-Warn2 '  DeepSeek Harness Desktop command not found -- skipping desktop yunxing plugin'
+        }
     }
 
     foreach ($plugin in @('dshmarket', 'dsh-context')) {
-        Write-Step "Installing dsh plugin: $plugin"
-        dsh plugin --profile web add $plugin 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $plugin failed (may already be installed)" }
+        Install-OrUpdate-DshPlugin 'web' $plugin
     }
 
     # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
@@ -1406,10 +1420,12 @@ if (Test-Cmd dsh) {
 # Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
 # marketplace plugin name (fails); use GitHub shorthand (user/repo) to install
 # directly. install is non-idempotent (repeat errors "already installed"), so
-# guard with `grok plugin list`.
+# guard with `grok plugin list`: installed → update, absent → install.
 if (Test-Cmd grok) {
     if (grok plugin list 2>$null | Select-String -Quiet 'yunxing') {
-        Write-Host '  yunxing Grok plugin already installed'
+        Write-Step 'Updating yunxing Grok plugin'
+        grok plugin update yunxing 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  grok plugin update failed' }
     } else {
         Write-Step 'Installing yunxing Grok plugin (raptoravis/yunxing)'
         grok plugin install raptoravis/yunxing --trust 2>$null
