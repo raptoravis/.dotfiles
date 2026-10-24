@@ -1363,10 +1363,12 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
-# dsh-skills-manager: install/manage skills (global or workspace scope); dsh-mnemon:
-# composable view-based context/memory; dsh-image-gen: image generation (Gemini/OpenAI/
-# Seedream/DashScope/ComfyUI); dsh-im: unified IM bridge (session/command/notify/approval);
-# dsh-bot: headless agent runner (cron/webhooks/queues, run logs, retries, CI exit codes).
+# dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
+# (Gemini/OpenAI/Seedream/DashScope/ComfyUI); dsh-bot: headless agent runner
+# (cron/webhooks/queues, run logs, retries, CI exit codes).
+# dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
+# rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
+# Re-add once upstream ships 0.2.x-compatible releases.
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~\.dsh\skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
@@ -1405,7 +1407,7 @@ function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$D
 
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-skills-manager', 'dsh-mnemon', 'dsh-image-gen', 'dsh-im', 'dsh-bot')
+    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'dsh-bot')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {

@@ -956,10 +956,12 @@ install_dsh_desktop_mac
 # (image → structured JSON evidence); dsh-agent-teams: multi-agent team
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
-# dsh-skills-manager: install/manage skills (global or workspace scope); dsh-mnemon:
-# composable view-based context/memory; dsh-image-gen: image generation (Gemini/OpenAI/
-# Seedream/DashScope/ComfyUI); dsh-im: unified IM bridge (session/command/notify/approval);
-# dsh-bot: headless agent runner (cron/webhooks/queues, run logs, retries, CI exit codes).
+# dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
+# (Gemini/OpenAI/Seedream/DashScope/ComfyUI); dsh-bot: headless agent runner
+# (cron/webhooks/queues, run logs, retries, CI exit codes).
+# dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
+# rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
+# Re-add once upstream ships 0.2.x-compatible releases.
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~/.dsh/skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
@@ -1004,7 +1006,7 @@ dsh_plugin_install_or_update() {
 
 if command -v dsh >/dev/null 2>&1; then
   # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-skills-manager dsh-mnemon dsh-image-gen dsh-im dsh-bot"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen dsh-bot"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do

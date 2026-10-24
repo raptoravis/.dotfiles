@@ -67,3 +67,6 @@ reasonix.toml
 # OMC (oh-my-claudecode) runtime artifacts
 .omc/
 .omx/
+.agent-teams/
+install-linux.sh
+.scratch/
