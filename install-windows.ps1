@@ -592,6 +592,63 @@ if (Test-Cmd winget) {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
 }
 
+# DeepSeek Harness Desktop ships separately from the npm CLI. Use its official
+# update feed so repeated runs download only a newer installer.
+Write-Step 'Installing/updating DeepSeek Harness Desktop'
+$DesktopFeedUrl = 'https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml'
+try {
+    $DesktopFeedResponse = Invoke-WebRequest -Uri $DesktopFeedUrl -UseBasicParsing -ErrorAction Stop
+    $DesktopFeed = if ($DesktopFeedResponse.Content -is [byte[]]) {
+        [Text.Encoding]::UTF8.GetString($DesktopFeedResponse.Content)
+    } else { [string]$DesktopFeedResponse.Content }
+    $DesktopVersionMatch = [regex]::Match($DesktopFeed, '(?m)^version: ([^\r\n]+)')
+    $DesktopUrlMatch = [regex]::Match($DesktopFeed, '(?m)^path: >-\r?\n[ \t]+(https://download\.deepseek\.com/dsh-desk/bin/win-x64/[^\r\n ]+\.exe)\r?$')
+    $DesktopHashMatch = [regex]::Match($DesktopFeed, '(?m)^sha512: >-\r?\n[ \t]+([A-Za-z0-9+/=]+)\r?$')
+    if (-not ($DesktopVersionMatch.Success -and $DesktopUrlMatch.Success -and $DesktopHashMatch.Success)) {
+        throw 'official update feed has an unexpected format'
+    }
+    $DesktopVersion = $DesktopVersionMatch.Groups[1].Value.Trim()
+    $DesktopUrl = $DesktopUrlMatch.Groups[1].Value
+    $DesktopHash = $DesktopHashMatch.Groups[1].Value
+    $DesktopRecord = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } | Select-Object -First 1
+    $DesktopInstalledVersion = if ($DesktopRecord) { $DesktopRecord.DisplayVersion } else { $null }
+    if (-not $DesktopInstalledVersion -and $DesktopRecord) {
+        $DesktopExe = Join-Path $DesktopRecord.InstallLocation 'DeepSeek Harness.exe'
+        if (Test-Path $DesktopExe) { $DesktopInstalledVersion = (Get-Item $DesktopExe).VersionInfo.FileVersion }
+    }
+    if ($DesktopInstalledVersion -and -not (Test-SemverLt $DesktopInstalledVersion $DesktopVersion)) {
+        Write-Host "  DeepSeek Harness Desktop @ $DesktopInstalledVersion is up to date"
+    } elseif (Get-Process -Name 'DeepSeek Harness' -ErrorAction SilentlyContinue) {
+        Write-Warn2 '  Quit DeepSeek Harness Desktop before installing/updating, then re-run this script'
+    } else {
+        $DesktopInstaller = Join-Path $env:TEMP "deepseek-harness-$([guid]::NewGuid()).exe"
+        try {
+            Write-Step "Downloading DeepSeek Harness Desktop $DesktopVersion"
+            Invoke-WebRequest -Uri $DesktopUrl -UseBasicParsing -OutFile $DesktopInstaller -ErrorAction Stop
+            $DesktopStream = [IO.File]::OpenRead($DesktopInstaller)
+            $DesktopHasher = [Security.Cryptography.SHA512]::Create()
+            try {
+                $DesktopActualHash = [Convert]::ToBase64String($DesktopHasher.ComputeHash($DesktopStream))
+            } finally { $DesktopStream.Dispose(); $DesktopHasher.Dispose() }
+            if ($DesktopActualHash -ne $DesktopHash) { throw 'installer SHA-512 does not match the official update feed' }
+            $DesktopProcess = Start-Process -FilePath $DesktopInstaller -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
+            if ($DesktopProcess.ExitCode -ne 0) { throw "installer exited with code $($DesktopProcess.ExitCode)" }
+            $DesktopInstalled = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.DisplayVersion -eq $DesktopVersion } | Select-Object -First 1
+            if (-not $DesktopInstalled) { throw 'installer completed but the expected version was not registered' }
+            Write-Host "  DeepSeek Harness Desktop $DesktopVersion installed"
+            if (-not (Test-Path (Join-Path $DshHome 'profiles\desktop\package.json'))) {
+                Write-Host '  Launch Desktop once to initialize its profile, then re-run this script to install yunxing skills'
+            }
+        } finally {
+            Remove-Item -LiteralPath $DesktopInstaller -Force -ErrorAction SilentlyContinue
+        }
+    }
+} catch {
+    Write-Warn2 "  DeepSeek Harness Desktop install/update failed: $_"
+}
+
 # Tailscale — installed via winget; ensure the daemon service is running and
 # authenticate if this machine hasn't logged in yet.
 $tailscaleCommand = Get-Command tailscale.exe -ErrorAction SilentlyContinue

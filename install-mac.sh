@@ -833,6 +833,123 @@ else
   warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
 fi
 
+# DeepSeek Harness Desktop has a separate release feed from the npm CLI. Download
+# the architecture-matched app only when the installed version is older.
+install_dsh_desktop_mac() {
+  local arch feed version url checksum installed app="/Applications/DeepSeek Harness.app"
+  local tmp zip actual source stage backup
+  case "$(uname -m)" in
+    arm64) arch=arm64 ;;
+    x86_64) arch=x64 ;;
+    *) warn "  DeepSeek Harness Desktop unsupported architecture: $(uname -m)"; return ;;
+  esac
+  feed="$(curl -fsSL "https://download.deepseek.com/dsh-desk/feeds/mac-$arch/nightly-mac.yml")" \
+    || { warn "  DeepSeek Harness Desktop update feed unavailable"; return; }
+  version="$(printf '%s\n' "$feed" | sed -n 's/^version: //p' | head -1)"
+  url="$(printf '%s\n' "$feed" | awk '/^path: >-$/ { getline; sub(/^[ \t]+/, ""); sub(/\r$/, ""); print; exit }')"
+  checksum="$(printf '%s\n' "$feed" | awk '/^sha512: >-$/ { getline; sub(/^[ \t]+/, ""); sub(/\r$/, ""); print; exit }')"
+  case "$url" in
+    "https://download.deepseek.com/dsh-desk/bin/mac-$arch/"*.zip) ;;
+    *) warn "  DeepSeek Harness Desktop update feed has an unexpected download URL"; return ;;
+  esac
+  if [ -z "$version" ] || ! printf '%s' "$checksum" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+    warn "  DeepSeek Harness Desktop update feed has an unexpected format"
+    return
+  fi
+  installed="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null || true)"
+  if [ -n "$installed" ]; then
+    if ! declare -f semver_lt >/dev/null; then
+      warn "  Cannot compare Desktop versions without Node.js; skipping update"
+      return
+    fi
+    if ! semver_lt "$installed" "$version"; then
+      log "  DeepSeek Harness Desktop @ $installed is up to date"
+      return
+    fi
+  fi
+  if pgrep -f '/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness' >/dev/null 2>&1; then
+    warn "  Quit DeepSeek Harness Desktop before installing/updating, then re-run this script"
+    return
+  fi
+  if brew list --cask deepseek-harness >/dev/null 2>&1; then
+    if [ -n "$installed" ]; then
+      log "Upgrading Homebrew DeepSeek Harness Desktop ($installed -> $version)"
+      brew upgrade --cask deepseek-harness --greedy-latest
+    else
+      log "Repairing Homebrew DeepSeek Harness Desktop installation"
+      brew reinstall --cask deepseek-harness
+    fi
+    if [ $? -eq 0 ]; then
+      installed="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null || true)"
+      if [ "$installed" != "$version" ]; then
+        warn "  Homebrew cask is behind the official Desktop feed ($installed vs $version)"
+      fi
+    else
+      warn "  DeepSeek Harness Desktop cask upgrade failed"
+    fi
+    return
+  fi
+  tmp="$(mktemp -d)" || { warn "  could not create Desktop download directory"; return; }
+  zip="$tmp/deepseek-harness.zip"
+  log "Downloading DeepSeek Harness Desktop $version ($arch)"
+  if ! curl -fL "$url" -o "$zip"; then
+    warn "  DeepSeek Harness Desktop download failed"
+    rm -rf "$tmp"
+    return
+  fi
+  actual="$(openssl dgst -sha512 -binary "$zip" | openssl base64 -A)"
+  if [ "$actual" != "$checksum" ]; then
+    warn "  DeepSeek Harness Desktop SHA-512 does not match the official update feed"
+    rm -rf "$tmp"
+    return
+  fi
+  if ! ditto -x -k "$zip" "$tmp/extracted"; then
+    warn "  DeepSeek Harness Desktop extraction failed"
+    rm -rf "$tmp"
+    return
+  fi
+  source="$tmp/extracted/DeepSeek Harness.app"
+  if [ ! -d "$source" ] || [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$source/Contents/Info.plist" 2>/dev/null)" != "$version" ]; then
+    warn "  Official archive does not contain the expected DeepSeek Harness.app version"
+    rm -rf "$tmp"
+    return
+  fi
+  stage="/Applications/.DeepSeek Harness.new.$$.app"
+  backup="/Applications/.DeepSeek Harness.backup.$$.app"
+  if [ -e "$stage" ] || [ -e "$backup" ] || [ -L "$app" ]; then
+    warn "  Desktop install path cannot be replaced safely"
+    rm -rf "$tmp"
+    return
+  fi
+  if ! sudo ditto "$source" "$stage"; then
+    warn "  DeepSeek Harness Desktop copy failed"
+    sudo rm -rf "$stage"
+    rm -rf "$tmp"
+    return
+  fi
+  if [ -d "$app" ] && ! sudo mv "$app" "$backup"; then
+    warn "  DeepSeek Harness Desktop backup failed"
+    sudo rm -rf "$stage"
+    rm -rf "$tmp"
+    return
+  fi
+  if sudo mv "$stage" "$app"; then
+    [ ! -d "$backup" ] || sudo rm -rf "$backup"
+    log "  DeepSeek Harness Desktop $version installed"
+    if [ ! -f "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/package.json" ]; then
+      log "  Launch Desktop once to initialize its profile, then re-run this script to install yunxing skills"
+    fi
+  else
+    warn "  DeepSeek Harness Desktop replacement failed; restoring previous app"
+    if [ -d "$backup" ] && ! sudo mv "$backup" "$app"; then
+      warn "  Previous app remains at $backup; restore it manually"
+    fi
+    sudo rm -rf "$stage"
+  fi
+  rm -rf "$tmp"
+}
+install_dsh_desktop_mac
+
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);
