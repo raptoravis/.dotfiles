@@ -957,8 +957,13 @@ install_dsh_desktop_mac
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
-# (Gemini/OpenAI/Seedream/DashScope/ComfyUI); dsh-bot: headless agent runner
-# (cron/webhooks/queues, run logs, retries, CI exit codes).
+# (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
+# ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
+# chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
+# platform is `web`, so it is installed with the web/UI plugins below, not into
+# every profile. `dsh-bot` is a different package (dushaobindoudou/dsh-plugin:
+# a headless cron/webhook runner) that an earlier run installed by mistake; it
+# is removed below where present.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
 # Re-add once upstream ships 0.2.x-compatible releases.
@@ -1041,7 +1046,7 @@ dsh_profile_peer_rules() {
 
 if command -v dsh >/dev/null 2>&1; then
   # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen dsh-bot"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
@@ -1070,7 +1075,7 @@ if command -v dsh >/dev/null 2>&1; then
     dsh_profile_peer_rules dsh-tui
   fi
 
-  for plugin in dshmarket dsh-context; do
+  for plugin in dshmarket dsh-context ds-bot; do
     dsh_plugin_install_or_update web "$plugin"
   done
 
@@ -1083,6 +1088,27 @@ if command -v dsh >/dev/null 2>&1; then
     dsh plugin --profile web remove dsh-browser-use >/dev/null 2>&1 \
       || warn "  dsh plugin remove dsh-browser-use failed"
   fi
+
+  # `dsh-bot` is not DS Bot. It is a different package (dushaobindoudou/dsh-plugin:
+  # a headless cron/webhook runner) that an earlier run of this script added to
+  # every profile by mistake; drop it so only the correct `ds-bot` stays.
+  for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
+    [ -f "${dsh_profile_dir}package.json" ] || continue
+    dsh_profile="$(basename "$dsh_profile_dir")"
+    [ "$dsh_profile" = "desktop" ] && continue
+    if dsh plugin --profile "$dsh_profile" list 2>/dev/null | grep -q 'dsh-bot@'; then
+      log "Removing wrong bot plugin: dsh-bot (profile: $dsh_profile)"
+      dsh plugin --profile "$dsh_profile" remove dsh-bot >/dev/null 2>&1 \
+        || warn "  dsh plugin remove dsh-bot failed on $dsh_profile"
+    fi
+  done
+
+  # pnpm keeps the removed package's command shims under node_modules/.bin, so a
+  # stale `dsh-bot` command would survive the uninstall; prune them too.
+  for dsh_bot_shim in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/node_modules/.bin/dsh-bot*; do
+    [ -e "$dsh_bot_shim" ] || continue
+    rm -f "$dsh_bot_shim"
+  done
 
   # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
   # profile's @deepseek-harness-tui/dsh-tui bundle, so re-add the bundle at the

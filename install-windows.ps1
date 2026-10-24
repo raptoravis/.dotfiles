@@ -1364,8 +1364,13 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # collaboration tools + web tree monitor (@nanmicoder/dsh-agent-teams);
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
-# (Gemini/OpenAI/Seedream/DashScope/ComfyUI); dsh-bot: headless agent runner
-# (cron/webhooks/queues, run logs, retries, CI exit codes).
+# (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
+# ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
+# chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
+# platform is `web`, so it is installed with the web/UI plugins below, not into
+# every profile. `dsh-bot` is a different package (dushaobindoudou/dsh-plugin:
+# a headless cron/webhook runner) that an earlier run installed by mistake; it
+# is removed below where present.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
 # Re-add once upstream ships 0.2.x-compatible releases.
@@ -1440,7 +1445,7 @@ function Set-DshProfilePeerRules ([string]$Profile) {
 
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'dsh-bot')
+    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
@@ -1486,7 +1491,7 @@ if (Test-Cmd dsh) {
         }
     }
 
-    foreach ($plugin in @('dshmarket', 'dsh-context')) {
+    foreach ($plugin in @('dshmarket', 'dsh-context', 'ds-bot')) {
         Install-OrUpdate-DshPlugin 'web' $plugin
     }
 
@@ -1498,6 +1503,27 @@ if (Test-Cmd dsh) {
         Write-Step 'Removing incompatible dsh plugin: dsh-browser-use'
         dsh plugin --profile web remove dsh-browser-use 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin remove dsh-browser-use failed' }
+    }
+
+    # `dsh-bot` is not DS Bot. It is a different package (dushaobindoudou/dsh-plugin:
+    # a headless cron/webhook runner) that an earlier run of this script added to
+    # every profile by mistake; drop it so only the correct `ds-bot` stays.
+    foreach ($BotProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
+        if (-not (Test-Path (Join-Path $BotProfileDir.FullName 'package.json'))) { continue }
+        if ($BotProfileDir.Name -eq 'desktop') { continue }
+        if (dsh plugin --profile $BotProfileDir.Name list 2>$null | Select-String -SimpleMatch -Quiet 'dsh-bot@') {
+            Write-Step "Removing wrong bot plugin: dsh-bot (profile: $($BotProfileDir.Name))"
+            dsh plugin --profile $BotProfileDir.Name remove dsh-bot 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin remove dsh-bot failed on $($BotProfileDir.Name)" }
+        }
+    }
+
+    # pnpm keeps the removed package's command shims under node_modules\.bin, so a
+    # stale `dsh-bot` command would survive the uninstall; prune them too.
+    foreach ($BotShimProfile in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
+        $BotShimBin = Join-Path $BotShimProfile.FullName 'node_modules\.bin'
+        if (-not (Test-Path $BotShimBin)) { continue }
+        Remove-Item (Join-Path $BotShimBin 'dsh-bot*') -Force -ErrorAction SilentlyContinue
     }
 
     # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
