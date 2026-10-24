@@ -66,8 +66,7 @@ function Test-SemverLt($a, $b) {
 }
 function Test-SemverSafeUpgrade($a, $b) {
     # A→B 是否安全自动升级：B 非预发布，且仅同 minor 的 patch 级（0.x 的 minor 视为破坏性）。
-    # 预发布 latest 与跨 minor/major 的跳跃都判为不安全，避免 dsh/dsh-tui 耦合包被 latest
-    # 各自拉到不兼容的版本线。
+    # 预发布 latest 与跨 minor/major 的跳跃对其他 CLI 判为不安全。
     $js = 'const n = (v) => {
       const m = String(v).replace(/^v/, "").split("-");
       return { core: m[0].split(".").map((x) => +x || 0), pre: m[1] };
@@ -91,7 +90,7 @@ function Install-NpmCliIfStale ($pkg, $label) {
     $latest = ((npm view $pkg version 2>$null) | Select-Object -Last 1)
     if ($latest) { $latest = $latest.Trim() }
     if ($latest -and (Test-SemverLt $inst $latest)) {
-        if (Test-SemverSafeUpgrade $inst $latest) {
+        if ($pkg -in @('@deepseek-ai/dsh', '@deepseek-harness-tui/dsh-tui') -or (Test-SemverSafeUpgrade $inst $latest)) {
             Write-Step "Upgrading $label ($pkg): $inst -> $latest"
             npm install -g $pkg
             if ($LASTEXITCODE -ne 0) { Write-Warn2 "  $label upgrade failed" }

@@ -740,8 +740,7 @@ if command -v npm >/dev/null 2>&1; then
   # semver_safe_upgrade A B — exit 0 if A→B is a safe auto-upgrade: B is not a
   # pre-release, and the bump stays within the same minor line (for 0.x the minor
   # is breaking, so 0.x only auto-upgrades patch). Pre-release latest and any
-  # minor/major jump are treated as unsafe — keeps coupled dsh/dsh-tui from being
-  # pulled by `latest` onto incompatible version lines.
+  # minor/major jump are treated as unsafe for other CLIs.
   semver_safe_upgrade() {
     node -e '
       const n = (v) => {
@@ -769,7 +768,7 @@ if command -v npm >/dev/null 2>&1; then
     fi
     latest=$(npm view "$pkg" version 2>/dev/null)
     if [[ -n "$latest" ]] && semver_lt "$inst" "$latest"; then
-      if semver_safe_upgrade "$inst" "$latest"; then
+      if [[ "$pkg" == @deepseek-ai/dsh || "$pkg" == @deepseek-harness-tui/dsh-tui ]] || semver_safe_upgrade "$inst" "$latest"; then
         log "Upgrading $label ($pkg): $inst -> $latest"
         npm_global "$pkg" "$@" || warn "  $label upgrade failed"
       else
