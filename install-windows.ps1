@@ -819,7 +819,7 @@ if (Test-Path -LiteralPath $tailscaleExe) {
 #     Cargo builds (cc crate), Python native extensions, Windows SDK.
 #     Installed via the VS Bootstrapper; only downloads what's needed.
 #     Workload: VCTools (Desktop development with C++).
-#     Idempotent: `vs_where` detects existing installs.
+#     Idempotent: `vswhere` detects existing installs.
 # ---------------------------------------------------------------------------
 $VSBootstrapUrl = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'
 $VSBootstrapExe = Join-Path $env:TEMP 'vs_BuildTools.exe'
@@ -827,11 +827,20 @@ $VsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.e
 
 # Check if Build Tools are already installed by looking for vswhere or any
 # instance with the VCTools workload.
+#
+# Query a plain ASCII property instead of `-format json`: PowerShell decodes a
+# native command's stdout with the console code page it cached at startup, while
+# vswhere writes UTF-8. Once anything earlier in this script changes the console
+# code page the CJK display name/description get mis-decoded, the mangled bytes
+# swallow the closing quote and ConvertFrom-Json dies ("unexpected character
+# encountered ... line 17"), which silently fell through to reinstalling the
+# whole multi-minute workload on every run. 7-bit ASCII decodes identically
+# under every code page, so installationPath is encoding-proof.
 $VsFound = $false
 if (Test-Path $VsWhere) {
-    $vsInstance = & $VsWhere -latest -products '*' -requires 'Microsoft.VisualStudio.Workload.VCTools' -format json 2>$null | ConvertFrom-Json
-    if ($vsInstance -and $vsInstance.Length -gt 0) {
-        Write-Step "Visual Studio Build Tools already installed: $($vsInstance[0].displayName)"
+    $vsPath = @(& $VsWhere -latest -products '*' -requires 'Microsoft.VisualStudio.Workload.VCTools' -property installationPath 2>$null)
+    if ($vsPath.Count -gt 0 -and $vsPath[0]) {
+        Write-Step "Visual Studio Build Tools already installed: $($vsPath[0])"
         $VsFound = $true
     }
 }
