@@ -18,7 +18,7 @@ for arg in "$@"; do
       cat <<EOF
 Usage: $0 [--uninstallagents]
   --uninstallagents  Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
-                     DeepSeek Harness, omp) and remove their config dirs.
+                     DeepSeek Harness, omp, bmad-loop) and remove their config dirs.
 EOF
       exit 0
       ;;
@@ -39,6 +39,12 @@ if (( UNINSTALL_AGENTS )); then
     warn "npm not on PATH — skipping npm uninstall step"
   fi
 
+  # bmad-loop installs as a uv tool, so it has no npm package to uninstall.
+  if command -v uv >/dev/null 2>&1; then
+    log "  uv tool uninstall bmad-loop"
+    uv tool uninstall bmad-loop 2>/dev/null || true
+  fi
+
   # 2) Remove agent config directories
   AGENT_DIRS=(
     "$HOME/.claude"
@@ -46,6 +52,7 @@ if (( UNINSTALL_AGENTS )); then
     "$HOME/.config/opencode"
     "$HOME/.grok"
     "${DSH_HOME:-$HOME/.dsh}"
+    "${XDG_STATE_HOME:-$HOME/.local/state}/bmad-loop"
     "$HOME/.omp"
     "$HOME/.agents"
     "$HOME/.cache/dotfiles/agent-plugins"
@@ -1425,6 +1432,104 @@ if command -v git >/dev/null 2>&1; then
   fi
 else
   warn "git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
+# 7e5) bmad-loop — deterministic orchestrator for the BMAD implementation
+#      phase (story -> dev -> verify -> review -> commit, unattended). Upstream
+#      ships it from Git only (no PyPI, no npm), so it installs as a uv tool
+#      with the TUI extra; sessions are driven through tmux (the POSIX backend,
+#      installed above). Policy is per project in .bmad-loop/policy.toml,
+#      written by "bmad-loop init". Upstream is early beta and asks for a
+#      pinned release, so this tracks the newest vX.Y.Z tag rather than the tip
+#      of the default branch.
+# ---------------------------------------------------------------------------
+BMAD_LOOP_REPO="https://github.com/bmad-code-org/bmad-loop.git"
+
+# Numeric dotted-version compare: returns 0 when $1 > $2, 1 otherwise.
+bmad_loop_gt() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    split(a, x, "."); split(b, y, ".")
+    for (i = 1; i <= 3; i++) {
+      if ((x[i] + 0) > (y[i] + 0)) exit 0
+      if ((x[i] + 0) < (y[i] + 0)) exit 1
+    }
+    exit 1
+  }'
+}
+
+# Biggest vX.Y.Z on stdin. awk, not sort -V: BSD sort on macOS has no -V.
+bmad_loop_max_tag() {
+  awk -F. '
+    { maj = $1 + 0; min = $2 + 0; pat = $3 + 0
+      if (!seen || maj > bmaj || (maj == bmaj && min > bmin) \
+          || (maj == bmaj && min == bmin && pat > bpat)) {
+        seen = 1; bmaj = maj; bmin = min; bpat = pat; best = $0
+      } }
+    END { if (seen) print best }'
+}
+
+if ! command -v uv >/dev/null 2>&1; then
+  warn "uv not on PATH -- skipping bmad-loop (re-run after uv is installed)"
+else
+  # uv tool shims live in the uv tool bin dir; refresh PATH so a tool installed
+  # by an earlier run is visible even when this shell predates it.
+  bmad_loop_bin="$(uv tool dir --bin 2>/dev/null || true)"
+  if [[ -n "$bmad_loop_bin" && -d "$bmad_loop_bin" && ":$PATH:" != *":$bmad_loop_bin:"* ]]; then
+    export PATH="$bmad_loop_bin:$PATH"
+  fi
+  if [[ -d "$HOME/.local/bin" && ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+
+  # tmux is the POSIX transport bmad-loop drives; it refuses runs below 3.2.
+  if ! command -v tmux >/dev/null 2>&1; then
+    warn "tmux not on PATH -- bmad-loop needs tmux >= 3.2 to drive sessions"
+  else
+    tmux_version="$(tmux -V 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)"
+    if [[ -n "$tmux_version" ]] && bmad_loop_gt "3.2" "$tmux_version"; then
+      warn "tmux $tmux_version is below bmad-loop's 3.2 floor"
+    fi
+  fi
+
+  # Track the newest release tag (pre-release tags are ignored) so upgrades stay
+  # review-sized; fall back to the default branch when tags cannot be read.
+  bmad_loop_ref="main"
+  if command -v git >/dev/null 2>&1; then
+    bmad_loop_tag="$(git ls-remote --tags --refs "$BMAD_LOOP_REPO" 'v*' 2>/dev/null \
+      | sed -n 's#.*refs/tags/v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p' \
+      | bmad_loop_max_tag)"
+    [[ -n "$bmad_loop_tag" ]] && bmad_loop_ref="v$bmad_loop_tag"
+  fi
+  bmad_loop_spec="bmad-loop[tui] @ git+${BMAD_LOOP_REPO}@${bmad_loop_ref}"
+  bmad_loop_wanted="${bmad_loop_ref#v}"
+
+  bmad_loop_version=""
+  if command -v bmad-loop >/dev/null 2>&1; then
+    bmad_loop_version="$(bmad-loop --version 2>/dev/null \
+      | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+  fi
+
+  if ! command -v bmad-loop >/dev/null 2>&1; then
+    log "Installing bmad-loop[tui] ($bmad_loop_ref)"
+    # Upstream verifies Python 3.11-3.14; pin 3.14 so a newer distro/brew
+    # default does not land outside that range (uv downloads it when missing).
+    uv tool install --python 3.14 "$bmad_loop_spec" \
+      || warn "  bmad-loop install failed"
+  elif [[ "$bmad_loop_ref" == v* && -n "$bmad_loop_version" ]] \
+       && bmad_loop_gt "$bmad_loop_wanted" "$bmad_loop_version"; then
+    log "Upgrading bmad-loop: $bmad_loop_version -> $bmad_loop_wanted"
+    # A tag change is a new requirement, so --force replaces the tool env.
+    uv tool install --force --python 3.14 "$bmad_loop_spec" \
+      || warn "  bmad-loop upgrade failed"
+  else
+    log "bmad-loop already installed (${bmad_loop_version:-version unknown})"
+  fi
+
+  if command -v bmad-loop >/dev/null 2>&1; then
+    log "  per project: bmad-loop init --cli claude; bmad-loop validate; bmad-loop run"
+    log "  backend: tmux (bmad-loop mux should name the POSIX platform default)"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
