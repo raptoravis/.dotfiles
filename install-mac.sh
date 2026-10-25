@@ -936,7 +936,7 @@ install_dsh_desktop_mac() {
     [ ! -d "$backup" ] || sudo rm -rf "$backup"
     log "  DeepSeek Harness Desktop $version installed"
     if [ ! -f "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/package.json" ]; then
-      log "  Launch Desktop once to initialize its profile, then re-run this script to install yunxing skills"
+      log "  Launch Desktop once to initialize its profile, then re-run this script to install its plugin bundles and skills"
     fi
   else
     warn "  DeepSeek Harness Desktop replacement failed; restoring previous app"
@@ -970,13 +970,22 @@ install_dsh_desktop_mac
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~/.dsh/skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
+# dsh, dst and Desktop all bundle dsh-base, so the skills linked into
+# ~/.dsh/skills are shared by every profile including the Desktop app.
 # Each bundle is installed if absent and updated to latest if present.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
-# modlens skills. The bundles therefore go into every CLI profile already on disk — the
-# earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
+# modlens skills. The same six bundles therefore go into every CLI profile, the
+# dsh-tui profile and the Electron-owned Desktop profile — the earlier
+# `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
+#
+# The Desktop profile is managed further below with the command bundled inside the
+# app, outside the npm-dsh gate, so it is covered even without an npm dsh install.
+# That plugin manager refuses a bundle whose engines.dsh / @deepseek-ai peer ranges
+# exclude the app's nightly runtime: such a bundle is reported and skipped until
+# it ships a compatible release, and is not installed.
 #
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
@@ -991,21 +1000,37 @@ dsh_plugin_name() {
   esac
 }
 
+# Surface the plugin manager's rejection reason (e.g. a bundle whose dsh peer
+# ranges exclude the Desktop runtime) instead of only a bare warning.
+dsh_plugin_failure_reason() {
+  local line
+  if ! line="$(printf '%s\n' "$1" | grep -m1 -E 'installation rejected|incompatible with dsh|plugin command failed|ERR_PNPM_|error:')"; then
+    return 0
+  fi
+  # The compatibility diagnostic repeats every peer range; keep only its verdict.
+  line="$(printf '%s' "$line" | sed -E 's/: requirements \{.*$//' | cut -c1-220)"
+  printf '    %s\n' "$line"
+}
+
 # Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
 # delegates to pnpm add — fine for registry specs, but git specs pin a commit and
 # re-adding retains that lock, so present plugins always go through
 # `dsh plugin update <name> --latest`.
 dsh_plugin_install_or_update() {
-  local profile="$1" spec="$2" dsh_command="${3:-dsh}" name
+  local profile="$1" spec="$2" dsh_command="${3:-dsh}" name output
   name="$(dsh_plugin_name "$spec")"
   if "$dsh_command" plugin --profile "$profile" list 2>/dev/null | grep -qF "$name@"; then
     log "Updating dsh plugin: $spec (profile: $profile)"
-    "$dsh_command" plugin --profile "$profile" update "$name" --latest >/dev/null 2>&1 \
-      || warn "  dsh plugin update $name failed on $profile"
+    if ! output="$("$dsh_command" plugin --profile "$profile" update "$name" --latest 2>&1 >/dev/null)"; then
+      warn "  dsh plugin update $name failed on $profile"
+      dsh_plugin_failure_reason "$output"
+    fi
   else
     log "Installing dsh plugin: $spec (profile: $profile)"
-    "$dsh_command" plugin --profile "$profile" add "$spec" >/dev/null 2>&1 \
-      || warn "  dsh plugin add $spec failed on $profile"
+    if ! output="$("$dsh_command" plugin --profile "$profile" add "$spec" 2>&1 >/dev/null)"; then
+      warn "  dsh plugin add $spec failed on $profile"
+      dsh_plugin_failure_reason "$output"
+    fi
   fi
 }
 
@@ -1044,9 +1069,11 @@ dsh_profile_peer_rules() {
   printf '\n%s\n' "$rules" >> "$workspace"
 }
 
+# The skill/tool bundle set is defined outside the npm-dsh gate so the Desktop
+# block below can install it with the app's own bundled command.
+dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen"
+
 if command -v dsh >/dev/null 2>&1; then
-  # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
@@ -1124,21 +1151,29 @@ else
   warn "dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)"
 fi
 
-# The Desktop profile is Electron-owned and requires the command in its app bundle.
-# It can be managed independently of an npm dsh installation.
+# The Desktop profile is Electron-owned and booted only by the app, but its
+# plugin manager is the same "dsh plugin" command inside the app bundle. Manage
+# it with that command so it works whether or not an npm dsh CLI is installed,
+# and give it the same skill/tool bundles as the CLI profiles above.
+dsh_desktop_command=""
+for dsh_app in "/Applications/DeepSeek Harness.app" "$HOME/Applications/DeepSeek Harness.app"; do
+  dsh_desktop_command="$dsh_app/Contents/Resources/runtime/cli/bin/dsh"
+  [ -x "$dsh_desktop_command" ] && break
+  dsh_desktop_command=""
+done
 if [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/package.json" ]; then
-  for dsh_app in "/Applications/DeepSeek Harness.app" "$HOME/Applications/DeepSeek Harness.app"; do
-    dsh_desktop_command="$dsh_app/Contents/Resources/runtime/cli/bin/dsh"
-    [ -x "$dsh_desktop_command" ] && break
-  done
-  if [ -x "$dsh_desktop_command" ]; then
+  if [ -n "$dsh_desktop_command" ]; then
     # Electron owns this profile, but its pnpm settings live in the same file the
     # bundled command reads; record the expected peers before updating.
     dsh_profile_peer_rules desktop
-    dsh_plugin_install_or_update desktop github:raptoravis/yunxing "$dsh_desktop_command"
+    for dsh_bundle in $dsh_bundles; do
+      dsh_plugin_install_or_update desktop "$dsh_bundle" "$dsh_desktop_command"
+    done
   else
-    warn "  DeepSeek Harness Desktop command not found -- skipping desktop yunxing plugin"
+    warn "  DeepSeek Harness Desktop command not found -- skipping its plugins and skills"
   fi
+elif [ -n "$dsh_desktop_command" ]; then
+  log "Launch DeepSeek Harness Desktop once to initialize its profile, then re-run this script for its plugins and skills"
 fi
 
 # Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
@@ -1200,7 +1235,8 @@ fi
 # 7e2) chinese-novelist skill (raptoravis/chinese-novelist-skill) — a plain
 #      directory skill (SKILL.md + references/ + scripts/) installed into each
 #      coding agent's global skills dir as a symlink to a shared checkout.
-#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base).
+#      dsh, dst and the Desktop app all read ~/.dsh/skills via the shared
+#      filesystem skill provider (dsh-base).
 # ---------------------------------------------------------------------------
 CHINESE_NOVELIST_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/chinese-novelist-skill"
 if command -v git >/dev/null 2>&1; then
@@ -1247,8 +1283,8 @@ fi
 #      the folder (taste-skill -> design-taste-frontend, soft-skill ->
 #      high-end-visual-design) — falling back to the folder name.
 #      dsh reads ~/.dsh/skills through its filesystem skill provider
-#      (@deepseek-ai/dsh-base); the dst (dsh-tui) profile bundles dsh-base too,
-#      so a single link covers both.
+#      (@deepseek-ai/dsh-base); the dst (dsh-tui) and Desktop profiles bundle
+#      dsh-base too, so a single link covers all three.
 # ---------------------------------------------------------------------------
 TASTE_SKILL_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/taste-skill"
 if command -v git >/dev/null 2>&1; then
@@ -1316,6 +1352,79 @@ if command -v git >/dev/null 2>&1; then
   fi
 else
   warn "git not on PATH -- skipping taste-skill (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
+# 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
+#      agent skills (skills/*/SKILL.md). Clone it once and link every skill
+#      directory into each agent's global skills dir, so claude/codex/grok/
+#      dsh/dst/desktop/opencode/cursor/omp all see them. The per-project
+#      "bmad setup" step still runs inside a project (it needs uv, installed
+#      earlier by this script).
+# ---------------------------------------------------------------------------
+BMAD_SKILLS_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/bmad-method"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$BMAD_SKILLS_SRC/.git" ]; then
+    log "Updating BMAD-METHOD checkout"
+    if ! git -C "$BMAD_SKILLS_SRC" pull --ff-only --quiet 2>/dev/null; then
+      warn "  BMAD-METHOD pull failed — re-cloning"
+      rm -rf "$BMAD_SKILLS_SRC"
+    fi
+  fi
+  if [ ! -d "$BMAD_SKILLS_SRC/.git" ]; then
+    log "Cloning BMAD-METHOD into $BMAD_SKILLS_SRC"
+    mkdir -p "$(dirname "$BMAD_SKILLS_SRC")"
+    git clone --depth=1 --quiet https://github.com/bmad-code-org/BMAD-METHOD.git "$BMAD_SKILLS_SRC" \
+      || warn "  BMAD-METHOD clone failed"
+  fi
+  if [ -f "$BMAD_SKILLS_SRC/skills/bmad/SKILL.md" ]; then
+    bmad_skill_dests=(
+      "$HOME/.claude/skills"
+      "${CODEX_HOME:-$HOME/.codex}/skills"
+      "$HOME/.grok/skills"
+      "${DSH_HOME:-$HOME/.dsh}/skills"
+      "$HOME/.config/opencode/skills"
+      "$HOME/.cursor/skills"
+      "$HOME/.omp/agent/skills"
+    )
+    bmad_skill_names=" "
+    bmad_skill_count=0
+    for bmad_skill_md in "$BMAD_SKILLS_SRC"/skills/*/SKILL.md; do
+      [ -e "$bmad_skill_md" ] || continue
+      bmad_skill_dir="$(dirname "$bmad_skill_md")"
+      bmad_skill_name="$(basename "$bmad_skill_dir")"
+      bmad_skill_names="$bmad_skill_names$bmad_skill_name "
+      for dest in "${bmad_skill_dests[@]}"; do
+        mkdir -p "$dest"
+        rm -rf "$dest/$bmad_skill_name"
+        ln -sfn "$bmad_skill_dir" "$dest/$bmad_skill_name"
+      done
+      bmad_skill_count=$((bmad_skill_count + 1))
+    done
+    if [ "$bmad_skill_count" -eq 0 ]; then
+      warn "  BMAD-METHOD/skills/*/SKILL.md missing — skipping agent links"
+    else
+      log "Linked $bmad_skill_count BMAD-METHOD skills into claude/codex/grok/dsh(dst,desktop)/opencode/cursor/omp"
+      # Drop links left for a skill upstream no longer ships (removed/renamed).
+      for dest in "${bmad_skill_dests[@]}"; do
+        for dest_entry in "$dest"/*; do
+          [ -L "$dest_entry" ] || continue
+          case "$(readlink "$dest_entry" 2>/dev/null)" in
+            "$BMAD_SKILLS_SRC"/*) ;;
+            *) continue ;;
+          esac
+          case "$bmad_skill_names" in
+            *" $(basename "$dest_entry") "*) ;;
+            *) rm -f "$dest_entry"; log "  removed stale BMAD skill link: ${dest_entry##*/}" ;;
+          esac
+        done
+      done
+    fi
+  else
+    warn "  BMAD-METHOD/skills/bmad/SKILL.md missing — skipping agent links"
+  fi
+else
+  warn "git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)"
 fi
 
 # ---------------------------------------------------------------------------

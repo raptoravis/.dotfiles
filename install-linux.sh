@@ -1271,6 +1271,11 @@ fi
 # earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
+# DeepSeek Harness Desktop has no Linux build (its linux-x64 update feed returns
+# 404), so no desktop profile exists here and none is managed: the desktop profile
+# is skipped in the loops below. The macOS and Windows installers install this
+# same bundle set into ~/.dsh/profiles/desktop with the app's bundled dsh command.
+#
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
@@ -1284,21 +1289,37 @@ dsh_plugin_name() {
   esac
 }
 
+# Surface the plugin manager's rejection reason (e.g. a bundle whose dsh peer
+# ranges exclude the Desktop runtime) instead of only a bare warning.
+dsh_plugin_failure_reason() {
+  local line
+  if ! line="$(printf '%s\n' "$1" | grep -m1 -E 'installation rejected|incompatible with dsh|plugin command failed|ERR_PNPM_|error:')"; then
+    return 0
+  fi
+  # The compatibility diagnostic repeats every peer range; keep only its verdict.
+  line="$(printf '%s' "$line" | sed -E 's/: requirements \{.*$//' | cut -c1-220)"
+  printf '    %s\n' "$line"
+}
+
 # Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
 # delegates to pnpm add — fine for registry specs, but git specs pin a commit and
 # re-adding retains that lock, so present plugins always go through
 # `dsh plugin update <name> --latest`.
 dsh_plugin_install_or_update() {
-  local profile="$1" spec="$2" name
+  local profile="$1" spec="$2" name output
   name="$(dsh_plugin_name "$spec")"
   if dsh plugin --profile "$profile" list 2>/dev/null | grep -qF "$name@"; then
     log "Updating dsh plugin: $spec (profile: $profile)"
-    dsh plugin --profile "$profile" update "$name" --latest >/dev/null 2>&1 \
-      || warn "  dsh plugin update $name failed on $profile"
+    if ! output="$(dsh plugin --profile "$profile" update "$name" --latest 2>&1 >/dev/null)"; then
+      warn "  dsh plugin update $name failed on $profile"
+      dsh_plugin_failure_reason "$output"
+    fi
   else
     log "Installing dsh plugin: $spec (profile: $profile)"
-    dsh plugin --profile "$profile" add "$spec" >/dev/null 2>&1 \
-      || warn "  dsh plugin add $spec failed on $profile"
+    if ! output="$(dsh plugin --profile "$profile" add "$spec" 2>&1 >/dev/null)"; then
+      warn "  dsh plugin add $spec failed on $profile"
+      dsh_plugin_failure_reason "$output"
+    fi
   fi
 }
 
@@ -1438,7 +1459,8 @@ fi
 # 8e2) chinese-novelist skill (raptoravis/chinese-novelist-skill) — a plain
 #      directory skill (SKILL.md + references/ + scripts/) installed into each
 #      coding agent's global skills dir as a symlink to a shared checkout.
-#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base).
+#      dsh, dst and the Desktop app all read ~/.dsh/skills via the shared
+#      filesystem skill provider (dsh-base).
 # ---------------------------------------------------------------------------
 CHINESE_NOVELIST_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/chinese-novelist-skill"
 if command -v git >/dev/null 2>&1; then
@@ -1485,8 +1507,8 @@ fi
 #      the folder (taste-skill -> design-taste-frontend, soft-skill ->
 #      high-end-visual-design) — falling back to the folder name.
 #      dsh reads ~/.dsh/skills through its filesystem skill provider
-#      (@deepseek-ai/dsh-base); the dst (dsh-tui) profile bundles dsh-base too,
-#      so a single link covers both.
+#      (@deepseek-ai/dsh-base); the dst (dsh-tui) and Desktop profiles bundle
+#      dsh-base too, so a single link covers all three.
 # ---------------------------------------------------------------------------
 TASTE_SKILL_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/taste-skill"
 if command -v git >/dev/null 2>&1; then
@@ -1554,6 +1576,79 @@ if command -v git >/dev/null 2>&1; then
   fi
 else
   warn "git not on PATH -- skipping taste-skill (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
+# 8e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
+#      agent skills (skills/*/SKILL.md). Clone it once and link every skill
+#      directory into each agent's global skills dir, so claude/codex/grok/
+#      dsh/dst/desktop/opencode/cursor/omp all see them. The per-project
+#      "bmad setup" step still runs inside a project (it needs uv, installed
+#      earlier by this script).
+# ---------------------------------------------------------------------------
+BMAD_SKILLS_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/bmad-method"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$BMAD_SKILLS_SRC/.git" ]; then
+    log "Updating BMAD-METHOD checkout"
+    if ! git -C "$BMAD_SKILLS_SRC" pull --ff-only --quiet 2>/dev/null; then
+      warn "  BMAD-METHOD pull failed — re-cloning"
+      rm -rf "$BMAD_SKILLS_SRC"
+    fi
+  fi
+  if [ ! -d "$BMAD_SKILLS_SRC/.git" ]; then
+    log "Cloning BMAD-METHOD into $BMAD_SKILLS_SRC"
+    mkdir -p "$(dirname "$BMAD_SKILLS_SRC")"
+    git clone --depth=1 --quiet https://github.com/bmad-code-org/BMAD-METHOD.git "$BMAD_SKILLS_SRC" \
+      || warn "  BMAD-METHOD clone failed"
+  fi
+  if [ -f "$BMAD_SKILLS_SRC/skills/bmad/SKILL.md" ]; then
+    bmad_skill_dests=(
+      "$HOME/.claude/skills"
+      "${CODEX_HOME:-$HOME/.codex}/skills"
+      "$HOME/.grok/skills"
+      "${DSH_HOME:-$HOME/.dsh}/skills"
+      "$HOME/.config/opencode/skills"
+      "$HOME/.cursor/skills"
+      "$HOME/.omp/agent/skills"
+    )
+    bmad_skill_names=" "
+    bmad_skill_count=0
+    for bmad_skill_md in "$BMAD_SKILLS_SRC"/skills/*/SKILL.md; do
+      [ -e "$bmad_skill_md" ] || continue
+      bmad_skill_dir="$(dirname "$bmad_skill_md")"
+      bmad_skill_name="$(basename "$bmad_skill_dir")"
+      bmad_skill_names="$bmad_skill_names$bmad_skill_name "
+      for dest in "${bmad_skill_dests[@]}"; do
+        mkdir -p "$dest"
+        rm -rf "$dest/$bmad_skill_name"
+        ln -sfn "$bmad_skill_dir" "$dest/$bmad_skill_name"
+      done
+      bmad_skill_count=$((bmad_skill_count + 1))
+    done
+    if [ "$bmad_skill_count" -eq 0 ]; then
+      warn "  BMAD-METHOD/skills/*/SKILL.md missing — skipping agent links"
+    else
+      log "Linked $bmad_skill_count BMAD-METHOD skills into claude/codex/grok/dsh(dst,desktop)/opencode/cursor/omp"
+      # Drop links left for a skill upstream no longer ships (removed/renamed).
+      for dest in "${bmad_skill_dests[@]}"; do
+        for dest_entry in "$dest"/*; do
+          [ -L "$dest_entry" ] || continue
+          case "$(readlink "$dest_entry" 2>/dev/null)" in
+            "$BMAD_SKILLS_SRC"/*) ;;
+            *) continue ;;
+          esac
+          case "$bmad_skill_names" in
+            *" $(basename "$dest_entry") "*) ;;
+            *) rm -f "$dest_entry"; log "  removed stale BMAD skill link: ${dest_entry##*/}" ;;
+          esac
+        done
+      done
+    fi
+  else
+    warn "  BMAD-METHOD/skills/bmad/SKILL.md missing — skipping agent links"
+  fi
+else
+  warn "git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)"
 fi
 
 # ---------------------------------------------------------------------------

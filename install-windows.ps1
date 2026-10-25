@@ -16,8 +16,12 @@ param(
     # tools launched outside pwsh (vscode, etc.) reach
     # the network through the same proxy. Pass '' to skip.
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
-    # Uninstall all AI agent CLIs (Claude Code, Codex, OpenCode, Grok,
-    # DeepSeek Harness, omp) and remove their config directories.
+    # Uninstall all AI agent CLIs and the agent tooling this script installs
+    # (Claude Code, Codex, OpenCode, Grok, DeepSeek Harness CLI/TUI/Desktop,
+    # omp, oh-my-codex, herdr, zg, hostc, claude-mem, agent-browser): stop their
+    # processes/services, run the Desktop uninstaller, remove npm packages,
+    # config/data/cache dirs, skills checkouts, Cursor skill links and PATH
+    # entries. Shared runtimes (bun, Node, npm/pnpm caches) are kept.
     [switch]$UninstallAgents
 )
 
@@ -113,15 +117,72 @@ $DshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFIL
 if ($UninstallAgents) {
     Write-Step 'Uninstalling AI agent CLIs and cleaning config directories'
 
-    # 1) npm global uninstall
+    # Remove only agent-owned paths. Shared runtimes (bun, Node, npm/pnpm caches)
+    # and unrelated agent/IDE installs are intentionally kept.
+
+    # 1) Stop running agents and agent-owned services first: deleting files under
+    # a live process leaves locked files behind, and the Codex sandbox helper
+    # service would otherwise outlive its CLI.
+    Write-Step '  stopping running agent processes'
+    foreach ($procName in @('herdr', 'zg', 'zvec-grep', 'opencode', 'dsh', 'dsh-tui', 'DeepSeek Harness')) {
+        $procs = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
+        foreach ($proc in $procs) {
+            Write-Step "  stop $($proc.ProcessName) ($($proc.Id))"
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $CodexSandboxService = 'CodexSandboxService.OpenAI.Codex'
+    if (Get-Service -Name $CodexSandboxService -ErrorAction SilentlyContinue) {
+        Write-Step "  stop/remove service $CodexSandboxService"
+        Stop-Service -Name $CodexSandboxService -Force -ErrorAction SilentlyContinue
+        # Deleting a service needs an elevated shell; warn instead of failing the run.
+        $null = sc.exe delete $CodexSandboxService 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  could not delete the Codex sandbox service (re-run from an elevated shell to remove it)' }
+    }
+
+    # 2) DeepSeek Harness Desktop: run its registered uninstaller so the app, its
+    # registry entry and shortcuts are removed, then drop any leftover app data.
+    $DesktopRecord = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.UninstallString } | Select-Object -First 1
+    if ($DesktopRecord) {
+        $UninstallExe = $null
+        if ($DesktopRecord.UninstallString -match '^\s*"([^"]+)"') { $UninstallExe = $Matches[1] }
+        elseif ($DesktopRecord.UninstallString -match '^\s*(\S+)') { $UninstallExe = $Matches[1] }
+        if ($UninstallExe -and (Test-Path -LiteralPath $UninstallExe)) {
+            Write-Step "  uninstalling DeepSeek Harness Desktop ($($DesktopRecord.DisplayVersion))"
+            Start-Process -FilePath $UninstallExe -ArgumentList '/S', '/currentuser' -Wait -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        } else {
+            Write-Warn2 '  DeepSeek Harness Desktop uninstaller not found; removing its files instead'
+        }
+    }
+    foreach ($desktopDir in @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness'),
+        (Join-Path $env:APPDATA 'DeepSeek Harness'),
+        (Join-Path $env:LOCALAPPDATA 'DeepSeek Harness')
+    )) {
+        if (Test-Path -LiteralPath $desktopDir) {
+            Write-Step "  rm -r -fo $desktopDir"
+            Remove-Item -Recurse -Force -LiteralPath $desktopDir -ErrorAction SilentlyContinue
+        }
+    }
+
+    # 3) npm global uninstall — every agent/agent-tooling CLI the install above adds.
+    # pnpm, playwright and other shared dev tools are kept.
     if (Test-Cmd npm) {
         $AgentPackages = @(
             '@anthropic-ai/claude-code',
             '@openai/codex',
+            'oh-my-codex',
             '@opencode/cli',
             '@xai-official/grok',
             '@deepseek-ai/dsh',
-            '@deepseek-harness-tui/dsh-tui'
+            '@deepseek-harness-tui/dsh-tui',
+            '@zvec/zvec-grep',
+            'hostc',
+            'claude-mem',
+            'agent-browser',
+            'puppeteer'
         )
         foreach ($pkg in $AgentPackages) {
             Write-Step "  npm uninstall -g $pkg"
@@ -134,29 +195,88 @@ if ($UninstallAgents) {
         Write-Warn2 'npm not on PATH -- skipping npm uninstall step'
     }
 
-    # 2) Remove agent config directories
-
-    $AgentDirs = @(
+    # 4) Agent config, data, cache and skills-checkout paths. Files (.claude.json)
+    # are handled by the same helper as directories.
+    $AgentPaths = @(
         (Join-Path $env:USERPROFILE '.claude'),
+        (Join-Path $env:USERPROFILE '.claude.json'),
+        (Join-Path $env:USERPROFILE '.claude.json.backup'),
         $CodexHome,
         (Join-Path $env:USERPROFILE '.config\opencode'),
+        (Join-Path $env:USERPROFILE '.local\share\opencode'),
+        (Join-Path $env:USERPROFILE '.local\state\opencode'),
         (Join-Path $env:USERPROFILE '.grok'),
         $DshHome,
         (Join-Path $env:USERPROFILE '.omp'),
         (Join-Path $env:LOCALAPPDATA 'omp'),
         (Join-Path $env:USERPROFILE '.agents'),
+        (Join-Path $env:USERPROFILE '.herdr'),
+        (Join-Path $env:USERPROFILE '.config\herdr'),
+        (Join-Path $env:LOCALAPPDATA 'herdr'),
+        (Join-Path $env:USERPROFILE '.zvec-grep'),
+        (Join-Path $env:USERPROFILE '.agent-browser'),
+        (Join-Path $env:USERPROFILE '.local\share\yunxing'),
+        (Join-Path $env:USERPROFILE '.local\share\bmad-method'),
+        (Join-Path $env:USERPROFILE '.local\share\chinese-novelist-skill'),
+        (Join-Path $env:USERPROFILE '.local\share\taste-skill'),
         (Join-Path $env:USERPROFILE '.cache\dotfiles\agent-plugins'),
         (Join-Path $env:USERPROFILE '.cache\opencode'),
         (Join-Path $env:USERPROFILE '.cache\claude'),
         (Join-Path $env:USERPROFILE '.cache\codex'),
-        (Join-Path $env:USERPROFILE '.cache\dsh')
+        (Join-Path $env:USERPROFILE '.cache\codex-runtimes'),
+        (Join-Path $env:USERPROFILE '.cache\dsh'),
+        (Join-Path $env:USERPROFILE '.cache\puppeteer'),
+        (Join-Path $env:USERPROFILE '.cache\chrome-devtools-mcp')
     )
-    foreach ($d in $AgentDirs) {
-        if (Test-Path $d) {
-            Write-Step "  rm -r -fo $d"
-            Remove-Item -Recurse -Force -LiteralPath $d -ErrorAction SilentlyContinue
+    foreach ($p in $AgentPaths) {
+        if (-not (Test-Path -LiteralPath $p)) {
+            Write-Step "  skip (not found): $p"
+            continue
+        }
+        $item = Get-Item -LiteralPath $p -Force
+        if ($item.PSIsContainer) {
+            Write-Step "  rm -r -fo $p"
+            Remove-Item -Recurse -Force -LiteralPath $p -ErrorAction SilentlyContinue
         } else {
-            Write-Step "  skip (not found): $d"
+            Write-Step "  rm -fo $p"
+            Remove-Item -Force -LiteralPath $p -ErrorAction SilentlyContinue
+        }
+    }
+
+    # 5) omp installs into the shared bun dir; remove only its shims, not bun itself.
+    foreach ($ompShim in @(
+        (Join-Path $env:USERPROFILE '.bun\bin\omp.exe'),
+        (Join-Path $env:USERPROFILE '.bun\bin\omp.bunx'),
+        (Join-Path $env:USERPROFILE '.bun\bin\omp.cmd'),
+        (Join-Path $env:USERPROFILE '.bun\bin\omp.ps1')
+    )) {
+        if (Test-Path -LiteralPath $ompShim) {
+            Write-Step "  rm -fo $ompShim"
+            Remove-Item -Force -LiteralPath $ompShim -ErrorAction SilentlyContinue
+        }
+    }
+
+    # 6) Cursor keeps the user's IDE settings, so only drop the skill links this
+    # repo created (they point into the removed ~/.local/share checkouts).
+    $CursorSkills = Join-Path $env:USERPROFILE '.cursor\skills'
+    if (Test-Path -LiteralPath $CursorSkills) {
+        $cursorLinks = @(Get-ChildItem -LiteralPath $CursorSkills -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.LinkType -and ((@($_.Target) -join ';') -like '*\.local\share\*') })
+        foreach ($link in $cursorLinks) {
+            Write-Step "  rm skill link $($link.Name)"
+            cmd /c rmdir "$($link.FullName)" 2>$null | Out-Null
+        }
+    }
+
+    # 7) Remove the PATH entries the agent installers appended; ~/.bun\bin stays
+    # because bun is a shared runtime. Empty segments are dropped too.
+    $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($UserPath) {
+        $KeptPath = @(($UserPath -split ';') | Where-Object { $_ -and ($_ -notmatch '\\\.herdr\\|\\\.grok\\bin') })
+        $NewPath = $KeptPath -join ';'
+        if ($NewPath -ne $UserPath) {
+            Write-Step '  removing agent PATH entries from the user environment'
+            [Environment]::SetEnvironmentVariable('PATH', $NewPath, 'User')
         }
     }
 
@@ -591,6 +711,14 @@ if (Test-Cmd winget) {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
 }
 
+# The Desktop app's uninstall registration (DisplayName/DisplayVersion/InstallLocation),
+# shared by the install/update step here and the plugin step that manages its profile.
+function Get-DshDesktopUninstallRecord {
+    Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } |
+        Select-Object -First 1
+}
+
 # DeepSeek Harness Desktop ships separately from the npm CLI. Use its official
 # update feed so repeated runs download only a newer installer.
 Write-Step 'Installing/updating DeepSeek Harness Desktop'
@@ -609,8 +737,7 @@ try {
     $DesktopVersion = $DesktopVersionMatch.Groups[1].Value.Trim()
     $DesktopUrl = $DesktopUrlMatch.Groups[1].Value
     $DesktopHash = $DesktopHashMatch.Groups[1].Value
-    $DesktopRecord = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } | Select-Object -First 1
+    $DesktopRecord = Get-DshDesktopUninstallRecord
     $DesktopInstalledVersion = if ($DesktopRecord) { $DesktopRecord.DisplayVersion } else { $null }
     if (-not $DesktopInstalledVersion -and $DesktopRecord) {
         $DesktopExe = Join-Path $DesktopRecord.InstallLocation 'DeepSeek Harness.exe'
@@ -638,7 +765,7 @@ try {
             if (-not $DesktopInstalled) { throw 'installer completed but the expected version was not registered' }
             Write-Host "  DeepSeek Harness Desktop $DesktopVersion installed"
             if (-not (Test-Path (Join-Path $DshHome 'profiles\desktop\package.json'))) {
-                Write-Host '  Launch Desktop once to initialize its profile, then re-run this script to install yunxing skills'
+                Write-Host '  Launch Desktop once to initialize its profile, then re-run this script to install its plugin bundles and skills'
             }
         } finally {
             Remove-Item -LiteralPath $DesktopInstaller -Force -ErrorAction SilentlyContinue
@@ -1385,6 +1512,14 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
 # earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
+# The Electron Desktop profile gets the same six bundles below, managed with the
+# `dsh plugin` command inside the app bundle so it works even without an npm dsh CLI.
+# That runtime is the nightly build and can run ahead of the npm CLI, so its plugin
+# manager refuses a bundle whose engines.dsh / @deepseek-ai peer ranges exclude it;
+# the refusal reason is reported and the bundle is skipped (re-run after it ships a
+# compatible release). Desktop shares ~\.dsh\skills through dsh-base, so the 7e2/7e3
+# links cover its filesystem skills too.
+#
 # dsh-tui is the exception: its profile is bootstrapped lazily by the launcher on
 # first `dst` run, so it isn't on disk when this loop scans. Pre-install the skill
 # bundles into it explicitly, or the TUI boots skill-less until the next re-run.
@@ -1393,20 +1528,39 @@ function Get-DshPluginName ([string]$Spec) {
     return $Spec
 }
 
+# Surface the plugin manager's rejection reason (e.g. a bundle whose dsh peer
+# ranges exclude the Desktop app's nightly runtime) instead of only a bare warning.
+function Show-DshPluginFailure ($Output) {
+    $Reason = $Output | Select-String -Pattern 'installation rejected|incompatible with dsh|plugin command failed|ERR_PNPM_|error:' |
+        Select-Object -First 1
+    if (-not $Reason) { return }
+    # The compatibility diagnostic repeats every peer range; keep only its verdict.
+    $Text = $Reason.Line -replace ': requirements \{.*$', ''
+    if ($Text.Length -gt 220) { $Text = $Text.Substring(0, 220) }
+    Write-Host "    $Text"
+}
+
 # Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
 # delegates to pnpm add — fine for registry specs, but git specs pin a commit and
 # re-adding retains that lock, so present plugins always go through
-# `dsh plugin update <name> --latest`.
+# `dsh plugin update <name> --latest`. Output is captured so a refused bundle can
+# report the manager's reason without flooding the log with pnpm progress.
 function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$DshCommand = 'dsh') {
     $Name = Get-DshPluginName $Spec
     if (& $DshCommand plugin --profile $Profile list 2>$null | Select-String -SimpleMatch -Quiet "$Name@") {
         Write-Step "Updating dsh plugin: $Spec (profile: $Profile)"
-        & $DshCommand plugin --profile $Profile update $Name --latest 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin update $Name failed on $Profile" }
+        $Output = & $DshCommand plugin --profile $Profile update $Name --latest 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn2 "  dsh plugin update $Name failed on $Profile"
+            Show-DshPluginFailure $Output
+        }
     } else {
         Write-Step "Installing dsh plugin: $Spec (profile: $Profile)"
-        & $DshCommand plugin --profile $Profile add $Spec 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin add $Spec failed on $Profile" }
+        $Output = & $DshCommand plugin --profile $Profile add $Spec 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn2 "  dsh plugin add $Spec failed on $Profile"
+            Show-DshPluginFailure $Output
+        }
     }
 }
 
@@ -1443,9 +1597,14 @@ function Set-DshProfilePeerRules ([string]$Profile) {
     Set-Content -Path $Workspace -Value ($Content + "`n`n" + ($Rules -join "`n") + "`n") -NoNewline
 }
 
+# Skill/tool bundles for every profile that can compose them: each CLI profile and
+# the Electron Desktop profile (managed outside the npm-dsh gate further below).
+# dsh-tui is pre-installed explicitly because the launcher creates its profile
+# lazily on first `dst` run.
+$DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen')
+
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
-    $DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen')
     $DshProfilesSeen = 0
     $DshTuiCovered = $false
     foreach ($DshProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
@@ -1472,23 +1631,6 @@ if (Test-Cmd dsh) {
             Install-OrUpdate-DshPlugin 'dsh-tui' $DshBundle
         }
         Set-DshProfilePeerRules 'dsh-tui'
-    }
-
-    $DesktopProfile = Join-Path $DshHome 'profiles\desktop\package.json'
-    if (Test-Path $DesktopProfile) {
-        # Electron owns this profile, but its pnpm settings live in the same file
-        # the bundled command reads; record the expected peers before updating.
-        Set-DshProfilePeerRules 'desktop'
-        $DesktopInstall = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-            Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } |
-            Select-Object -First 1 -ExpandProperty InstallLocation
-        if (-not $DesktopInstall) { $DesktopInstall = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness' }
-        $DesktopDsh = Join-Path $DesktopInstall 'resources\runtime\cli\bin\dsh.cmd'
-        if (Test-Path $DesktopDsh) {
-            Install-OrUpdate-DshPlugin 'desktop' 'github:raptoravis/yunxing' $DesktopDsh
-        } else {
-            Write-Warn2 '  DeepSeek Harness Desktop command not found -- skipping desktop yunxing plugin'
-        }
     }
 
     foreach ($plugin in @('dshmarket', 'dsh-context', 'ds-bot')) {
@@ -1538,6 +1680,34 @@ if (Test-Cmd dsh) {
     }
 } else {
     Write-Warn2 'dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)'
+}
+
+# Desktop profile: Electron-owned and booted only by the app, but its plugin manager
+# is the `dsh plugin` command inside the app bundle. Manage it with that command so
+# it works whether or not an npm dsh CLI is installed, and give it the same
+# skill/tool bundles as the CLI profiles above. Those bundles supply Desktop's
+# modlens / agent-teams / engineering-skill-pack / mnemon / image-gen skills; the
+# ~\.dsh\skills junctions from 7e2/7e3 already reach Desktop through dsh-base.
+$DesktopProfile = Join-Path $DshHome 'profiles\desktop\package.json'
+$DesktopRecord = Get-DshDesktopUninstallRecord
+$DesktopInstall = if ($DesktopRecord) { $DesktopRecord.InstallLocation } else {
+    $DesktopFallback = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness'
+    if (Test-Path -LiteralPath (Join-Path $DesktopFallback 'DeepSeek Harness.exe')) { $DesktopFallback } else { $null }
+}
+$DesktopDsh = if ($DesktopInstall) { Join-Path $DesktopInstall 'resources\runtime\cli\bin\dsh.cmd' } else { $null }
+if (Test-Path -LiteralPath $DesktopProfile) {
+    if ($DesktopDsh -and (Test-Path -LiteralPath $DesktopDsh)) {
+        # Electron owns this profile, but its pnpm settings live in the same file
+        # the bundled command reads; record the expected peers before updating.
+        Set-DshProfilePeerRules 'desktop'
+        foreach ($DshBundle in $DshBundles) {
+            Install-OrUpdate-DshPlugin 'desktop' $DshBundle $DesktopDsh
+        }
+    } else {
+        Write-Warn2 '  DeepSeek Harness Desktop command not found -- skipping its plugins and skills'
+    }
+} elseif ($DesktopDsh -and (Test-Path -LiteralPath $DesktopDsh)) {
+    Write-Host '  Launch DeepSeek Harness Desktop once to initialize its profile, then re-run this script for its plugins and skills'
 }
 
 # Grok Build — grok CLI plugin. `grok plugin install <name>` treats <name> as a
@@ -1614,7 +1784,8 @@ if (Test-Cmd herdr) {
 # 7e2) chinese-novelist skill (raptoravis/chinese-novelist-skill) — a plain
 #      directory skill (SKILL.md + references/ + scripts/) installed into each
 #      coding agent's global skills dir as a junction to a shared checkout.
-#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base).
+#      dsh reads ~/.dsh/skills via its filesystem skill provider (dsh-base); the
+#      dsh-tui and Desktop profiles bundle dsh-base too, so one junction covers all.
 # ---------------------------------------------------------------------------
 $NovelistSrc = Join-Path $env:USERPROFILE '.local\share\chinese-novelist-skill'
 if (Test-Cmd git) {
@@ -1660,8 +1831,8 @@ if (Test-Cmd git) {
 #      the folder (taste-skill -> design-taste-frontend, soft-skill ->
 #      high-end-visual-design) — falling back to the folder name.
 #      dsh reads ~\.dsh\skills through its filesystem skill provider
-#      (@deepseek-ai/dsh-base); the dst (dsh-tui) profile bundles dsh-base too,
-#      so a single link covers both.
+#      (@deepseek-ai/dsh-base); the dst (dsh-tui) and Desktop profiles bundle
+#      dsh-base too, so a single junction covers all three.
 # ---------------------------------------------------------------------------
 $TasteSkillSrc = Join-Path $env:USERPROFILE '.local\share\taste-skill'
 if (Test-Cmd git) {
@@ -1728,6 +1899,76 @@ if (Test-Cmd git) {
     }
 } else {
     Write-Warn2 'git not on PATH -- skipping taste-skill (re-run after git is installed)'
+}
+
+# ---------------------------------------------------------------------------
+# 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
+#      agent skills (skills\<name>\SKILL.md). Clone it once and link every skill
+#      directory into each agent's global skills dir, so claude/codex/grok/
+#      dsh/dst/desktop/opencode/cursor/omp all see them. The per-project
+#      "bmad setup" step still runs inside a project (it needs uv, installed
+#      earlier by this script).
+# ---------------------------------------------------------------------------
+$BmadSkillsSrc = Join-Path $env:USERPROFILE '.local\share\bmad-method'
+if (Test-Cmd git) {
+    if (Test-Path (Join-Path $BmadSkillsSrc '.git')) {
+        Write-Step 'Updating BMAD-METHOD checkout'
+        git -C $BmadSkillsSrc pull --ff-only --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn2 '  BMAD-METHOD pull failed -- re-cloning'
+            Remove-Item -Recurse -Force $BmadSkillsSrc -ErrorAction SilentlyContinue
+        }
+    }
+    if (-not (Test-Path (Join-Path $BmadSkillsSrc '.git'))) {
+        Write-Step 'Cloning BMAD-METHOD checkout'
+        New-Item -ItemType Directory -Force -Path (Split-Path $BmadSkillsSrc) | Out-Null
+        git clone --depth=1 --quiet https://github.com/bmad-code-org/BMAD-METHOD.git $BmadSkillsSrc 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  BMAD-METHOD clone failed' }
+    }
+    if (Test-Path (Join-Path $BmadSkillsSrc 'skills\bmad\SKILL.md')) {
+        Write-Step 'Linking BMAD-METHOD skills into coding agents (claude/codex/grok/dsh/dst/desktop/opencode/cursor/omp)'
+        $BmadSkillDests = @(
+            (Join-Path $env:USERPROFILE '.claude\skills'),
+            (Join-Path $CodexHome 'skills'),
+            (Join-Path $env:USERPROFILE '.grok\skills'),
+            (Join-Path $DshHome 'skills'),
+            (Join-Path $env:USERPROFILE '.config\opencode\skills'),
+            (Join-Path $env:USERPROFILE '.cursor\skills'),
+            (Join-Path $env:USERPROFILE '.omp\agent\skills')
+        )
+        $BmadSkillDirs = @(Get-ChildItem -Path (Join-Path $BmadSkillsSrc 'skills') -Directory -ErrorAction SilentlyContinue |
+            Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') })
+        $BmadSkillNames = @()
+        foreach ($BmadSkillDir in $BmadSkillDirs) {
+            $BmadSkillNames += $BmadSkillDir.Name
+            foreach ($BmadDest in $BmadSkillDests) {
+                New-Item -ItemType Directory -Force -Path $BmadDest | Out-Null
+                $BmadLink = Join-Path $BmadDest $BmadSkillDir.Name
+                # rmdir drops a junction (dangling ones included) without touching
+                # its target; Remove-Item -Recurse would follow it.
+                cmd /c rmdir "$BmadLink" 2>$null | Out-Null
+                New-Item -ItemType Junction -Path $BmadLink -Target $BmadSkillDir.FullName | Out-Null
+            }
+        }
+        if ($BmadSkillNames.Count -eq 0) {
+            Write-Warn2 '  BMAD-METHOD\skills\*\SKILL.md missing -- skipping agent links'
+        } else {
+            Write-Step "Linked $($BmadSkillNames.Count) BMAD-METHOD skills into coding agents (claude/codex/grok/dsh/dst/desktop/opencode/cursor/omp)"
+            # Drop junctions left for a skill upstream no longer ships.
+            foreach ($BmadDest in $BmadSkillDests) {
+                $BmadStale = @(Get-ChildItem -Path $BmadDest -Force -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LinkType -eq 'Junction' -and (@($_.Target) -join ';') -like "$BmadSkillsSrc\*" -and $BmadSkillNames -notcontains $_.Name })
+                foreach ($BmadEntry in $BmadStale) {
+                    cmd /c rmdir "$($BmadEntry.FullName)" 2>$null | Out-Null
+                    Write-Step "  removed stale BMAD skill link: $($BmadEntry.Name)"
+                }
+            }
+        }
+    } else {
+        Write-Warn2 '  BMAD-METHOD/skills/bmad/SKILL.md missing -- skipping agent links'
+    }
+} else {
+    Write-Warn2 'git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)'
 }
 
 # ---------------------------------------------------------------------------
