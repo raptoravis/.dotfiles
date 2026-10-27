@@ -1365,9 +1365,10 @@ fi
 # 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
 #      agent skills (skills/*/SKILL.md). Clone it once and link every skill
 #      directory into each agent's global skills dir, so claude/codex/grok/
-#      dsh/dst/desktop/opencode/cursor/omp all see them. The per-project
-#      "bmad setup" step still runs inside a project (it needs uv, installed
-#      earlier by this script).
+#      dsh/dst/desktop/opencode/cursor/omp all see them. v7 is the preview line
+#      on the default branch (main), not yet tagged. The per-project "bmad
+#      setup" step still runs inside a project (it needs uv, installed earlier
+#      by this script).
 # ---------------------------------------------------------------------------
 BMAD_SKILLS_SRC="${XDG_DATA_HOME:-$HOME/.local/share}/bmad-method"
 if command -v git >/dev/null 2>&1; then
@@ -1381,7 +1382,7 @@ if command -v git >/dev/null 2>&1; then
   if [ ! -d "$BMAD_SKILLS_SRC/.git" ]; then
     log "Cloning BMAD-METHOD into $BMAD_SKILLS_SRC"
     mkdir -p "$(dirname "$BMAD_SKILLS_SRC")"
-    git clone --depth=1 --quiet https://github.com/bmad-code-org/BMAD-METHOD.git "$BMAD_SKILLS_SRC" \
+    git clone --depth=1 --branch main --quiet https://github.com/bmad-code-org/BMAD-METHOD.git "$BMAD_SKILLS_SRC" \
       || warn "  BMAD-METHOD clone failed"
   fi
   if [ -f "$BMAD_SKILLS_SRC/skills/bmad/SKILL.md" ]; then
@@ -1440,9 +1441,9 @@ fi
 #      ships it from Git only (no PyPI, no npm), so it installs as a uv tool
 #      with the TUI extra; sessions are driven through tmux (the POSIX backend,
 #      installed above). Policy is per project in .bmad-loop/policy.toml,
-#      written by "bmad-loop init". Upstream is early beta and asks for a
-#      pinned release, so this tracks the newest vX.Y.Z tag rather than the tip
-#      of the default branch.
+#      written by "bmad-loop init". BMAD v7 support ships only on the default
+#      branch (the newest vX.Y.Z tag still predates it), so this tracks main
+#      and refreshes it on every run.
 # ---------------------------------------------------------------------------
 BMAD_LOOP_REPO="https://github.com/bmad-code-org/bmad-loop.git"
 
@@ -1456,17 +1457,6 @@ bmad_loop_gt() {
     }
     exit 1
   }'
-}
-
-# Biggest vX.Y.Z on stdin. awk, not sort -V: BSD sort on macOS has no -V.
-bmad_loop_max_tag() {
-  awk -F. '
-    { maj = $1 + 0; min = $2 + 0; pat = $3 + 0
-      if (!seen || maj > bmaj || (maj == bmaj && min > bmin) \
-          || (maj == bmaj && min == bmin && pat > bpat)) {
-        seen = 1; bmaj = maj; bmin = min; bpat = pat; best = $0
-      } }
-    END { if (seen) print best }'
 }
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -1492,23 +1482,12 @@ else
     fi
   fi
 
-  # Track the newest release tag (pre-release tags are ignored) so upgrades stay
-  # review-sized; fall back to the default branch when tags cannot be read.
+  # BMAD v7 support ships only on the default branch (the newest vX.Y.Z tag
+  # still predates it), so track main and refresh it on every run. main is not
+  # versioned -- the tool reports the same version as the last release tag --
+  # so there is no tag to version-compare against.
   bmad_loop_ref="main"
-  if command -v git >/dev/null 2>&1; then
-    bmad_loop_tag="$(git ls-remote --tags --refs "$BMAD_LOOP_REPO" 'v*' 2>/dev/null \
-      | sed -n 's#.*refs/tags/v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$#\1#p' \
-      | bmad_loop_max_tag)"
-    [[ -n "$bmad_loop_tag" ]] && bmad_loop_ref="v$bmad_loop_tag"
-  fi
   bmad_loop_spec="bmad-loop[tui] @ git+${BMAD_LOOP_REPO}@${bmad_loop_ref}"
-  bmad_loop_wanted="${bmad_loop_ref#v}"
-
-  bmad_loop_version=""
-  if command -v bmad-loop >/dev/null 2>&1; then
-    bmad_loop_version="$(bmad-loop --version 2>/dev/null \
-      | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
-  fi
 
   if ! command -v bmad-loop >/dev/null 2>&1; then
     log "Installing bmad-loop[tui] ($bmad_loop_ref)"
@@ -1516,14 +1495,11 @@ else
     # default does not land outside that range (uv downloads it when missing).
     uv tool install --python 3.14 "$bmad_loop_spec" \
       || warn "  bmad-loop install failed"
-  elif [[ "$bmad_loop_ref" == v* && -n "$bmad_loop_version" ]] \
-       && bmad_loop_gt "$bmad_loop_wanted" "$bmad_loop_version"; then
-    log "Upgrading bmad-loop: $bmad_loop_version -> $bmad_loop_wanted"
-    # A tag change is a new requirement, so --force replaces the tool env.
-    uv tool install --force --python 3.14 "$bmad_loop_spec" \
-      || warn "  bmad-loop upgrade failed"
   else
-    log "bmad-loop already installed (${bmad_loop_version:-version unknown})"
+    log "Refreshing bmad-loop from $bmad_loop_ref"
+    # --force moves an existing env (possibly a vX.Y.Z release) onto main.
+    uv tool install --force --python 3.14 "$bmad_loop_spec" \
+      || warn "  bmad-loop refresh failed"
   fi
 
   if command -v bmad-loop >/dev/null 2>&1; then

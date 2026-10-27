@@ -1985,9 +1985,10 @@ if (Test-Cmd git) {
 # 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
 #      agent skills (skills\<name>\SKILL.md). Clone it once and link every skill
 #      directory into each agent's global skills dir, so claude/codex/grok/
-#      dsh/dst/desktop/opencode/cursor/omp all see them. The per-project
-#      "bmad setup" step still runs inside a project (it needs uv, installed
-#      earlier by this script).
+#      dsh/dst/desktop/opencode/cursor/omp all see them. v7 is the preview line
+#      on the default branch (main), not yet tagged. The per-project "bmad
+#      setup" step still runs inside a project (it needs uv, installed earlier
+#      by this script).
 # ---------------------------------------------------------------------------
 $BmadSkillsSrc = Join-Path $env:USERPROFILE '.local\share\bmad-method'
 if (Test-Cmd git) {
@@ -2002,7 +2003,7 @@ if (Test-Cmd git) {
     if (-not (Test-Path (Join-Path $BmadSkillsSrc '.git'))) {
         Write-Step 'Cloning BMAD-METHOD checkout'
         New-Item -ItemType Directory -Force -Path (Split-Path $BmadSkillsSrc) | Out-Null
-        git clone --depth=1 --quiet https://github.com/bmad-code-org/BMAD-METHOD.git $BmadSkillsSrc 2>$null
+        git clone --depth=1 --branch main --quiet https://github.com/bmad-code-org/BMAD-METHOD.git $BmadSkillsSrc 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  BMAD-METHOD clone failed' }
     }
     if (Test-Path (Join-Path $BmadSkillsSrc 'skills\bmad\SKILL.md')) {
@@ -2060,8 +2061,9 @@ if (Test-Cmd git) {
 #      pwsh >= 7.3 on PATH; bmad-loop run refuses to start below either.
 #      Policy (verify commands, worktree isolation, review CLI) is per project
 #      in .bmad-loop/policy.toml, written by "bmad-loop init" - nothing to set
-#      up here. Upstream is early beta and asks for a pinned release, so this
-#      tracks the newest vX.Y.Z tag rather than the moving default branch.
+#      up here. BMAD v7 support ships only on the default branch (the newest
+#      vX.Y.Z tag still predates it), so this tracks main and refreshes it on
+#      every run.
 # ---------------------------------------------------------------------------
 $BmadLoopRepo = 'https://github.com/bmad-code-org/bmad-loop.git'
 $BmadLoopPython = '3.14'   # upstream verifies 3.11-3.14; a 3.15 default is untested
@@ -2097,15 +2099,11 @@ if (Test-Cmd pwsh) {
 if (-not (Test-Cmd uv)) {
     Write-Warn2 'uv not on PATH - skipping bmad-loop (re-run after uv is installed)'
 } else {
-    # Track the newest release tag (pre-release tags are ignored) so upgrades
-    # stay review-sized; fall back to the default branch if tags cannot be read.
+    # BMAD v7 support ships only on the default branch (the newest vX.Y.Z tag
+    # still predates it), so track main and refresh it on every run. main is not
+    # versioned -- the tool reports the same version as the last release tag --
+    # so there is no tag to version-compare against.
     $BmadLoopRef = 'main'
-    if (Test-Cmd git) {
-        $bmadLoopTags = @(git ls-remote --tags --refs $BmadLoopRepo 'v*' 2>$null |
-            ForEach-Object { if ($_ -match 'refs/tags/v?(\d+\.\d+\.\d+)$') { [version]$Matches[1] } } |
-            Sort-Object)
-        if ($bmadLoopTags.Count -gt 0) { $BmadLoopRef = 'v' + $bmadLoopTags[-1].ToString() }
-    }
     $BmadLoopSpec = "bmad-loop[tui] @ git+$BmadLoopRepo@$BmadLoopRef"
 
     # uv tool shims land in `uv tool dir --bin`; refresh this session's PATH so a
@@ -2116,26 +2114,16 @@ if (-not (Test-Cmd uv)) {
     }
 
     $bmadLoopInstalled = Test-Cmd bmad-loop
-    $bmadLoopVersion = $null
-    if ($bmadLoopInstalled) {
-        $bmadLoopRaw = bmad-loop --version 2>$null | Select-Object -First 1
-        if ($bmadLoopRaw -match '(\d+\.\d+\.\d+)') { $bmadLoopVersion = [version]$Matches[1] }
-    }
-    $bmadLoopWanted = $null
-    if ($BmadLoopRef -match '^v(\d+\.\d+\.\d+)$') { $bmadLoopWanted = [version]$Matches[1] }
 
     if (-not $bmadLoopInstalled) {
         Write-Step "Installing bmad-loop[tui] ($BmadLoopRef, Python $BmadLoopPython)"
         uv tool install --python $BmadLoopPython $BmadLoopSpec
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  bmad-loop install failed' }
-    } elseif ($bmadLoopWanted -and $bmadLoopVersion -and $bmadLoopVersion -lt $bmadLoopWanted) {
-        Write-Step "Upgrading bmad-loop: $bmadLoopVersion -> $bmadLoopWanted"
-        # A tag change is a new requirement, so --force replaces the tool env.
-        uv tool install --force --python $BmadLoopPython $BmadLoopSpec
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  bmad-loop upgrade failed' }
     } else {
-        $bmadLoopShown = if ($bmadLoopVersion) { $bmadLoopVersion.ToString() } else { 'version unknown' }
-        Write-Host "  bmad-loop already installed ($bmadLoopShown)"
+        Write-Step "Refreshing bmad-loop from $BmadLoopRef"
+        # --force moves an existing env (possibly a vX.Y.Z release) onto main.
+        uv tool install --force --python $BmadLoopPython $BmadLoopSpec
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  bmad-loop refresh failed' }
     }
 
     if (Test-Cmd bmad-loop) {
