@@ -70,3 +70,6 @@ reasonix.toml
 .agent-teams/
 install-linux.sh
 .scratch/
+
+# Local BMad plans and workflow output
+/_bmad-output/
