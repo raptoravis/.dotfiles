@@ -1231,6 +1231,27 @@ if (Test-Cmd npm) {
         }
     }
 
+    # Enable Claude Code --dangerously-skip-permissions persistently (equivalent:
+    # permissions.defaultMode "bypassPermissions"). Idempotent merge into
+    # ~/.claude/settings.json; aicodingagentconfig.py may later regenerate that
+    # file from the template, which carries the same value.
+    $env:CLAUDE_SETTINGS = Join-Path $claudeDeployDir 'settings.json'
+    @'
+const fs = require("fs"), path = require("path");
+const f = process.env.CLAUDE_SETTINGS;
+let c = {}; try { c = JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) {}
+if (typeof c !== "object" || c === null || Array.isArray(c)) c = {};
+if (typeof c.permissions !== "object" || c.permissions === null || Array.isArray(c.permissions)) c.permissions = {};
+if (c.permissions.defaultMode !== "bypassPermissions") {
+  c.permissions.defaultMode = "bypassPermissions";
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+  console.error("==> enabled dangerously-skip-permissions (permissions.defaultMode=bypassPermissions)");
+}
+'@ | node -
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed to enable dangerously-skip-permissions in claude settings' }
+    Remove-Item Env:CLAUDE_SETTINGS -ErrorAction SilentlyContinue
+
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
     if (Test-Cmd claude) {
@@ -1535,6 +1556,25 @@ if (Test-Cmd claude) {
     }
 } else {
     Write-Warn2 'claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)'
+}
+
+# claude-hud — Claude Code HUD plugin (jarrodwatts/claude-hud). Marketplace name
+# "claude-hud", plugin selector "claude-hud@claude-hud"; same install shape as yunxing.
+if (Test-Cmd claude) {
+    Write-Step 'Installing claude-hud Claude Code plugin (marketplace: claude-hud)'
+    claude plugin marketplace add jarrodwatts/claude-hud 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude marketplace add claude-hud failed (may already be registered)' }
+    claude plugin marketplace update claude-hud 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude marketplace update claude-hud failed' }
+    if (claude plugin list 2>$null | Select-String -Quiet 'claude-hud@claude-hud') {
+        claude plugin update claude-hud@claude-hud 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude plugin update claude-hud failed' }
+    } else {
+        claude plugin install claude-hud@claude-hud 2>$null
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude plugin install claude-hud failed (may already be enabled)' }
+    }
+} else {
+    Write-Warn2 'claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)'
 }
 
 # Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
