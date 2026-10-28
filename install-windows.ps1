@@ -1557,8 +1557,19 @@ if (Test-Cmd zg) {
     $zgArgs = @('--force')
     foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
     Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
-    & zg install @zgArgs --yes
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  zg install failed (see zg output above; MCP config conflict needs cleanup, an already-running daemon is benign)' }
+    $zgOutput = & zg install @zgArgs --yes 2>&1
+    $zgExitCode = $LASTEXITCODE
+    $zgText = ($zgOutput | Out-String).TrimEnd()
+    if ($zgText) { Write-Host $zgText }
+    if ($zgExitCode -ne 0) {
+        if ($zgText -match 'EADDRINUSE') {
+            Write-Step '  zg server start skipped: port already in use (an existing or legacy server may be running; see zg output above)'
+        } elseif ($zgText -match 'conflicting|unmanaged') {
+            Write-Warn2 '  zg install failed: MCP config conflict needs cleanup (see zg output above)'
+        } else {
+            Write-Warn2 '  zg install failed (see zg output above)'
+        }
+    }
 }
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
