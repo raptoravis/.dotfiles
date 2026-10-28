@@ -1151,13 +1151,15 @@ if (-not (Test-Cmd herdr)) {
 # 7b3) omp — coding agent with the IDE wired in (Windows-native). bin: `omp`,
 #      config under ~/.omp. Supersedes the retired Pi coding agent.
 # ---------------------------------------------------------------------------
-if (-not (Test-Cmd omp)) {
-    Write-Step 'Installing omp (coding agent)'
-    irm 'https://omp.sh/install.ps1' | iex
-    if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
+# 安装器是幂等的：binary 模式命中 latest/${TARGET}?channel=stable，source 模式
+# `bun install -g` 拉 latest。未装过 → 安装；已装过 → 同样跑安装器更新到最新。
+if (Test-Cmd omp) {
+    Write-Step 'Updating omp (coding agent) to latest'
 } else {
-    Write-Host '  omp already installed'
+    Write-Step 'Installing omp (coding agent)'
 }
+irm 'https://omp.sh/install.ps1' | iex
+if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
 
 # ---------------------------------------------------------------------------
 # 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)
