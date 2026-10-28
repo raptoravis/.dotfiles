@@ -19,18 +19,10 @@ theme_wt         = "Tokyo Night"               # Windows Terminal — define col
 "common/bash" = "~/.config/bash"
 "common/tmux/tmux.conf" = "~/.tmux.conf"
 "common/uv" = "~/.config/uv"
-# NOTE: settings.json is intentionally NOT symlinked here. It is a generated
-# file written by common/scripts/aicodingagentconfig.py from the
-# common/scripts/aicodingagentsettings/claude.json template plus the
-# machine-local ~/.aicodingagentconfig.jsonc (apikey/baseurl/models). A symlink
-# would let the auth token leak into this repo on every provider switch.
-"common/claude/statusline.mjs" = "~/.claude/statusline.mjs"
-"common/claude/claude-hud-usage-refresh.mjs" = "~/.claude/claude-hud-usage-refresh.mjs"
-"common/claude/CLAUDE.md" = "~/.claude/CLAUDE.md"
-"common/claude/claude-hud-config.json" = "~/.claude/plugins/claude-hud/config.json"
-"common/codex/AGENTS.md" = "~/.codex/AGENTS.md"
-"common/opencode/AGENTS.md" = "~/.config/opencode/AGENTS.md"
-"common/grok/AGENTS.md" = "~/.grok/AGENTS.md"
+# NOTE: coding-agent config (claude/codex/opencode/grok settings, statusline,
+# CLAUDE.md, AGENTS.md, claude-hud) is intentionally NOT symlinked here. Those
+# files are machine-local and generated/updated by the install scripts and
+# common/scripts/aicodingagentconfig.py, not maintained as tracked dotfiles.
 "common/nushell" = "~/.config/nushell"
 "common/scripts/check-balance.py" = "~/.local/bin/check-balance.py"
 

@@ -487,6 +487,27 @@ if command -v npm >/dev/null 2>&1; then
   # for humans and agents. bin: `zg`. Requires Node.js >= 22.
   npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)"
 
+  # Deploy Claude Code statusline / claude-hud helpers into ~/.claude/.
+  # These were previously dotter-symlinked; now copied here so dotter no longer
+  # manages coding-agent config. Generated settings.json (aicodingagentconfig.py)
+  # points statusLine at ~/.claude/statusline.mjs, which spawns the
+  # claude-hud-usage-refresh.mjs refresher and reads plugins/claude-hud/config.json.
+  deploy_claude_helpers() {
+    local src claude_dir
+    claude_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    mkdir -p "$claude_dir/plugins/claude-hud"
+    src="$DOTFILES_DIR/common/claude"
+    # rm -f first: a pre-existing dotter symlink must be replaced by a real copy.
+    rm -f "$claude_dir/statusline.mjs" "$claude_dir/claude-hud-usage-refresh.mjs" "$claude_dir/plugins/claude-hud/config.json"
+    install -m 0644 "$src/statusline.mjs" "$claude_dir/statusline.mjs"
+    install -m 0644 "$src/claude-hud-usage-refresh.mjs" "$claude_dir/claude-hud-usage-refresh.mjs"
+    install -m 0644 "$src/claude-hud-config.json" "$claude_dir/plugins/claude-hud/config.json"
+  }
+  if [[ -d "$DOTFILES_DIR/common/claude" ]]; then
+    log "Deploying Claude Code statusline / claude-hud helpers"
+    deploy_claude_helpers || warn "  claude helper deploy failed"
+  fi
+
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
   if command -v claude >/dev/null 2>&1; then
@@ -616,8 +637,6 @@ fi
 # 7d) Yunxing plugin (raptoravis/yunxing)
 #     Claude Code — marketplace name "yunxing" (derived from
 #     .claude-plugin/marketplace.json), plugin selector "yunxing@yunxing".
-#     Also redundantly declared in common/claude/settings.json (enabledPlugins)
-#     for fresh dotter-only setups.
 #     Codex — marketplace name "yunxing", plugin selector "yunxing@yunxing"
 #     (derived from .codex-plugin/plugin.json).
 #     OpenCode — native plugin module via git URL.

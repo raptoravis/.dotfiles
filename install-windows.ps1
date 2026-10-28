@@ -1211,6 +1211,26 @@ if (Test-Cmd npm) {
     # for humans and agents. bin: `zg`. Requires Node.js >= 22.
     Install-NpmCliIfStale '@zvec/zvec-grep' 'zg (zvec-grep)'
 
+    # Deploy Claude Code statusline / claude-hud helpers into ~/.claude/.
+    # These were previously dotter-symlinked; now copied here so dotter no longer
+    # manages coding-agent config. Generated settings.json (aicodingagentconfig.py)
+    # points statusLine at ~/.claude/statusline.mjs, which spawns the
+    # claude-hud-usage-refresh.mjs refresher and reads plugins/claude-hud/config.json.
+    $claudeDeployDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+    $claudeDeploySrc = Join-Path $DotfilesDir 'common\claude'
+    if (Test-Path $claudeDeploySrc) {
+        Write-Step 'Deploying Claude Code statusline / claude-hud helpers'
+        try {
+            $hudPluginDir = Join-Path $claudeDeployDir 'plugins\claude-hud'
+            New-Item -ItemType Directory -Path $hudPluginDir -Force | Out-Null
+            Copy-Item -Path (Join-Path $claudeDeploySrc 'statusline.mjs') -Destination (Join-Path $claudeDeployDir 'statusline.mjs') -Force -ErrorAction Stop
+            Copy-Item -Path (Join-Path $claudeDeploySrc 'claude-hud-usage-refresh.mjs') -Destination (Join-Path $claudeDeployDir 'claude-hud-usage-refresh.mjs') -Force -ErrorAction Stop
+            Copy-Item -Path (Join-Path $claudeDeploySrc 'claude-hud-config.json') -Destination (Join-Path $hudPluginDir 'config.json') -Force -ErrorAction Stop
+        } catch {
+            Write-Warn2 "  claude helper deploy failed: $_"
+        }
+    }
+
     # Register upstash/context7 as an MCP server for Claude Code & Codex.
     # Idempotent: `mcp add` errors if already registered, which we swallow.
     if (Test-Cmd claude) {
@@ -1355,8 +1375,6 @@ if (Test-Cmd npm) {
 # 7d) Yunxing plugin (raptoravis/yunxing)
 #     Claude Code — marketplace name "yunxing" (derived from
 #     .claude-plugin/marketplace.json), plugin selector "yunxing@yunxing".
-#     Also redundantly declared in common/claude/settings.json (enabledPlugins)
-#     for fresh dotter-only setups.
 #     Codex — marketplace name "yunxing", plugin selector "yunxing@yunxing"
 #     (derived from .codex-plugin/plugin.json).
 #     OpenCode — native plugin module via git URL.
