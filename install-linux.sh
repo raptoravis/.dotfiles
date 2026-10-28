@@ -1312,6 +1312,13 @@ else
   warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
 fi
 
+# Apply local policy after plugin setup, which may generate global instructions.
+if command -v node >/dev/null 2>&1; then
+  log "Updating global agent commit/push authorization rules"
+  node "$DOTFILES_DIR/common/scripts/install-agent-instructions.mjs" --all \
+    || warn "  global agent instructions update failed"
+fi
+
 # dsh — DeepSeek Harness plugins (package.json dsh.bundle → cordis.patch.yml).
 # dshmarket: in-harness plugin marketplace; dsh-context: context insight panel;
 # dsh-browser-use: Browser Use Cloud bridge (removed; no 0.2.0-rc-compatible release);

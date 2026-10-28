@@ -902,6 +902,13 @@ else
   warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
 fi
 
+# Apply local policy after plugin setup, which may generate global instructions.
+if command -v node >/dev/null 2>&1; then
+  log "Updating global agent commit/push authorization rules"
+  node "$DOTFILES_DIR/common/scripts/install-agent-instructions.mjs" --all \
+    || warn "  global agent instructions update failed"
+fi
+
 # DeepSeek Harness Desktop has a separate release feed from the npm CLI. Download
 # the architecture-matched app only when the installed version is older.
 install_dsh_desktop_mac() {
