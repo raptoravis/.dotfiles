@@ -880,19 +880,27 @@ if command -v npm >/dev/null 2>&1; then
   # Enable Claude Code --dangerously-skip-permissions persistently (equivalent:
   # permissions.defaultMode "bypassPermissions"). Idempotent merge into
   # ~/.claude/settings.json; aicodingagentconfig.py may later regenerate that
-  # file from the template, which carries the same value.
+  # file from the template, which carries the same value. Also wire the
+  # deployed HUD launcher on fresh installs, preserving an existing statusline.
   CLAUDE_SETTINGS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" node -e '
     const fs = require("fs"), path = require("path");
     const f = process.env.CLAUDE_SETTINGS;
     let c = {}; try { c = JSON.parse(fs.readFileSync(f, "utf8")); } catch (e) {}
     if (typeof c !== "object" || c === null || Array.isArray(c)) c = {};
     if (typeof c.permissions !== "object" || c.permissions === null || Array.isArray(c.permissions)) c.permissions = {};
-    if (c.permissions.defaultMode !== "bypassPermissions") {
+    const needsStatusLine = !c.statusLine?.command;
+    if (c.permissions.defaultMode !== "bypassPermissions" || needsStatusLine) {
       c.permissions.defaultMode = "bypassPermissions";
+      const quote = String.fromCharCode(39);
+      const launcher = path.join(path.dirname(f), "statusline.mjs").replace(/\\/g, "/");
+      if (needsStatusLine) c.statusLine = {
+        type: "command",
+        command: "node " + quote + launcher.replaceAll(quote, quote + "\"" + quote + "\"" + quote) + quote,
+      };
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
     }
-  ' || warn "  failed to enable dangerously-skip-permissions in claude settings"
+  ' || warn "  failed to configure Claude permissions / HUD statusline"
 
   # Register upstash/context7 as an MCP server for Claude Code & Codex.
   # Idempotent: `mcp add` errors if already registered, which we swallow.
