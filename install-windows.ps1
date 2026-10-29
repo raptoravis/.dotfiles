@@ -1153,13 +1153,24 @@ if (-not (Test-Cmd herdr)) {
 # ---------------------------------------------------------------------------
 # 安装器是幂等的：binary 模式命中 latest/${TARGET}?channel=stable，source 模式
 # `bun install -g` 拉 latest。未装过 → 安装；已装过 → 同样跑安装器更新到最新。
-if (Test-Cmd omp) {
-    Write-Step 'Updating omp (coding agent) to latest'
-} else {
-    Write-Step 'Installing omp (coding agent)'
+# omp needs a recent Bun; rerun the official installer to install/update it first.
+Write-Step 'Installing/updating Bun to latest for omp'
+try {
+    irm 'https://bun.sh/install.ps1' -ErrorAction Stop | iex -ErrorAction Stop
+    $BunInstallDir = if ($env:BUN_INSTALL) { $env:BUN_INSTALL } else { Join-Path $env:USERPROFILE '.bun' }
+    $BunExe = Join-Path $BunInstallDir 'bin\bun.exe'
+    if (-not (Test-Path -LiteralPath $BunExe)) { throw "Bun executable not found: $BunExe" }
+    $env:PATH = "$(Join-Path $BunInstallDir 'bin');$env:PATH"
+    if (Test-Cmd omp) {
+        Write-Step 'Updating omp (coding agent) to latest'
+    } else {
+        Write-Step 'Installing omp (coding agent)'
+    }
+    irm 'https://omp.sh/install.ps1' -ErrorAction Stop | iex -ErrorAction Stop
+    if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
+} catch {
+    Write-Warn2 "  Bun/omp install failed: $_"
 }
-irm 'https://omp.sh/install.ps1' | iex
-if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
 
 # ---------------------------------------------------------------------------
 # 7c) Global npm tools (hostc — Cloudflare-Workers edge tunnel CLI)

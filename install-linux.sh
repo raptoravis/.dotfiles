@@ -698,12 +698,19 @@ fi
 # ---------------------------------------------------------------------------
 # 安装器是幂等的：binary 模式命中 latest/${TARGET}?channel=stable，source 模式
 # `bun install -g` 拉 latest。未装过 → 安装；已装过 → 同样跑安装器更新到最新。
-if command -v omp >/dev/null 2>&1; then
-  log "Updating omp (coding agent) to latest"
+# omp needs a recent Bun; rerun the official installer to install/update it first.
+log "Installing/updating Bun to latest for omp"
+if curl -fsSL https://bun.com/install | bash; then
+  export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
+  if command -v omp >/dev/null 2>&1; then
+    log "Updating omp (coding agent) to latest"
+  else
+    log "Installing omp (coding agent)"
+  fi
+  curl -fsSL https://omp.sh/install | sh || warn "  omp install failed"
 else
-  log "Installing omp (coding agent)"
+  warn "  Bun install/update failed -- skipping omp install"
 fi
-curl -fsSL https://omp.sh/install | sh || warn "  omp install failed"
 # omp installs to ~/.local/bin (overridable via PI_INSTALL_DIR)
 [[ -d "$HOME/.local/bin" ]] && export PATH="$HOME/.local/bin:$PATH"
 
