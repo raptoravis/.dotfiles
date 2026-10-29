@@ -1335,6 +1335,7 @@ fi
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
+# dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
 # chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
 # platform is `web`, so it is installed with the web/UI plugins below, not into
@@ -1410,7 +1411,7 @@ dsh_plugin_install_or_update() {
 if cmd_exists_local dsh; then
   # CLI profiles keep their own skill/tool bundles. The official Desktop app
   # has no Linux release; its reserved profile cannot be managed by npm dsh.
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do

@@ -1042,6 +1042,7 @@ install_dsh_desktop_mac
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
+# dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
 # chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
 # platform is `web`, so it is installed with the web/UI plugins below, not into
@@ -1155,7 +1156,7 @@ dsh_profile_peer_rules() {
 
 # The skill/tool bundle set is defined outside the npm-dsh gate so the Desktop
 # block below can install it with the app's own bundled command.
-dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen"
+dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul"
 
 if command -v dsh >/dev/null 2>&1; then
   dsh_profiles_seen=0

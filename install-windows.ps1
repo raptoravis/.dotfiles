@@ -1668,6 +1668,7 @@ if (Test-Cmd node) {
 # dsh-engineering-skill-pack: 28 engineering/stack/UI/writing skills in one bundle.
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
+# dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
 # chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
 # platform is `web`, so it is installed with the web/UI plugins below, not into
@@ -1777,7 +1778,7 @@ function Set-DshProfilePeerRules ([string]$Profile) {
 # the Electron Desktop profile (managed outside the npm-dsh gate further below).
 # dsh-tui is pre-installed explicitly because the launcher creates its profile
 # lazily on first `dst` run.
-$DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen')
+$DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'github:icyaaaww/dsh-soul')
 
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.
