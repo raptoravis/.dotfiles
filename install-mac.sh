@@ -10,6 +10,10 @@
 
 set -uo pipefail
 
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
+err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
+
 UNINSTALL_AGENTS=0
 for arg in "$@"; do
   case "$arg" in
@@ -82,10 +86,6 @@ fi
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 ZSH_CUSTOM_DIR="${ZSH:-$HOME/.config/zsh/ohmyzsh}"
-
-log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
-err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   err "macOS only. Detected: $(uname -s)"
