@@ -109,3 +109,6 @@ if (( $+commands[herdr] )) \
   # detaching (ctrl+b q) returns to the shell.
   herdr
 fi
+
+# bun completions
+[ -s "/Users/jonli/.bun/_bun" ] && source "/Users/jonli/.bun/_bun"
