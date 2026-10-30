@@ -10,6 +10,10 @@
 
 set -uo pipefail
 
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
+err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
+
 UNINSTALL_AGENTS=0
 for arg in "$@"; do
   case "$arg" in
@@ -110,10 +114,6 @@ if (( IS_WSL )); then
       | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
   fi
 fi
-
-log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
-err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
 
 # WSL interop 会把 Windows 的 PATH 追加进来（appendWindowsPath=true），于是
 # `command -v claude` 可能命中 /mnt/c/... 下的 Windows 同名二进制。对 AI agent
