@@ -722,6 +722,51 @@ if (Test-Cmd winget) {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
 }
 
+# ego lite provides ego-browser during GUI onboarding; it is not an npm CLI.
+# https://github.com/citrolabs/ego-lite/blob/main/skills/ego-browser/references/install.md
+function Install-EgoLite {
+    if (Test-Cmd ego-browser) {
+        ego-browser nodejs -e "console.log('ego-browser ready')"
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  ego-browser runtime check failed'; return }
+        ego-browser skill
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  ego-browser skill failed; update ego lite from https://lite.ego.app/' }
+        return
+    }
+    $EgoRecord = Get-ItemProperty @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    ) -ErrorAction SilentlyContinue | Where-Object {
+        $_.PSObject.Properties['DisplayName'] -and $_.DisplayName -match '^ego[ -]?(lite|\(lite\))'
+    } | Select-Object -First 1
+    if ($EgoRecord) {
+        Write-Host '  ego lite is installed. Open it and finish onboarding, then open a new terminal.'
+    } elseif ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64' -and $env:PROCESSOR_ARCHITEW6432 -ne 'AMD64') {
+        Write-Warn2 '  ego lite offers a Windows x64 installer; check https://lite.ego.app/ for this architecture'
+    } else {
+        $EgoInstaller = Join-Path $env:TEMP "ego-lite-$([guid]::NewGuid()).exe"
+        try {
+            Write-Step 'Downloading ego lite (Windows x64)'
+            Invoke-WebRequest -Uri 'https://cdn.ego.app/setup/windows/x64/egoliteSetup.exe' `
+                -UseBasicParsing -OutFile $EgoInstaller -ErrorAction Stop
+            if ((Get-AuthenticodeSignature -LiteralPath $EgoInstaller).Status -ne 'Valid') {
+                throw 'ego lite installer signature is not valid'
+            }
+            # Upstream documents an interactive installer, with no silent flags.
+            $EgoProcess = Start-Process -FilePath $EgoInstaller -Wait -PassThru -ErrorAction Stop
+            if ($EgoProcess.ExitCode -ne 0) { throw "installer exited with code $($EgoProcess.ExitCode)" }
+            Write-Host '  Open ego lite and finish onboarding (browser import is optional), then open a new terminal.'
+        } catch {
+            Write-Warn2 "  ego lite installation failed: $_"
+        } finally {
+            Remove-Item -LiteralPath $EgoInstaller -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Host '  After onboarding: Get-Command ego-browser; ego-browser nodejs -e "console.log(''ego-browser ready'')"; ego-browser skill'
+}
+Write-Step 'Installing/checking ego lite'
+Install-EgoLite
+
 # The Desktop app's uninstall registration (DisplayName/DisplayVersion/InstallLocation),
 # shared by the install/update step here and the plugin step that manages its profile.
 function Get-DshDesktopUninstallRecord {

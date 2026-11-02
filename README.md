@@ -39,7 +39,7 @@ Both platforms converge on the same `common/` configs for the shell and dev tool
 
 ### Quick install (no prerequisites)
 
-One-shot bootstrap scripts that install everything from scratch — package manager, Rust, cargo-make, all tools, oh-my-zsh, and symlinks. Designed to run silently / non-interactively. Idempotent, safe to re-run.
+One-shot bootstrap scripts that install everything from scratch — package manager, Rust, cargo-make, all tools, oh-my-zsh, and symlinks. Most steps run silently / non-interactively; ego lite requires GUI setup. Idempotent, safe to re-run.
 
 ```bash
 git clone https://github.com/msetsma/.dotfiles.git ~/.dotfiles
@@ -58,6 +58,8 @@ powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
 On Windows, run `install-windows.ps1` on the host first, then `wsl --install`, then `install-linux.sh` inside WSL2.
+
+The macOS and Windows scripts also install [ego lite](https://github.com/citrolabs/ego-lite), which provides `ego-browser`. Windows opens the official interactive installer; macOS runs the upstream installation script. Complete onboarding in the app (browser import is optional), then open a new terminal and run `ego-browser nodejs -e "console.log('ego-browser ready')"` and `ego-browser skill` to verify. On macOS, ensure `~/.local/bin` is on PATH. Linux has no native release; WSL users install the app on Windows and use the Windows CLI there.
 
 Override the dotfiles location with `DOTFILES_DIR=...` (Linux/macOS) or `-DotfilesDir ...` (Windows).
 

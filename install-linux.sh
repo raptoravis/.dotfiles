@@ -2008,6 +2008,10 @@ if [[ "${SHELL:-}" != "$ZSH_BIN" ]]; then
   log "Default shell is $SHELL — to switch, run: chsh -s $ZSH_BIN"
 fi
 
+# ego lite currently ships macOS/Windows apps only; do not run its macOS
+# installer or install a look-alike npm CLI on Linux/WSL.
+warn "ego lite has no Linux release. On WSL, install it on the Windows host with install-windows.ps1 and finish GUI onboarding."
+
 log "Done. Open a new terminal (or 'wsl --shutdown' on WSL) to pick up the environment."
 echo
 echo "============================================================"

@@ -1722,6 +1722,34 @@ if [[ "${SHELL:-}" != "$ZSH_BIN" ]]; then
   log "Default shell is $SHELL — to switch, run: chsh -s $ZSH_BIN"
 fi
 
+# ego lite's official installer selects arm64/x64, skips an existing app, and
+# launches it. Onboarding registers ego-browser and installs the agent skill.
+# https://github.com/citrolabs/ego-lite/blob/main/skills/ego-browser/references/install.md
+log "Installing/checking ego lite"
+if ! command -v ego-browser >/dev/null 2>&1; then
+  ego_installer=$(mktemp "${TMPDIR:-/tmp}/ego-lite-install.XXXXXX")
+  if [[ -n "$ego_installer" ]]; then
+    if curl -fsSL --retry 3 'https://raw.githubusercontent.com/citrolabs/ego-lite/main/skills/ego-browser/scripts/install.sh' -o "$ego_installer"; then
+      sh "$ego_installer" || warn "  ego lite installation failed"
+    else
+      warn "  ego lite installer download failed"
+    fi
+    rm -f "$ego_installer"
+  else
+    warn "  Could not create temporary ego lite installer"
+  fi
+fi
+if command -v ego-browser >/dev/null 2>&1; then
+  if ego-browser nodejs -e "console.log('ego-browser ready')"; then
+    ego-browser skill || warn "  ego-browser skill failed; update ego lite from https://lite.ego.app/"
+  else
+    warn "  ego-browser runtime check failed"
+  fi
+else
+  warn "  Finish ego lite onboarding, then open a new terminal (ensure ~/.local/bin is on PATH)."
+  log "Then run: command -v ego-browser; ego-browser nodejs -e \"console.log('ego-browser ready')\"; ego-browser skill"
+fi
+
 log "Done. Open a new terminal to pick up the environment."
 echo
 echo "============================================================"
