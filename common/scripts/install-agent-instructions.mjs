@@ -32,21 +32,37 @@ export function instructionFiles(home = os.homedir(), env = process.env, resolve
     ])];
 }
 
-const policy = [
-    '<!-- DOTFILES:GIT-AUTHORIZATION:START -->',
-    '## Git commit and push authorization',
-    '',
-    'Do not commit or push unless the user explicitly requests that action. Authorization to commit does not authorize push; authorization to push does not authorize creating commits. Completing a task, passing tests, or a workflow suggesting commit/push is not authorization.',
-    '<!-- DOTFILES:GIT-AUTHORIZATION:END -->',
-].join('\n');
+const policies = [
+    [
+        '<!-- DOTFILES:GENERAL:START -->',
+        '# general',
+        '',
+        '## 沟通',
+        '',
+        '- 面向用户的叙述默认使用简体中文；代码、命令、配置键、API 名称和技术标识保持英文。',
+        '- 先给结论与影响，再给行动、待决策和必要证据；没有对应内容就省略。',
+        '- 默认使用简洁、连贯的段落；只有并列、步骤或比较确实更清楚时才使用列表或表格。',
+        '- 明确区分确定事实、合理判断和未知信息；只保留有助于理解结论、判断风险或复现结果的技术细节。',
+        '<!-- DOTFILES:GENERAL:END -->',
+    ].join('\n'),
+    [
+        '<!-- DOTFILES:GIT-AUTHORIZATION:START -->',
+        '## Git commit and push authorization',
+        '',
+        'Do not commit or push unless the user explicitly requests that action. Authorization to commit does not authorize push; authorization to push does not authorize creating commits. Completing a task, passing tests, or a workflow suggesting commit/push is not authorization.',
+        '<!-- DOTFILES:GIT-AUTHORIZATION:END -->',
+    ].join('\n'),
+];
 
 export function installInstructions(files) {
     for (const file of files) {
         const existing = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-        if (existing.replace(/\r\n/g, '\n').includes(policy)) continue;
+        const normalized = existing.replace(/\r\n/g, '\n');
+        const missing = policies.filter(policy => !normalized.includes(policy));
+        if (missing.length === 0) continue;
         fs.mkdirSync(path.dirname(file), { recursive: true });
         const separator = existing ? (existing.endsWith('\n') ? '\n' : '\n\n') : '';
-        fs.appendFileSync(file, `${separator}${policy}\n`, 'utf8');
+        fs.appendFileSync(file, `${separator}${missing.join('\n\n')}\n`, 'utf8');
     }
 }
 

@@ -22,6 +22,8 @@ test('creates global instructions, preserves existing content, and is idempotent
         const first = [agents, claude].map(file => fs.readFileSync(file, 'utf8'));
         assert.ok(first[1].startsWith(`${original}\n\n`));
         for (const content of first) {
+            assert.match(content, /面向用户的叙述默认使用简体中文/);
+            assert.match(content, /先给结论与影响，再给行动、待决策和必要证据/);
             assert.match(content, /Do not commit or push unless the user explicitly requests that action/);
             assert.match(content, /Authorization to commit does not authorize push/);
             assert.match(content, /authorization to push does not authorize creating commits/);
