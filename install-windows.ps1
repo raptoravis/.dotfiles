@@ -1688,6 +1688,15 @@ if (Test-Cmd zg) {
 # suppression below would hide.
 if ((Test-Cmd codex) -and (Test-Cmd omx)) {
     Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)'
+    # Clean foreign [hooks.state] residue first so `omx setup` can reconcile its
+    # trust state instead of refusing on stale/legacy entries (old oh-my-codex@
+    # plugin hooks, or project-local .codex/hooks.json a prior `codex mcp add` /
+    # zg re-serialization pulled into the OMX block). Best-effort; no-op when clean.
+    if (Test-Cmd node) {
+        $cleanOut = (node (Join-Path $DotfilesDir 'common/scripts/clean-codex-hook-trust.mjs') 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clean-codex-hook-trust failed (continuing): $cleanOut" }
+        elseif ($cleanOut) { Write-Host "  $cleanOut" }
+    }
     $omxErr = ($null | omx setup --scope user 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         if ($omxErr) { Write-Warn2 "  omx setup --scope user failed: $omxErr" }
