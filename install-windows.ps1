@@ -1808,6 +1808,24 @@ function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$D
             Show-DshPluginFailure $Output
         }
     }
+    if ($Name -eq 'dsh-maoying') {
+        $Repair = Join-Path $DotfilesDir 'common/scripts/repair-dsh-maoying.mjs'
+        if ($Profile -eq 'desktop') {
+            $App = [IO.Path]::GetFullPath((Join-Path (Split-Path $DshCommand -Parent) '../../../..'))
+            $PreviousRunAsNode = $env:ELECTRON_RUN_AS_NODE
+            try {
+                $env:ELECTRON_RUN_AS_NODE = '1'
+                & (Join-Path $App 'DeepSeek Harness.exe') $Repair (Join-Path $App 'resources/app.asar/dsh') $DshHome $Profile | Out-Host
+            } finally {
+                if ($null -eq $PreviousRunAsNode) { Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue }
+                else { $env:ELECTRON_RUN_AS_NODE = $PreviousRunAsNode }
+            }
+        } else {
+            $HostRoot = Join-Path ((npm root -g | Out-String).Trim()) '@deepseek-ai/dsh'
+            node $Repair $HostRoot $DshHome $Profile
+        }
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  Maoying compatibility repair failed on $Profile" }
+    }
 }
 
 # pnpm prints "Issues with peer dependencies found" after every plugin operation

@@ -1432,6 +1432,11 @@ dsh_plugin_install_or_update() {
       dsh_plugin_failure_reason "$output"
     fi
   fi
+  if [ "$name" = dsh-maoying ]; then
+    node "$DOTFILES_DIR/common/scripts/repair-dsh-maoying.mjs" \
+      "$(npm root -g)/@deepseek-ai/dsh" "${DSH_HOME:-$HOME/.dsh}" "$profile" \
+      || warn "  Maoying compatibility repair failed on $profile"
+  fi
 }
 
 if cmd_exists_local dsh; then

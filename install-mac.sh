@@ -1143,6 +1143,19 @@ dsh_plugin_install_or_update() {
       dsh_plugin_failure_reason "$output"
     fi
   fi
+  if [ "$name" = dsh-maoying ]; then
+    if [ "$profile" = desktop ]; then
+      local app="${dsh_command%/Contents/Resources/runtime/cli/bin/dsh}"
+      ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/DeepSeek Harness" \
+        "$DOTFILES_DIR/common/scripts/repair-dsh-maoying.mjs" \
+        "$app/Contents/Resources/app.asar/dsh" "${DSH_HOME:-$HOME/.dsh}" "$profile" \
+        || warn "  Maoying compatibility repair failed on $profile"
+    else
+      node "$DOTFILES_DIR/common/scripts/repair-dsh-maoying.mjs" \
+        "$(npm root -g)/@deepseek-ai/dsh" "${DSH_HOME:-$HOME/.dsh}" "$profile" \
+        || warn "  Maoying compatibility repair failed on $profile"
+    fi
+  fi
 }
 
 # pnpm prints "Issues with peer dependencies found" after every plugin operation
