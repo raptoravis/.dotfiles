@@ -19,7 +19,7 @@ param(
     # Uninstall all AI agent CLIs and the agent tooling this script installs
     # (Claude Code, Codex, OpenCode, Grok, DeepSeek Harness CLI/TUI/Desktop,
     # omp, oh-my-codex, herdr, bmad-loop, zg, hostc, claude-mem,
-    # agent-browser): stop their
+    # agent-browser, agent-desktop): stop their
     # processes/services, run the Desktop uninstaller, remove npm packages,
     # config/data/cache dirs, skills checkouts, Cursor skill links and PATH
     # entries. Shared runtimes (bun, Node, npm/pnpm caches) are kept.
@@ -115,6 +115,16 @@ function Test-Admin {
 $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 $DshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
 
+# Capture existing config roots before other skill installers create directories.
+$desktopClaudeRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+$desktopGrokRoot = if ($env:GROK_HOME) { $env:GROK_HOME } else { Join-Path $env:USERPROFILE '.grok' }
+$desktopXdgRoot = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config' }
+$desktopOmpRoot = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE '.omp\agent' }
+$desktopExistingRoots = @(
+    $desktopClaudeRoot, $CodexHome, $desktopGrokRoot, (Join-Path $desktopXdgRoot 'opencode'),
+    (Join-Path $env:USERPROFILE '.cursor'), $desktopOmpRoot, $DshHome, (Join-Path $env:USERPROFILE '.gemini')
+) | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+
 if ($UninstallAgents) {
     Write-Step 'Uninstalling AI agent CLIs and cleaning config directories'
 
@@ -183,6 +193,8 @@ if ($UninstallAgents) {
             'hostc',
             'claude-mem',
             'agent-browser',
+            'agent-desktop',
+            'dsh-maoying',
             'puppeteer'
         )
         foreach ($pkg in $AgentPackages) {
@@ -1236,6 +1248,12 @@ if (Test-Cmd npm) {
         npm install -g agent-browser
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-browser install failed' }
     }
+    if (-not (Test-Cmd agent-desktop)) {
+        Write-Step 'Installing agent-desktop (desktop automation for AI agents) via npm'
+        npm install -g agent-desktop
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-desktop install failed' }
+    }
+    Install-NpmCliIfStale 'dsh-maoying' 'Maoying CLI'
     # One-time Chromium download for agent-browser (idempotent — skips if already present)
     if (Test-Cmd agent-browser) {
         Write-Step 'agent-browser: downloading Chromium (one-time)'
@@ -1723,12 +1741,9 @@ if (Test-Cmd node) {
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
-# ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
-# chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
-# platform is `web`, so it is installed with the web/UI plugins below, not into
-# every profile. `dsh-bot` is a different package (dushaobindoudou/dsh-plugin:
-# a headless cron/webhook runner) that an earlier run installed by mistake; it
-# is removed below where present.
+# dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
+# maoying-* skills and the CLI are also installed for other coding agents.
+# ds-bot and the unrelated legacy dsh-bot are retired and removed below.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
 # Re-add once upstream ships 0.2.x-compatible releases.
@@ -1864,7 +1879,7 @@ if (Test-Cmd dsh) {
         Set-DshProfilePeerRules 'dsh-tui'
     }
 
-    foreach ($plugin in @('dshmarket', 'dsh-context', 'ds-bot')) {
+    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-maoying')) {
         Install-OrUpdate-DshPlugin 'web' $plugin
     }
 
@@ -1878,25 +1893,27 @@ if (Test-Cmd dsh) {
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  dsh plugin remove dsh-browser-use failed' }
     }
 
-    # `dsh-bot` is not DS Bot. It is a different package (dushaobindoudou/dsh-plugin:
-    # a headless cron/webhook runner) that an earlier run of this script added to
-    # every profile by mistake; drop it so only the correct `ds-bot` stays.
+    # Remove retired bot packages from every CLI-owned profile.
     foreach ($BotProfileDir in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
         if (-not (Test-Path (Join-Path $BotProfileDir.FullName 'package.json'))) { continue }
         if ($BotProfileDir.Name -eq 'desktop') { continue }
-        if (dsh plugin --profile $BotProfileDir.Name list 2>$null | Select-String -SimpleMatch -Quiet 'dsh-bot@') {
-            Write-Step "Removing wrong bot plugin: dsh-bot (profile: $($BotProfileDir.Name))"
-            dsh plugin --profile $BotProfileDir.Name remove dsh-bot 2>$null
-            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin remove dsh-bot failed on $($BotProfileDir.Name)" }
+        foreach ($retiredBot in @('ds-bot', 'dsh-bot')) {
+            if (dsh plugin --profile $BotProfileDir.Name list 2>$null | Select-String -SimpleMatch -Quiet "$retiredBot@") {
+                Write-Step "Removing retired bot plugin: $retiredBot (profile: $($BotProfileDir.Name))"
+                dsh plugin --profile $BotProfileDir.Name remove $retiredBot 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin remove $retiredBot failed on $($BotProfileDir.Name)" }
+            }
         }
     }
 
     # pnpm keeps the removed package's command shims under node_modules\.bin, so a
-    # stale `dsh-bot` command would survive the uninstall; prune them too.
+    # stale bot command would survive the uninstall; prune exact bot shims too.
     foreach ($BotShimProfile in (Get-ChildItem (Join-Path $DshHome 'profiles') -Directory -ErrorAction SilentlyContinue)) {
         $BotShimBin = Join-Path $BotShimProfile.FullName 'node_modules\.bin'
         if (-not (Test-Path $BotShimBin)) { continue }
-        Remove-Item (Join-Path $BotShimBin 'dsh-bot*') -Force -ErrorAction SilentlyContinue
+        foreach ($botShim in @('ds-bot', 'ds-bot.cmd', 'ds-bot.ps1', 'dsh-bot', 'dsh-bot.cmd', 'dsh-bot.ps1')) {
+            Remove-Item -LiteralPath (Join-Path $BotShimBin $botShim) -Force -ErrorAction SilentlyContinue
+        }
     }
 
     # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
@@ -1934,6 +1951,18 @@ if (Test-Path -LiteralPath $DesktopProfile) {
         foreach ($DshBundle in $DshBundles) {
             Install-OrUpdate-DshPlugin 'desktop' $DshBundle $DesktopDsh
         }
+        foreach ($retiredBot in @('ds-bot', 'dsh-bot')) {
+            if (& $DesktopDsh plugin --profile desktop list 2>$null | Select-String -SimpleMatch -Quiet "$retiredBot@") {
+                & $DesktopDsh plugin --profile desktop remove $retiredBot 2>$null
+                if ($LASTEXITCODE -ne 0) { Write-Warn2 "  Desktop bot removal failed: $retiredBot" }
+            }
+        }
+        # pnpm may retain shims after removal; Desktop must clean its own profile.
+        $desktopBotBin = Join-Path $DshHome 'profiles\desktop\node_modules\.bin'
+        foreach ($botShim in @('ds-bot', 'ds-bot.cmd', 'ds-bot.ps1', 'dsh-bot', 'dsh-bot.cmd', 'dsh-bot.ps1')) {
+            Remove-Item -LiteralPath (Join-Path $desktopBotBin $botShim) -Force -ErrorAction SilentlyContinue
+        }
+        Install-OrUpdate-DshPlugin 'desktop' 'dsh-maoying' $DesktopDsh
     } else {
         Write-Warn2 '  DeepSeek Harness Desktop command not found -- skipping its plugins and skills'
     }
@@ -2009,6 +2038,60 @@ if (Test-Cmd herdr) {
     }
 } else {
     Write-Warn2 'herdr CLI not on PATH -- skipping herdr agent skill (re-run after herdr is installed)'
+}
+
+# ---------------------------------------------------------------------------
+# agent-desktop: load guides from the installed CLI so they match its version.
+# Also distribute the portable maoying-* skills shipped by dsh-maoying.
+# Only create a skill root when the agent CLI or its config directory exists.
+# ---------------------------------------------------------------------------
+if ((Test-Cmd agent-desktop) -or (Test-Cmd maoying)) {
+    $maoyingSkillSource = $null
+    if ((Test-Cmd maoying) -and (Test-Cmd npm)) {
+        $maoyingSkillSource = Join-Path ((npm root -g | Out-String).Trim()) 'dsh-maoying\skills'
+        if (-not (Test-Path -LiteralPath $maoyingSkillSource -PathType Container)) { Write-Warn2 '  dsh-maoying packaged skills missing' }
+    }
+    $claudeRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
+    $grokRoot = if ($env:GROK_HOME) { $env:GROK_HOME } else { Join-Path $env:USERPROFILE '.grok' }
+    $dshRoot = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
+    $xdgRoot = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $env:USERPROFILE '.config' }
+    $ompSkillsRoot = if ($env:PI_CODING_AGENT_DIR) { $env:PI_CODING_AGENT_DIR } else { Join-Path $env:USERPROFILE '.omp\agent' }
+    $desktopAgents = @(
+        @('claude', $claudeRoot, (Join-Path $claudeRoot 'skills')),
+        @('codex', $CodexHome, (Join-Path $CodexHome 'skills')),
+        @('grok', $grokRoot, (Join-Path $grokRoot 'skills')),
+        @('opencode', (Join-Path $xdgRoot 'opencode'), (Join-Path $xdgRoot 'opencode\skills')),
+        @('cursor', (Join-Path $env:USERPROFILE '.cursor'), (Join-Path $env:USERPROFILE '.cursor\skills')),
+        @('omp', $ompSkillsRoot, (Join-Path $ompSkillsRoot 'skills')),
+        @('dsh', $dshRoot, (Join-Path $dshRoot 'skills')),
+        @('gemini', (Join-Path $env:USERPROFILE '.gemini'), (Join-Path $env:USERPROFILE '.gemini\skills'))
+    )
+    foreach ($agent in $desktopAgents) {
+        if ((Test-Cmd $agent[0]) -or ($agent[1] -in $desktopExistingRoots) -or
+            ($agent[0] -eq 'dsh' -and (Test-Cmd dsh-tui))) {
+            if (Test-Cmd agent-desktop) {
+                Write-Step "Installing agent-desktop skill for $($agent[0])"
+                try {
+                    $skillDir = Join-Path $agent[2] 'agent-desktop'
+                    New-Item -ItemType Directory -Force -Path $skillDir -ErrorAction Stop | Out-Null
+                    Copy-Item -LiteralPath (Join-Path $DotfilesDir 'common/agent-desktop/SKILL.md') -Destination (Join-Path $skillDir 'SKILL.md') -Force -ErrorAction Stop
+                } catch { Write-Warn2 "  agent-desktop skill install failed for $($agent[0]): $_" }
+            }
+            if ($maoyingSkillSource) {
+                foreach ($skill in (Get-ChildItem -LiteralPath $maoyingSkillSource -Directory -Filter 'maoying-*' -ErrorAction SilentlyContinue)) {
+                    if (-not (Test-Path -LiteralPath (Join-Path $skill.FullName 'SKILL.md'))) { continue }
+                    Write-Step "Installing $($skill.Name) skill for $($agent[0])"
+                    try {
+                        $skillDir = Join-Path $agent[2] $skill.Name
+                        New-Item -ItemType Directory -Force -Path $skillDir -ErrorAction Stop | Out-Null
+                        Get-ChildItem -LiteralPath $skill.FullName -Force | Copy-Item -Destination $skillDir -Recurse -Force -ErrorAction Stop
+                    } catch { Write-Warn2 "  $($skill.Name) skill install failed for $($agent[0]): $_" }
+                }
+            }
+        }
+    }
+} else {
+    Write-Warn2 'agent-desktop/maoying CLIs not on PATH -- skipping their agent skills'
 }
 
 # ---------------------------------------------------------------------------

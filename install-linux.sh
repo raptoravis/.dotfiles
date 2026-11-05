@@ -14,6 +14,19 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31m[err]\033[0m %s\n' "$*" >&2; }
 
+# Capture existing config roots before other skill installers create directories.
+AGENT_DESKTOP_EXISTING_ROOTS=()
+for desktop_root in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" \
+  "${CODEX_HOME:-$HOME/.codex}" \
+  "${GROK_HOME:-$HOME/.grok}" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" \
+  "$HOME/.cursor" \
+  "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}" \
+  "${DSH_HOME:-$HOME/.dsh}" \
+  "$HOME/.gemini"; do
+  [ ! -d "$desktop_root" ] || AGENT_DESKTOP_EXISTING_ROOTS+=("$desktop_root")
+done
+
 UNINSTALL_AGENTS=0
 for arg in "$@"; do
   case "$arg" in
@@ -35,7 +48,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui" "dsh-maoying"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -806,6 +819,11 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing agent-browser (browser automation for AI agents) via npm"
     npm_global agent-browser || warn "  agent-browser install failed"
   fi
+  if ! command -v agent-desktop >/dev/null 2>&1; then
+    log "Installing agent-desktop (desktop automation for AI agents) via npm"
+    npm_global agent-desktop || warn "  agent-desktop install failed"
+  fi
+  npm_install_if_stale dsh-maoying "Maoying CLI"
   # One-time Chromium download for agent-browser (idempotent — skips if already present)
   if command -v agent-browser >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
@@ -1347,12 +1365,9 @@ fi
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
-# ds-bot: DS Bot — long-lived bots, a main bot, Bot-to-Bot messages and group
-# chats (npm `ds-bot`, https://github.com/Fei2411/DeepSeek-Bot). Its client
-# platform is `web`, so it is installed with the web/UI plugins below, not into
-# every profile. `dsh-bot` is a different package (dushaobindoudou/dsh-plugin:
-# a headless cron/webhook runner) that an earlier run installed by mistake; it
-# is removed below where present.
+# dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
+# maoying-* skills and the CLI are also installed for other coding agents.
+# ds-bot and the unrelated legacy dsh-bot are retired and removed below.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
 # Re-add once upstream ships 0.2.x-compatible releases.
@@ -1447,7 +1462,7 @@ if cmd_exists_local dsh; then
     done
   fi
 
-  for plugin in dshmarket dsh-context ds-bot; do
+  for plugin in dshmarket dsh-context dsh-maoying; do
     dsh_plugin_install_or_update web "$plugin"
   done
 
@@ -1461,23 +1476,23 @@ if cmd_exists_local dsh; then
       || warn "  dsh plugin remove dsh-browser-use failed"
   fi
 
-  # `dsh-bot` is not DS Bot. It is a different package (dushaobindoudou/dsh-plugin:
-  # a headless cron/webhook runner) that an earlier run of this script added to
-  # every profile by mistake; drop it so only the correct `ds-bot` stays.
+  # Remove retired bot packages from every CLI-owned profile.
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do
     [ -f "${dsh_profile_dir}package.json" ] || continue
     dsh_profile="$(basename "$dsh_profile_dir")"
     [ "$dsh_profile" = "desktop" ] && continue
-    if dsh plugin --profile "$dsh_profile" list 2>/dev/null | grep -q 'dsh-bot@'; then
-      log "Removing wrong bot plugin: dsh-bot (profile: $dsh_profile)"
-      dsh plugin --profile "$dsh_profile" remove dsh-bot >/dev/null 2>&1 \
-        || warn "  dsh plugin remove dsh-bot failed on $dsh_profile"
-    fi
+    for retired_bot in ds-bot dsh-bot; do
+      if dsh plugin --profile "$dsh_profile" list 2>/dev/null | grep -qF "$retired_bot@"; then
+        log "Removing retired bot plugin: $retired_bot (profile: $dsh_profile)"
+        dsh plugin --profile "$dsh_profile" remove "$retired_bot" >/dev/null 2>&1 \
+          || warn "  dsh plugin remove $retired_bot failed on $dsh_profile"
+      fi
+    done
   done
 
   # pnpm keeps the removed package's command shims under node_modules/.bin, so a
-  # stale `dsh-bot` command would survive the uninstall; prune them too.
-  for dsh_bot_shim in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/node_modules/.bin/dsh-bot*; do
+  # stale bot command would survive the uninstall; prune exact bot shims too.
+  for dsh_bot_shim in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/node_modules/.bin/{ds-bot,dsh-bot}{,.cmd,.ps1}; do
     [ -e "$dsh_bot_shim" ] || continue
     rm -f "$dsh_bot_shim"
   done
@@ -1592,6 +1607,59 @@ if command -v git >/dev/null 2>&1; then
   fi
 else
   warn "git not on PATH -- skipping chinese-novelist skill (re-run after git is installed)"
+fi
+
+# ---------------------------------------------------------------------------
+# agent-desktop: load guides from the installed CLI so they match its version.
+# Also distribute the portable maoying-* skills shipped by dsh-maoying.
+# Only create a skill root when the agent CLI or its config directory exists.
+# ---------------------------------------------------------------------------
+if command -v agent-desktop >/dev/null 2>&1 || command -v maoying >/dev/null 2>&1; then
+  maoying_skill_src=""
+  if command -v maoying >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    maoying_skill_src="$(npm root -g 2>/dev/null)/dsh-maoying/skills"
+    [ -d "$maoying_skill_src" ] || warn "  dsh-maoying packaged skills missing"
+  fi
+  install_agent_desktop_skill() { # $1 = CLI, $2 = config root, $3 = skills root
+    local desktop_installed=0 desktop_existing
+    command -v "$1" >/dev/null 2>&1 && desktop_installed=1
+    # Bash 3.2 treats empty arrays as unset under nounset.
+    for desktop_existing in ${AGENT_DESKTOP_EXISTING_ROOTS[@]+"${AGENT_DESKTOP_EXISTING_ROOTS[@]}"}; do
+      [ "$desktop_existing" != "$2" ] || desktop_installed=1
+    done
+    if [ "$desktop_installed" = 1 ]; then
+      if command -v agent-desktop >/dev/null 2>&1; then
+        log "Installing agent-desktop skill for $1"
+        mkdir -p "$3/agent-desktop" &&
+          cp "$DOTFILES_DIR/common/agent-desktop/SKILL.md" "$3/agent-desktop/SKILL.md" \
+          || warn "  agent-desktop skill install failed for $1"
+      fi
+      if [ -n "$maoying_skill_src" ]; then
+        local maoying_source maoying_name
+        for maoying_source in "$maoying_skill_src"/maoying-*/; do
+          [ -f "$maoying_source/SKILL.md" ] || continue
+          maoying_name="$(basename "$maoying_source")"
+          log "Installing $maoying_name skill for $1"
+          mkdir -p "$3/$maoying_name" && cp -R "$maoying_source." "$3/$maoying_name/" \
+            || warn "  $maoying_name skill install failed for $1"
+        done
+      fi
+    fi
+  }
+  install_agent_desktop_skill claude "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
+  install_agent_desktop_skill codex "${CODEX_HOME:-$HOME/.codex}" "${CODEX_HOME:-$HOME/.codex}/skills"
+  install_agent_desktop_skill grok "${GROK_HOME:-$HOME/.grok}" "${GROK_HOME:-$HOME/.grok}/skills"
+  install_agent_desktop_skill opencode "${XDG_CONFIG_HOME:-$HOME/.config}/opencode" "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills"
+  install_agent_desktop_skill cursor "$HOME/.cursor" "$HOME/.cursor/skills"
+  install_agent_desktop_skill omp "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}" "${PI_CODING_AGENT_DIR:-$HOME/.omp/agent}/skills"
+  if command -v dsh-tui >/dev/null 2>&1; then
+    install_agent_desktop_skill dsh-tui "${DSH_HOME:-$HOME/.dsh}" "${DSH_HOME:-$HOME/.dsh}/skills"
+  else
+    install_agent_desktop_skill dsh "${DSH_HOME:-$HOME/.dsh}" "${DSH_HOME:-$HOME/.dsh}/skills"
+  fi
+  install_agent_desktop_skill gemini "$HOME/.gemini" "$HOME/.gemini/skills"
+else
+  warn "agent-desktop/maoying CLIs not on PATH -- skipping their agent skills"
 fi
 
 # ---------------------------------------------------------------------------
