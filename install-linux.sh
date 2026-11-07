@@ -1365,6 +1365,7 @@ fi
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
+# dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
 # dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
 # maoying-* skills and the CLI are also installed for other coding agents.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
@@ -1442,7 +1443,7 @@ dsh_plugin_install_or_update() {
 if cmd_exists_local dsh; then
   # CLI profiles keep their own skill/tool bundles. The official Desktop app
   # has no Linux release; its reserved profile cannot be managed by npm dsh.
-  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul"
+  dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul dsh-cost-meter"
   dsh_profiles_seen=0
   dsh_tui_covered=0
   for dsh_profile_dir in "${DSH_HOME:-$HOME/.dsh}"/profiles/*/; do

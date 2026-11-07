@@ -1741,6 +1741,7 @@ if (Test-Cmd node) {
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
+# dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
 # dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
 # maoying-* skills and the CLI are also installed for other coding agents.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
@@ -1758,7 +1759,7 @@ if (Test-Cmd node) {
 # earlier `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
 #
-# The Electron Desktop profile gets the same six bundles below, managed with the
+# The Electron Desktop profile gets the same eight bundles below, managed with the
 # `dsh plugin` command inside the app bundle so it works even without an npm dsh CLI.
 # That runtime is the nightly build and can run ahead of the npm CLI, so its plugin
 # manager refuses a bundle whose engines.dsh / @deepseek-ai peer ranges exclude it;
@@ -1865,7 +1866,7 @@ function Set-DshProfilePeerRules ([string]$Profile) {
 # the Electron Desktop profile (managed outside the npm-dsh gate further below).
 # dsh-tui is pre-installed explicitly because the launcher creates its profile
 # lazily on first `dst` run.
-$DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'github:icyaaaww/dsh-soul')
+$DshBundles = @('github:raptoravis/yunxing', '@liustack/modlens', '@nanmicoder/dsh-agent-teams', 'github:lcx9451/dsh-engineering-skill-pack', 'dsh-mnemon', 'dsh-image-gen', 'github:icyaaaww/dsh-soul', 'dsh-cost-meter')
 
 if (Test-Cmd dsh) {
     # CLI profiles keep their own skill/tool bundles; Desktop is handled below.

@@ -1072,6 +1072,7 @@ install_dsh_desktop_mac
 # dsh-mnemon: composable view-based context/memory; dsh-image-gen: image generation
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
+# dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
 # dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
 # maoying-* skills and the CLI are also installed for other coding agents.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
@@ -1087,7 +1088,7 @@ install_dsh_desktop_mac
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
-# modlens skills. The same six bundles therefore go into every CLI profile, the
+# modlens skills. The same eight bundles therefore go into every CLI profile, the
 # dsh-tui profile and the Electron-owned Desktop profile — the earlier
 # `web`-only loop left the TUI profile, the everyday entry point, skill-less.
 # Re-run after creating a new profile. The web/UI plugins stay on `web`.
@@ -1195,7 +1196,7 @@ dsh_profile_peer_rules() {
 
 # The skill/tool bundle set is defined outside the npm-dsh gate so the Desktop
 # block below can install it with the app's own bundled command.
-dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul"
+dsh_bundles="github:raptoravis/yunxing @liustack/modlens @nanmicoder/dsh-agent-teams github:lcx9451/dsh-engineering-skill-pack dsh-mnemon dsh-image-gen github:icyaaaww/dsh-soul dsh-cost-meter"
 
 if command -v dsh >/dev/null 2>&1; then
   dsh_profiles_seen=0
