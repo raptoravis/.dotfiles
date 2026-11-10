@@ -505,6 +505,12 @@ if ($InstallService) {
     sc.exe create cloudflared binPath= "$binPath" start= auto DisplayName= 'Cloudflared Tunnel' | Out-Host
     sc.exe description cloudflared "cloudflared tunnel run $TunnelName (managed by create_cloudflared_tunnel.ps1)" | Out-Host
 
+    # Disable Go post-quantum TLS (X25519MLKEM768): cloudflared 2026.10+ enables it by
+    # default, and its larger ClientHello is dropped by CN proxies/GFW, breaking the edge
+    # handshake with "TLS handshake with edge error: EOF". Inject GODEBUG for the service.
+    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\cloudflared' `
+        -Name Environment -Type MultiString -Value @('GODEBUG=tlsmlkem=0')
+
     # Auto-heal on crash: restart after 5s, reset the failure counter daily so the
     # 3-action ladder applies per-day rather than being exhausted permanently.
     sc.exe failure cloudflared reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Host
