@@ -823,7 +823,6 @@ if command -v npm >/dev/null 2>&1; then
     log "Installing agent-desktop (desktop automation for AI agents) via npm"
     npm_global agent-desktop || warn "  agent-desktop install failed"
   fi
-  npm_install_if_stale dsh-maoying "Maoying CLI"
   # One-time Chromium download for agent-browser (idempotent — skips if already present)
   if command -v agent-browser >/dev/null 2>&1; then
     log "agent-browser: downloading Chromium (one-time)"
@@ -1366,8 +1365,7 @@ fi
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
-# dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
-# maoying-* skills and the CLI are also installed for other coding agents.
+# dsh-maoying: retired - no longer installed.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
@@ -1433,11 +1431,6 @@ dsh_plugin_install_or_update() {
       dsh_plugin_failure_reason "$output"
     fi
   fi
-  if [ "$name" = dsh-maoying ]; then
-    node "$DOTFILES_DIR/common/scripts/repair-dsh-maoying.mjs" \
-      "$(npm root -g)/@deepseek-ai/dsh" "${DSH_HOME:-$HOME/.dsh}" "$profile" \
-      || warn "  Maoying compatibility repair failed on $profile"
-  fi
 }
 
 if cmd_exists_local dsh; then
@@ -1468,7 +1461,7 @@ if cmd_exists_local dsh; then
     done
   fi
 
-  for plugin in dshmarket dsh-context dsh-maoying; do
+  for plugin in dshmarket dsh-context; do
     dsh_plugin_install_or_update web "$plugin"
   done
 
@@ -1617,15 +1610,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # agent-desktop: load guides from the installed CLI so they match its version.
-# Also distribute the portable maoying-* skills shipped by dsh-maoying.
 # Only create a skill root when the agent CLI or its config directory exists.
 # ---------------------------------------------------------------------------
-if command -v agent-desktop >/dev/null 2>&1 || command -v maoying >/dev/null 2>&1; then
-  maoying_skill_src=""
-  if command -v maoying >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
-    maoying_skill_src="$(npm root -g 2>/dev/null)/dsh-maoying/skills"
-    [ -d "$maoying_skill_src" ] || warn "  dsh-maoying packaged skills missing"
-  fi
+if command -v agent-desktop >/dev/null 2>&1; then
   install_agent_desktop_skill() { # $1 = CLI, $2 = config root, $3 = skills root
     local desktop_installed=0 desktop_existing
     command -v "$1" >/dev/null 2>&1 && desktop_installed=1
@@ -1639,16 +1626,6 @@ if command -v agent-desktop >/dev/null 2>&1 || command -v maoying >/dev/null 2>&
         mkdir -p "$3/agent-desktop" &&
           cp "$DOTFILES_DIR/common/agent-desktop/SKILL.md" "$3/agent-desktop/SKILL.md" \
           || warn "  agent-desktop skill install failed for $1"
-      fi
-      if [ -n "$maoying_skill_src" ]; then
-        local maoying_source maoying_name
-        for maoying_source in "$maoying_skill_src"/maoying-*/; do
-          [ -f "$maoying_source/SKILL.md" ] || continue
-          maoying_name="$(basename "$maoying_source")"
-          log "Installing $maoying_name skill for $1"
-          mkdir -p "$3/$maoying_name" && cp -R "$maoying_source." "$3/$maoying_name/" \
-            || warn "  $maoying_name skill install failed for $1"
-        done
       fi
     fi
   }
@@ -1665,7 +1642,7 @@ if command -v agent-desktop >/dev/null 2>&1 || command -v maoying >/dev/null 2>&
   fi
   install_agent_desktop_skill gemini "$HOME/.gemini" "$HOME/.gemini/skills"
 else
-  warn "agent-desktop/maoying CLIs not on PATH -- skipping their agent skills"
+  warn "agent-desktop CLI not on PATH -- skipping its agent skills"
 fi
 
 # ---------------------------------------------------------------------------

@@ -1253,7 +1253,6 @@ if (Test-Cmd npm) {
         npm install -g agent-desktop
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  agent-desktop install failed' }
     }
-    Install-NpmCliIfStale 'dsh-maoying' 'Maoying CLI'
     # One-time Chromium download for agent-browser (idempotent — skips if already present)
     if (Test-Cmd agent-browser) {
         Write-Step 'agent-browser: downloading Chromium (one-time)'
@@ -1742,8 +1741,7 @@ if (Test-Cmd node) {
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
-# dsh-maoying: novel-writing UI/preset plugin on web and Desktop; portable
-# maoying-* skills and the CLI are also installed for other coding agents.
+# dsh-maoying: retired - no longer installed.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
@@ -1808,24 +1806,6 @@ function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$D
             Write-Warn2 "  dsh plugin add $Spec failed on $Profile"
             Show-DshPluginFailure $Output
         }
-    }
-    if ($Name -eq 'dsh-maoying') {
-        $Repair = Join-Path $DotfilesDir 'common/scripts/repair-dsh-maoying.mjs'
-        if ($Profile -eq 'desktop') {
-            $App = [IO.Path]::GetFullPath((Join-Path (Split-Path $DshCommand -Parent) '../../../..'))
-            $PreviousRunAsNode = $env:ELECTRON_RUN_AS_NODE
-            try {
-                $env:ELECTRON_RUN_AS_NODE = '1'
-                & (Join-Path $App 'DeepSeek Harness.exe') $Repair (Join-Path $App 'resources/app.asar/dsh') $DshHome $Profile | Out-Host
-            } finally {
-                if ($null -eq $PreviousRunAsNode) { Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue }
-                else { $env:ELECTRON_RUN_AS_NODE = $PreviousRunAsNode }
-            }
-        } else {
-            $HostRoot = Join-Path ((npm root -g | Out-String).Trim()) '@deepseek-ai/dsh'
-            node $Repair $HostRoot $DshHome $Profile
-        }
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  Maoying compatibility repair failed on $Profile" }
     }
 }
 
@@ -1898,7 +1878,7 @@ if (Test-Cmd dsh) {
         Set-DshProfilePeerRules 'dsh-tui'
     }
 
-    foreach ($plugin in @('dshmarket', 'dsh-context', 'dsh-maoying')) {
+    foreach ($plugin in @('dshmarket', 'dsh-context')) {
         Install-OrUpdate-DshPlugin 'web' $plugin
     }
 
@@ -1981,7 +1961,6 @@ if (Test-Path -LiteralPath $DesktopProfile) {
         foreach ($botShim in @('ds-bot', 'ds-bot.cmd', 'ds-bot.ps1', 'dsh-bot', 'dsh-bot.cmd', 'dsh-bot.ps1')) {
             Remove-Item -LiteralPath (Join-Path $desktopBotBin $botShim) -Force -ErrorAction SilentlyContinue
         }
-        Install-OrUpdate-DshPlugin 'desktop' 'dsh-maoying' $DesktopDsh
     } else {
         Write-Warn2 '  DeepSeek Harness Desktop command not found -- skipping its plugins and skills'
     }
@@ -2061,15 +2040,9 @@ if (Test-Cmd herdr) {
 
 # ---------------------------------------------------------------------------
 # agent-desktop: load guides from the installed CLI so they match its version.
-# Also distribute the portable maoying-* skills shipped by dsh-maoying.
 # Only create a skill root when the agent CLI or its config directory exists.
 # ---------------------------------------------------------------------------
-if ((Test-Cmd agent-desktop) -or (Test-Cmd maoying)) {
-    $maoyingSkillSource = $null
-    if ((Test-Cmd maoying) -and (Test-Cmd npm)) {
-        $maoyingSkillSource = Join-Path ((npm root -g | Out-String).Trim()) 'dsh-maoying\skills'
-        if (-not (Test-Path -LiteralPath $maoyingSkillSource -PathType Container)) { Write-Warn2 '  dsh-maoying packaged skills missing' }
-    }
+if (Test-Cmd agent-desktop) {
     $claudeRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
     $grokRoot = if ($env:GROK_HOME) { $env:GROK_HOME } else { Join-Path $env:USERPROFILE '.grok' }
     $dshRoot = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
@@ -2096,21 +2069,10 @@ if ((Test-Cmd agent-desktop) -or (Test-Cmd maoying)) {
                     Copy-Item -LiteralPath (Join-Path $DotfilesDir 'common/agent-desktop/SKILL.md') -Destination (Join-Path $skillDir 'SKILL.md') -Force -ErrorAction Stop
                 } catch { Write-Warn2 "  agent-desktop skill install failed for $($agent[0]): $_" }
             }
-            if ($maoyingSkillSource) {
-                foreach ($skill in (Get-ChildItem -LiteralPath $maoyingSkillSource -Directory -Filter 'maoying-*' -ErrorAction SilentlyContinue)) {
-                    if (-not (Test-Path -LiteralPath (Join-Path $skill.FullName 'SKILL.md'))) { continue }
-                    Write-Step "Installing $($skill.Name) skill for $($agent[0])"
-                    try {
-                        $skillDir = Join-Path $agent[2] $skill.Name
-                        New-Item -ItemType Directory -Force -Path $skillDir -ErrorAction Stop | Out-Null
-                        Get-ChildItem -LiteralPath $skill.FullName -Force | Copy-Item -Destination $skillDir -Recurse -Force -ErrorAction Stop
-                    } catch { Write-Warn2 "  $($skill.Name) skill install failed for $($agent[0]): $_" }
-                }
-            }
         }
     }
 } else {
-    Write-Warn2 'agent-desktop/maoying CLIs not on PATH -- skipping their agent skills'
+    Write-Warn2 'agent-desktop CLI not on PATH -- skipping its agent skills'
 }
 
 # ---------------------------------------------------------------------------
