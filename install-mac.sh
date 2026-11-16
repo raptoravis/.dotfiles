@@ -1822,6 +1822,22 @@ else
   log "Then run: command -v ego-browser; ego-browser nodejs -e \"console.log('ego-browser ready')\"; ego-browser skill"
 fi
 
+# ego-browser registers its skill for Claude Code only (a symlink at
+# ~/.claude/skills/ego-browser -> the ego lite skill dir). dsh, dst (dsh-tui)
+# and the DeepSeek Harness Desktop app read ~/.dsh/skills through dsh-base's
+# filesystem skill provider, and omp reads ~/.omp/agent/skills; link the same
+# skill into both so those agents see it too.
+if [ -f "$HOME/.claude/skills/ego-browser/SKILL.md" ]; then
+  for ego_skill_dest in \
+    "${DSH_HOME:-$HOME/.dsh}/skills" \
+    "$HOME/.omp/agent/skills"; do
+    mkdir -p "$ego_skill_dest"
+    rm -rf "$ego_skill_dest/ego-browser"
+    ln -sfn "$HOME/.claude/skills/ego-browser" "$ego_skill_dest/ego-browser"
+  done
+  log "Linked ego-browser skill into dsh/dst/desktop/omp"
+fi
+
 log "Done. Open a new terminal to pick up the environment."
 echo
 echo "============================================================"

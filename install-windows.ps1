@@ -778,6 +778,28 @@ function Install-EgoLite {
 Write-Step 'Installing/checking ego lite'
 Install-EgoLite
 
+# ego-browser registers its skill for Claude Code only (a junction at
+# ~\.claude\skills\ego-browser -> the ego lite skill dir). dsh, dst (dsh-tui)
+# and the DeepSeek Harness Desktop app read ~\.dsh\skills through dsh-base's
+# filesystem skill provider, and omp reads ~\.omp\agent\skills; mirror the same
+# skill into both so those agents see it too.
+$ClaudeEgoBrowser = Join-Path $env:USERPROFILE '.claude\skills\ego-browser'
+if (Test-Path (Join-Path $ClaudeEgoBrowser 'SKILL.md')) {
+    $EgoSkillDests = @(
+        (Join-Path $DshHome 'skills'),
+        (Join-Path $env:USERPROFILE '.omp\agent\skills')
+    )
+    foreach ($EgoSkillDest in $EgoSkillDests) {
+        New-Item -ItemType Directory -Force -Path $EgoSkillDest | Out-Null
+        $EgoSkillLink = Join-Path $EgoSkillDest 'ego-browser'
+        # rmdir drops a junction (dangling ones included) without touching its
+        # target; Remove-Item -Recurse would follow it.
+        cmd /c rmdir "$EgoSkillLink" 2>$null | Out-Null
+        New-Item -ItemType Junction -Path $EgoSkillLink -Target $ClaudeEgoBrowser | Out-Null
+    }
+    Write-Step 'Linked ego-browser skill into dsh/dst/desktop/omp'
+}
+
 # The Desktop app's uninstall registration (DisplayName/DisplayVersion/InstallLocation),
 # shared by the install/update step here and the plugin step that manages its profile.
 function Get-DshDesktopUninstallRecord {
