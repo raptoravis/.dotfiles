@@ -194,7 +194,6 @@ if ($UninstallAgents) {
             'claude-mem',
             'agent-browser',
             'agent-desktop',
-            'dsh-maoying',
             'puppeteer'
         )
         foreach ($pkg in $AgentPackages) {
@@ -1741,7 +1740,6 @@ if (Test-Cmd node) {
 # (Gemini/OpenAI/Seedream/DashScope/ComfyUI).
 # dsh-soul: experience compilation + memory skeleton/graph compaction (default-off).
 # dsh-cost-meter: cost/token tracking, budgets, provider balances, coding-plan quotas (web + Desktop GUI).
-# dsh-maoying: retired - no longer installed.
 # ds-bot and the unrelated legacy dsh-bot are retired and removed below.
 # dsh-skills-manager + dsh-im dropped: they pin @deepseek-ai/*@^0.1.x-rc and are
 # rejected by dsh 0.2.x (install refused; `allow-version --accept-risk` required).
