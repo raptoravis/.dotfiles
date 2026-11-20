@@ -48,7 +48,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@openhands/agent-canvas" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -338,29 +338,21 @@ if (( IS_WSL )) && ! dpkg -s wslu >/dev/null 2>&1; then
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq wslu 2>/dev/null || true
 fi
 
-# Node.js 22 via NodeSource — 不用 Node 24：其自带 npm 11 默认拦 install 脚本
-# （allowScripts），会静默跳过 zg/node-llama-cpp/onnxruntime 等原生二进制下载，
-# 装出「能用但缺原生组件」的坏状态；Node 22 自带 npm 10，无此拦截，与其它
-# 能正常装 zg 的 WSL 机器一致。dsh/zg 需 >=22.19，22.x 满足。
-# 注意：仅 Linux 锁 22；macOS(brew node)/Windows(choco 24.18.0) 仍走 24，暂不动。
-# NodeSource 的 nodejs 包自带 npm，故上方 APT_PKGS 已移除 `nodejs`/`npm`。
-# 幂等：node 主版本 == 22 即跳过；已装 24 会显式降级到 22。
-NODE_MAJOR=22
+# OpenHands Agent Canvas 需要 Node.js 24+。NodeSource 的 nodejs 包自带 npm。
+NODE_MAJOR=24
 # WSL interop 会把 Windows 的 node 追加进 PATH（见 cmd_exists_local 注释），而后面
 # npm_global 需要 Linux 本地 node；用 local 判定，避免被 Windows 侧 node 骗过跳过安装。
 node_major=0
 if cmd_exists_local node; then
   node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 fi
-if (( node_major == NODE_MAJOR )); then
-  log "Node.js $(node --version) already ${NODE_MAJOR}.x — skipping NodeSource"
+if (( node_major >= NODE_MAJOR )); then
+  log "Node.js $(node --version) meets the Node.js ${NODE_MAJOR}+ requirement — skipping NodeSource"
 else
   log "Installing Node.js ${NODE_MAJOR}.x via NodeSource (from node $(node --version 2>/dev/null || echo none))"
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" \
     | sudo --preserve-env=http_proxy,https_proxy,HTTP_PROXY,HTTPS_PROXY,no_proxy,NO_PROXY bash - \
     || warn "  nodesource setup failed (falling through to version check)"
-  # 已装更高主版本（如 24）时 apt 不会自动降级，显式 remove 再 install 覆盖。
-  sudo env DEBIAN_FRONTEND=noninteractive apt-get remove -y -qq nodejs 2>/dev/null || true
   sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs \
     || warn "  nodejs install failed"
 fi
@@ -845,6 +837,14 @@ if command -v npm >/dev/null 2>&1; then
   # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
   npm_install_if_stale oh-my-codex "oh-my-codex (omx CLI)"
   npm_install_if_stale @opencode/cli "OpenCode CLI"
+  if node -e 'process.exit(parseInt(process.versions.node, 10) < 24 ? 1 : 0)'; then
+    npm_install_if_stale @openhands/agent-canvas "OpenHands Agent Canvas"
+    if command -v agent-canvas >/dev/null 2>&1; then
+      log "Run agent-canvas to start OpenHands Agent Canvas"
+    fi
+  else
+    warn "  OpenHands Agent Canvas requires Node.js 24+; skipping install"
+  fi
   # d3c8e51 之前 Grok CLI 由 x.ai 的 curl 脚本安装，它在 ~/.local/bin 留下一条
   # grok -> ~/.grok/bin/grok 软链——而 npm 全局 prefix 正是 ~/.local，bin 目录
   # 就是同一个 ~/.local/bin。npm 只接管自己创建的 bin 链接，遇到这条外部软链会
