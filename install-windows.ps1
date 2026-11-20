@@ -1298,15 +1298,6 @@ if (Test-Cmd npm) {
     # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
     Install-NpmCliIfStale 'oh-my-codex' 'oh-my-codex (omx CLI)'
     Install-NpmCliIfStale '@opencode/cli' 'OpenCode CLI'
-    node -e 'process.exit(parseInt(process.versions.node, 10) < 24 ? 1 : 0)'
-    if ($LASTEXITCODE -eq 0) {
-        Install-NpmCliIfStale '@openhands/agent-canvas' 'OpenHands Agent Canvas'
-        if (Test-Cmd agent-canvas) {
-            Write-Host '  Run agent-canvas to start OpenHands Agent Canvas'
-        }
-    } else {
-        Write-Warn2 '  OpenHands Agent Canvas requires Node.js 24+; skipping install'
-    }
     Install-NpmCliIfStale '@xai-official/grok' 'Grok CLI'
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.

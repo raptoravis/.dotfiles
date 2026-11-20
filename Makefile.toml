@@ -42,7 +42,6 @@ script = [
     "inst=$(npm list -g --depth=0 @openai/codex 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @openai/codex version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @openai/codex || echo '  codex install failed'; fi",
     "inst=$(npm list -g --depth=0 @opencode/cli 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @opencode/cli version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @opencode/cli || echo '  opencode install failed'; fi",
     "inst=$(npm list -g --depth=0 @xai-official/grok 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @xai-official/grok version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g @xai-official/grok || echo '  grok install failed'; fi",
-    "inst=$(npm list -g --depth=0 @openhands/agent-canvas 2>/dev/null | sed -nE 's/.*@([^@]+)$/\\1/p' | head -1); latest=$(npm view @openhands/agent-canvas version 2>/dev/null); if [ -z \"$inst\" ] || { [ -n \"$latest\" ] && [ \"$inst\" != \"$latest\" ]; }; then npm install -g --engine-strict @openhands/agent-canvas || echo '  OpenHands Agent Canvas install failed'; fi",
 ]
 
 [tasks.install-rust]
