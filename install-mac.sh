@@ -507,10 +507,6 @@ if command -v npm >/dev/null 2>&1; then
   npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
   # dsh-tui — Claude Code-style interactive TUI front door for dsh. bin: `dsh-tui`.
   npm_install_if_stale @deepseek-harness-tui/dsh-tui "DeepSeek Harness TUI"
-  # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
-  # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)"
-
   # Deploy Claude Code statusline / claude-hud helpers into ~/.claude/.
   # These were previously dotter-symlinked; now copied here so dotter no longer
   # manages coding-agent config. Generated settings.json (aicodingagentconfig.py)
@@ -650,15 +646,12 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"timeout":{"startup":120000}}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
-    # zg (zvec-grep) — stdio bootstrap; starts/reuses the shared daemon.
-    ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
     if command -v opencode >/dev/null 2>&1; then
-      log "Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
-      command -v zg >/dev/null 2>&1 && register_json_mcp "$HOME/.config/opencode/opencode.json" "$ZVEC_LOCAL_JSON"
     fi
   fi
 else
@@ -864,42 +857,6 @@ if command -v claude >/dev/null 2>&1; then
   fi
 else
   warn "claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)"
-fi
-
-# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-# guidance + tool approval + start local server). Idempotent — re-runs update
-# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
-# skipped. opencode is wired manually above.
-#
-# MUST run after the codex MCP/plugin registration above and before `omx setup`
-# below: `codex mcp add` re-serializes config.toml and drops trailing comment
-# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
-# trust END marker and make `omx setup` refuse to reconcile its trust state.
-# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
-# absorbing zg's markers.
-if command -v zg >/dev/null 2>&1; then
-  zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-  for t in claude codex; do
-    command -v "$t" >/dev/null 2>&1 && zg_targets+=("$t")
-  done
-  zg_args=(--force)
-  for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
-  log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-  if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
-    printf '%s\n' "$zg_out"
-  else
-    case "$zg_out" in
-      *EADDRINUSE*)
-        log "  zg daemon already running — daemon start skipped (benign)";;
-      *conflicting*|*unmanaged*)
-        printf '%s\n' "$zg_out" >&2
-        warn "  zg install failed: MCP config conflict needs cleanup (see zg output above)";;
-      *)
-        printf '%s\n' "$zg_out" >&2
-        warn "  zg install failed (see zg output above)";;
-    esac
-  fi
 fi
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
@@ -1778,8 +1735,7 @@ if command -v dotter >/dev/null 2>&1; then
     sed -i '' -E '/^"common\/(claude|codex|grok|opencode)\//d' "$DOTTER_CACHE"
   fi
   log "Symlinking dotfiles via dotter"
-  # --force: overwrite stray non-symlink targets (e.g. `zg install` writes
-  # AGENTS.md as regular files before dotter runs) so symlinks always win.
+  # --force: replace stray non-symlink targets with symlinks.
   # --noconfirm: don't pause on the "remove empty directory?" prompt.
   ( cd "$DOTFILES_DIR" && dotter -v --force --noconfirm ) || warn "dotter exited with errors"
 else

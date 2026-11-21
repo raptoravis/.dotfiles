@@ -1237,10 +1237,6 @@ if (Test-Cmd npm) {
     Install-NpmCliIfStale '@deepseek-ai/dsh' 'DeepSeek Harness CLI'
     # dsh-tui — Claude Code-style interactive TUI front door for dsh. bin: `dsh-tui`.
     Install-NpmCliIfStale '@deepseek-harness-tui/dsh-tui' 'DeepSeek Harness TUI'
-    # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
-    # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-    Install-NpmCliIfStale '@zvec/zvec-grep' 'zg (zvec-grep)'
-
     # Deploy Claude Code statusline / claude-hud helpers into ~/.claude/.
     # These were previously dotter-symlinked; now copied here so dotter no longer
     # manages coding-agent config. Generated settings.json (aicodingagentconfig.py)
@@ -1394,15 +1390,12 @@ if(changed){ fs.mkdirSync(path.dirname(f),{recursive:true}); fs.writeFileSync(f,
         $CdtLocalJson = '{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
         $FetchLocalJson = '{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"timeout":{"startup":120000}}}'
         $Ctx7LocalJson = '{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
-        # zg (zvec-grep) — stdio bootstrap; starts/reuses the shared daemon.
-        $ZvecLocalJson = '{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
         if (Test-Cmd opencode) {
-            Write-Step 'Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)'
+            Write-Step 'Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)'
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $GhRemoteJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $CdtLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $FetchLocalJson
             Register-JsonMcp "$HOME\.config\opencode\opencode.json" $Ctx7LocalJson
-            if (Test-Cmd zg) { Register-JsonMcp "$HOME\.config\opencode\opencode.json" $ZvecLocalJson }
         }
     }
 } else {
@@ -1613,41 +1606,6 @@ if (Test-Cmd claude) {
     }
 } else {
     Write-Warn2 'claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)'
-}
-
-# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-# guidance + tool approval + start local server). Idempotent — re-runs update
-# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
-# skipped. opencode is wired manually above.
-#
-# MUST run after the codex MCP/plugin registration above and before `omx setup`
-# below: `codex mcp add` re-serializes config.toml and drops trailing comment
-# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
-# trust END marker and make `omx setup` refuse to reconcile its trust state.
-# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
-# absorbing zg's markers.
-if (Test-Cmd zg) {
-    $zgTargets = @('cursor')  # GUI IDE, no CLI to detect — always wire
-    foreach ($t in @('claude', 'codex')) {
-        if (Test-Cmd $t) { $zgTargets += $t }
-    }
-    $zgArgs = @('--force')
-    foreach ($t in $zgTargets) { $zgArgs += '--target'; $zgArgs += $t }
-    Write-Step "Wiring zg MCP into AI agents ($($zgTargets -join ', '))"
-    $zgOutput = & zg install @zgArgs --yes 2>&1
-    $zgExitCode = $LASTEXITCODE
-    $zgText = ($zgOutput | Out-String).TrimEnd()
-    if ($zgText) { Write-Host $zgText }
-    if ($zgExitCode -ne 0) {
-        if ($zgText -match 'EADDRINUSE') {
-            Write-Step '  zg server start skipped: port already in use (an existing or legacy server may be running; see zg output above)'
-        } elseif ($zgText -match 'conflicting|unmanaged') {
-            Write-Warn2 '  zg install failed: MCP config conflict needs cleanup (see zg output above)'
-        } else {
-            Write-Warn2 '  zg install failed (see zg output above)'
-        }
-    }
 }
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the

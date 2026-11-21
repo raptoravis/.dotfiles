@@ -184,7 +184,7 @@ if proxy_port_reachable; then
   export GLOBAL_AGENT_HTTP_PROXY="$PROXY_URL"
   export GLOBAL_AGENT_HTTPS_PROXY="$PROXY_URL"
   export GLOBAL_AGENT_NO_PROXY=localhost,127.0.0.1
-  # Node 内置 fetch(undici) 默认不认 http(s)_proxy；NODE_USE_ENV_PROXY=1 让它走代理（zg 下模型依赖这个）
+  # Node 内置 fetch(undici) 默认不认 http(s)_proxy；NODE_USE_ENV_PROXY=1 让它走代理
   export NODE_USE_ENV_PROXY=1
   log "检测到 7890 代理 — 设置全局 http(s)_proxy"
 else
@@ -866,20 +866,6 @@ if command -v npm >/dev/null 2>&1; then
   npm_install_if_stale @deepseek-ai/dsh "DeepSeek Harness CLI"
   # dsh-tui — Claude Code 风格交互式 TUI 入口（dsh 前端）。bin: `dsh-tui`。
   npm_install_if_stale @deepseek-harness-tui/dsh-tui "DeepSeek Harness TUI"
-  # zg — zvec-grep: local-first search layer (ripgrep + BM25 + vector search)
-  # for humans and agents. bin: `zg`. Requires Node.js >= 22.
-  # onnxruntime-node postinstall 默认去 GitHub 下 CUDA(EP) 二进制（WSL 无 GPU 用不上）、
-  # node-llama-cpp 默认下预编译 llama.cpp，两者经 Clash 代理都易卡死/超时；skip 跳过。
-  # zg 核心搜索走 @zvec/bindings-linux-x64（Rust 绑定），不受影响。
-  NODE_LLAMA_CPP_SKIP_DOWNLOAD=true ONNXRUNTIME_NODE_INSTALL_CUDA=skip \
-    npm_install_if_stale @zvec/zvec-grep "zg (zvec-grep)" || warn "  zg install/upgrade failed (requires Node.js >= 22)"
-  # npm 半途失败会留下悬空的 ~/.local/bin/zg，command -v 静默回退到 Windows 侧 /mnt/c
-  # 的 zg，直到 `zg index` 才崩（missing @zvec/bindings-linux-x64）。装完立刻跑一次，
-  # 失败就地暴露，而不是留个坏链接等后续才炸。
-  if ! zg --version >/dev/null 2>&1; then
-    warn "  zg unusable after install (-> $(command -v zg 2>/dev/null || echo 'not found')) — likely partial npm install or missing @zvec/bindings-linux-x64"
-  fi
-
   # Deploy Claude Code statusline / claude-hud helpers into ~/.claude/.
   # These were previously dotter-symlinked; now copied here so dotter no longer
   # manages coding-agent config. Generated settings.json (aicodingagentconfig.py)
@@ -1019,20 +1005,12 @@ if command -v npm >/dev/null 2>&1; then
     CDT_LOCAL_JSON='{"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"]}}'
     FETCH_LOCAL_JSON='{"fetch":{"type":"local","command":["npx","-y","mcp-fetch-server"],"timeout":{"startup":120000}}}'
     CTX7_LOCAL_JSON='{"context7":{"type":"local","command":["npx","-y","@upstash/context7-mcp"]}}'
-    # zg (zvec-grep) — WSL wires a local HTTP daemon on 7998 (the Windows-side
-    # daemon holds 7999 for Cursor); pure Linux uses the stdio bootstrap.
-    if (( IS_WSL )); then
-      ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"remote","url":"http://127.0.0.1:7998/mcp","timeout":600000,"oauth":false}}'
-    else
-      ZVEC_LOCAL_JSON='{"zvec_grep":{"type":"local","command":["zg","server","--stdio"],"timeout":600000}}'
-    fi
     if cmd_exists_local opencode; then
-      log "Registering github + chrome-devtools + fetch + context7 + zvec_grep MCP for opencode (~/.config/opencode/opencode.json)"
+      log "Registering github + chrome-devtools + fetch + context7 MCP for opencode (~/.config/opencode/opencode.json)"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$GH_REMOTE_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CDT_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$FETCH_LOCAL_JSON"
       register_json_mcp "$HOME/.config/opencode/opencode.json" "$CTX7_LOCAL_JSON"
-      cmd_exists_local zg && register_json_mcp "$HOME/.config/opencode/opencode.json" "$ZVEC_LOCAL_JSON"
     fi
   fi
 else
@@ -1248,68 +1226,6 @@ if cmd_exists_local claude; then
   fi
 else
   warn "claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)"
-fi
-
-# Wire zg into supported AI agents via MCP (managed zvec_grep entry + search
-# guidance + tool approval + start local server). Idempotent — re-runs update
-# only the ZVEC_GREP_START/END managed blocks; --force absorbs any stray
-# unmanaged zvec_grep table. dsh / omp / grok are not supported zg targets and
-# are skipped. opencode is wired manually above.
-#
-# MUST run after the codex MCP/plugin registration above and before `omx setup`
-# below: `codex mcp add` re-serializes config.toml and drops trailing comment
-# markers, so zg's block (appended at EOF) would otherwise clobber the OMX hook
-# trust END marker and make `omx setup` refuse to reconcile its trust state.
-# Running zg here lets `omx setup` regenerate its block and re-serialize cleanly,
-# absorbing zg's markers.
-if cmd_exists_local zg; then
-  zg_targets=(cursor)  # GUI IDE, no CLI to detect — always wire
-  for t in claude codex; do
-    cmd_exists_local "$t" && zg_targets+=("$t")
-  done
-  zg_args=(--force)
-  for t in "${zg_targets[@]}"; do zg_args+=(--target "$t"); done
-  log "Wiring zg MCP into AI agents: ${zg_targets[*]}"
-  if (( IS_WSL )); then
-    # WSL mirrored networking: the Windows-side zg daemon holds 127.0.0.1:7999
-    # (serving Cursor) and cannot see WSL paths, so stdio would collide on 7999.
-    # Run a separate WSL daemon on 7998 and wire agents over HTTP instead.
-    zg_port=7998
-    if ! zg_on_out=$(zg server on --listen "127.0.0.1:$zg_port" 2>&1); then
-      printf '%s\n' "$zg_on_out" >&2
-      warn "  zg daemon (127.0.0.1:$zg_port) failed to start"
-    fi
-    if zg_out=$(ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" \
-        zg install "${zg_args[@]}" --mcp-transport http --yes 2>&1); then
-      printf '%s\n' "$zg_out"
-    else
-      printf '%s\n' "$zg_out" >&2
-      warn "  zg install failed (see zg output above)"
-    fi
-    # 交互式 CLI 默认连 7999（穿透到 Windows daemon、看不到 WSL 路径 → ROOT_NOT_FOUND），
-    # 把 client.serverUrl 持久化到 ~/.zvec-grep/config.json，指向 WSL daemon(7998)。幂等 merge。
-    ZVEC_GREP_SERVER_URL="http://127.0.0.1:$zg_port/mcp" node -e '
-      const fs = require("fs");
-      const p = require("path").join(process.env.HOME, ".zvec-grep", "config.json");
-      let cfg = { version: 1 };
-      try { cfg = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
-      cfg.client = { ...(cfg.client || {}), serverUrl: process.env.ZVEC_GREP_SERVER_URL };
-      fs.mkdirSync(require("path").dirname(p), { recursive: true });
-      fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + "\n");
-    '
-  else
-    if zg_out=$(zg install "${zg_args[@]}" --yes 2>&1); then
-      printf '%s\n' "$zg_out"
-    else
-      case "$zg_out" in
-        *EADDRINUSE*)
-          log "  zg daemon already running — daemon start skipped";;
-        *)
-          printf '%s\n' "$zg_out" >&2
-          warn "  zg install failed (see zg output above)";;
-      esac
-    fi
-  fi
 fi
 
 # Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
@@ -2046,8 +1962,7 @@ if command -v dotter >/dev/null 2>&1; then
     sed -i -E '/^"common\/(claude|codex|grok|opencode)\//d' "$DOTTER_CACHE"
   fi
   log "Symlinking dotfiles via dotter"
-  # --force: overwrite stray non-symlink targets (e.g. `zg install` writes
-  # AGENTS.md as regular files before dotter runs) so symlinks always win.
+  # --force: replace stray non-symlink targets with symlinks.
   # --noconfirm: don't pause on the "remove empty directory?" prompt.
   ( cd "$DOTFILES_DIR" && dotter -v --force --noconfirm ) || warn "dotter exited with errors"
 else
