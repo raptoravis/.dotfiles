@@ -1794,50 +1794,6 @@ if [[ "${SHELL:-}" != "$ZSH_BIN" ]]; then
   log "Default shell is $SHELL — to switch, run: chsh -s $ZSH_BIN"
 fi
 
-# ego lite's official installer selects arm64/x64, skips an existing app, and
-# launches it. Onboarding registers ego-browser and installs the agent skill.
-# https://github.com/citrolabs/ego-lite/blob/main/skills/ego-browser/references/install.md
-log "Installing/checking ego lite"
-if ! command -v ego-browser >/dev/null 2>&1; then
-  ego_installer=$(mktemp "${TMPDIR:-/tmp}/ego-lite-install.XXXXXX")
-  if [[ -n "$ego_installer" ]]; then
-    if curl -fsSL --retry 3 'https://raw.githubusercontent.com/citrolabs/ego-lite/main/skills/ego-browser/scripts/install.sh' -o "$ego_installer"; then
-      sh "$ego_installer" || warn "  ego lite installation failed"
-    else
-      warn "  ego lite installer download failed"
-    fi
-    rm -f "$ego_installer"
-  else
-    warn "  Could not create temporary ego lite installer"
-  fi
-fi
-if command -v ego-browser >/dev/null 2>&1; then
-  if ego-browser nodejs -e "console.log('ego-browser ready')"; then
-    ego-browser skill || warn "  ego-browser skill failed; update ego lite from https://lite.ego.app/"
-  else
-    warn "  ego-browser runtime check failed"
-  fi
-else
-  warn "  Finish ego lite onboarding, then open a new terminal (ensure ~/.local/bin is on PATH)."
-  log "Then run: command -v ego-browser; ego-browser nodejs -e \"console.log('ego-browser ready')\"; ego-browser skill"
-fi
-
-# ego-browser registers its skill for Claude Code only (a symlink at
-# ~/.claude/skills/ego-browser -> the ego lite skill dir). dsh, dst (dsh-tui)
-# and the DeepSeek Harness Desktop app read ~/.dsh/skills through dsh-base's
-# filesystem skill provider, and omp reads ~/.omp/agent/skills; link the same
-# skill into both so those agents see it too.
-if [ -f "$HOME/.claude/skills/ego-browser/SKILL.md" ]; then
-  for ego_skill_dest in \
-    "${DSH_HOME:-$HOME/.dsh}/skills" \
-    "$HOME/.omp/agent/skills"; do
-    mkdir -p "$ego_skill_dest"
-    rm -rf "$ego_skill_dest/ego-browser"
-    ln -sfn "$HOME/.claude/skills/ego-browser" "$ego_skill_dest/ego-browser"
-  done
-  log "Linked ego-browser skill into dsh/dst/desktop/omp"
-fi
-
 log "Done. Open a new terminal to pick up the environment."
 echo
 echo "============================================================"
