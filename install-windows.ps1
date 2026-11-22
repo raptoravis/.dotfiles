@@ -38,6 +38,80 @@ function Write-Step  ($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Warn2 ($msg) { Write-Host "[warn] $msg" -ForegroundColor Yellow }
 function Write-Err2  ($msg) { Write-Host "[err]  $msg" -ForegroundColor Red }
 function Test-Cmd ($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
+
+function Get-NormalizedPathEntry ([string]$Entry) {
+    if (-not $Entry) { return '' }
+    return [Environment]::ExpandEnvironmentVariables($Entry.Trim()).TrimEnd([char[]]'\/')
+}
+
+function Move-PathEntryToFront ([AllowEmptyString()][string]$PathValue, [string]$Entry) {
+    $NormalizedEntry = Get-NormalizedPathEntry $Entry
+    $OtherEntries = @(($PathValue -split ';') | Where-Object {
+        $_ -and (Get-NormalizedPathEntry $_) -ine $NormalizedEntry
+    })
+    return (@($Entry) + $OtherEntries) -join ';'
+}
+
+function Remove-LegacyOmpFiles ([string[]]$BinDirs) {
+    $Pending = @()
+    foreach ($BinDir in @($BinDirs | Where-Object { $_ } | Select-Object -Unique)) {
+        $LegacyPaths = @(
+            foreach ($Name in @('omp.exe', 'omp.bunx', 'omp.cmd', 'omp.ps1')) {
+                Join-Path $BinDir $Name
+            }
+            Get-ChildItem -LiteralPath $BinDir -Filter '.omp-delete-*.tmp' -File -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName }
+        )
+        foreach ($LegacyPath in $LegacyPaths) {
+            if (-not (Test-Path -LiteralPath $LegacyPath)) { continue }
+            try {
+                Remove-Item -LiteralPath $LegacyPath -Force -ErrorAction Stop
+                Write-Host "  removed legacy omp file: $LegacyPath"
+            } catch {
+                $IsTombstone = [IO.Path]::GetFileName($LegacyPath).StartsWith('.omp-delete-')
+                if ($IsTombstone) {
+                    $Pending += $LegacyPath
+                    continue
+                }
+                $RetiredPath = Join-Path $BinDir ".omp-delete-$([guid]::NewGuid().ToString('N')).tmp"
+                try {
+                    Move-Item -LiteralPath $LegacyPath -Destination $RetiredPath -Force -ErrorAction Stop
+                    $Pending += $RetiredPath
+                    Write-Host "  retired locked legacy omp file: $LegacyPath"
+                } catch {
+                    $Pending += $LegacyPath
+                    Write-Warn2 "  legacy omp is locked at $LegacyPath; cleanup will retry in the background"
+                }
+            }
+        }
+    }
+    $Pending = @($Pending | Select-Object -Unique)
+    if ($Pending.Count -eq 0) { return }
+
+    $EncodedPaths = @($Pending | ForEach-Object {
+        [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($_))
+    })
+    $PathLiterals = ($EncodedPaths | ForEach-Object { "'$_'" }) -join ','
+    $CleanupScript = @"
+`$paths = @($PathLiterals) | ForEach-Object { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(`$_)) }
+while (`$paths.Count -gt 0) {
+    `$remaining = @()
+    foreach (`$path in `$paths) {
+        try { Remove-Item -LiteralPath `$path -Force -ErrorAction Stop } catch { `$remaining += `$path }
+    }
+    `$paths = `$remaining
+    if (`$paths.Count -gt 0) { Start-Sleep -Seconds 2 }
+}
+"@
+    $EncodedCleanup = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($CleanupScript))
+    try {
+        $PowerShellExe = (Get-Process -Id $PID).Path
+        Start-Process -FilePath $PowerShellExe -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $EncodedCleanup) -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        Write-Host '  legacy omp cleanup will finish after running legacy sessions exit'
+    } catch {
+        Write-Warn2 '  could not start legacy omp cleanup; close old omp sessions and rerun this installer'
+    }
+}
 # 安装/升级一个 npm 全局 CLI。`npm install -g` 不看已装版本、每次都拉 latest 重装，
 # 已是最新也白跑。这里先比 installed vs latest：未安装或远端有新版才真正 install。
 function Test-SemverLt($a, $b) {
@@ -128,6 +202,18 @@ function Test-Admin {
 
 $CodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 $DshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
+$OmpInstallDir = if ($env:PI_INSTALL_DIR) { $env:PI_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'omp' }
+$DefaultOmpInstallDir = Join-Path $env:LOCALAPPDATA 'omp'
+
+# Match the current exact DisplayName as well as historical version-suffixed
+# registrations from older Desktop installers.
+function Get-DshDesktopUninstallRecords ([string]$DisplayVersion) {
+    Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+        Where-Object {
+            ($_.DisplayName -eq 'DeepSeek Harness' -or $_.DisplayName -like 'DeepSeek Harness *') -and
+                (-not $DisplayVersion -or $_.DisplayVersion -eq $DisplayVersion)
+        }
+}
 
 # Capture existing config roots before other skill installers create directories.
 $desktopClaudeRoot = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE '.claude' }
@@ -167,8 +253,8 @@ if ($UninstallAgents) {
 
     # 2) DeepSeek Harness Desktop: run its registered uninstaller so the app, its
     # registry entry and shortcuts are removed, then drop any leftover app data.
-    $DesktopRecord = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.UninstallString } | Select-Object -First 1
+    $DesktopRecord = Get-DshDesktopUninstallRecords |
+        Where-Object { $_.UninstallString } | Select-Object -First 1
     if ($DesktopRecord) {
         $UninstallExe = $null
         if ($DesktopRecord.UninstallString -match '^\s*"([^"]+)"') { $UninstallExe = $Matches[1] }
@@ -244,7 +330,7 @@ if ($UninstallAgents) {
         (Join-Path $env:USERPROFILE '.grok'),
         $DshHome,
         (Join-Path $env:USERPROFILE '.omp'),
-        (Join-Path $env:LOCALAPPDATA 'omp'),
+        $DefaultOmpInstallDir,
         (Join-Path $env:USERPROFILE '.agents'),
         (Join-Path $env:USERPROFILE '.herdr'),
         (Join-Path $env:USERPROFILE '.config\herdr'),
@@ -278,19 +364,19 @@ if ($UninstallAgents) {
             Remove-Item -Force -LiteralPath $p -ErrorAction SilentlyContinue
         }
     }
-
-    # 5) omp installs into the shared bun dir; remove only its shims, not bun itself.
-    foreach ($ompShim in @(
-        (Join-Path $env:USERPROFILE '.bun\bin\omp.exe'),
-        (Join-Path $env:USERPROFILE '.bun\bin\omp.bunx'),
-        (Join-Path $env:USERPROFILE '.bun\bin\omp.cmd'),
-        (Join-Path $env:USERPROFILE '.bun\bin\omp.ps1')
-    )) {
-        if (Test-Path -LiteralPath $ompShim) {
-            Write-Step "  rm -fo $ompShim"
-            Remove-Item -Force -LiteralPath $ompShim -ErrorAction SilentlyContinue
+    # A custom PI_INSTALL_DIR may be shared; remove only omp.exe there.
+    if ((Get-NormalizedPathEntry $OmpInstallDir) -ine (Get-NormalizedPathEntry $DefaultOmpInstallDir)) {
+        $CustomOmpExe = Join-Path $OmpInstallDir 'omp.exe'
+        if (Test-Path -LiteralPath $CustomOmpExe) {
+            Write-Step "  rm -fo $CustomOmpExe"
+            Remove-Item -LiteralPath $CustomOmpExe -Force -ErrorAction SilentlyContinue
         }
     }
+
+    # 5) Remove legacy omp binaries from shared Bun dirs; keep Bun itself.
+    $DefaultBunBin = Join-Path $env:USERPROFILE '.bun\bin'
+    $ConfiguredBunBin = if ($env:BUN_INSTALL) { Join-Path $env:BUN_INSTALL 'bin' } else { $DefaultBunBin }
+    Remove-LegacyOmpFiles @($DefaultBunBin, $ConfiguredBunBin)
 
     # 6) Cursor keeps the user's IDE settings, so only drop the skill links this
     # repo created (they point into the removed ~/.local/share checkouts).
@@ -304,11 +390,14 @@ if ($UninstallAgents) {
         }
     }
 
-    # 7) Remove the PATH entries the agent installers appended; ~/.bun\bin stays
-    # because bun is a shared runtime. Empty segments are dropped too.
+    # 7) Remove agent PATH entries; ~/.bun\bin stays because Bun is shared.
     $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
     if ($UserPath) {
-        $KeptPath = @(($UserPath -split ';') | Where-Object { $_ -and ($_ -notmatch '\\\.herdr\\|\\\.grok\\bin') })
+        $OmpInstallDirNormalized = Get-NormalizedPathEntry $OmpInstallDir
+        $KeptPath = @(($UserPath -split ';') | Where-Object {
+            $_ -and ($_ -notmatch '\\.herdr\\|\\.grok\\bin') -and
+                (Get-NormalizedPathEntry $_) -ine $OmpInstallDirNormalized
+        })
         $NewPath = $KeptPath -join ';'
         if ($NewPath -ne $UserPath) {
             Write-Step '  removing agent PATH entries from the user environment'
@@ -747,13 +836,6 @@ if (Test-Cmd winget) {
     Write-Warn2 'winget not on PATH -- skipping winget apps (install "App Installer" from the Microsoft Store)'
 }
 
-# The Desktop app's uninstall registration (DisplayName/DisplayVersion/InstallLocation),
-# shared by the install/update step here and the plugin step that manages its profile.
-function Get-DshDesktopUninstallRecord {
-    Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.InstallLocation } |
-        Select-Object -First 1
-}
 
 # DeepSeek Harness Desktop ships separately from the npm CLI. Use its official
 # update feed so repeated runs download only a newer installer.
@@ -773,7 +855,8 @@ try {
     $DesktopVersion = $DesktopVersionMatch.Groups[1].Value.Trim()
     $DesktopUrl = $DesktopUrlMatch.Groups[1].Value
     $DesktopHash = $DesktopHashMatch.Groups[1].Value
-    $DesktopRecord = Get-DshDesktopUninstallRecord
+    $DesktopRecord = Get-DshDesktopUninstallRecords |
+        Where-Object { $_.InstallLocation } | Select-Object -First 1
     $DesktopInstalledVersion = if ($DesktopRecord) { $DesktopRecord.DisplayVersion } else { $null }
     if (-not $DesktopInstalledVersion -and $DesktopRecord) {
         $DesktopExe = Join-Path $DesktopRecord.InstallLocation 'DeepSeek Harness.exe'
@@ -796,9 +879,12 @@ try {
             if ($DesktopActualHash -ne $DesktopHash) { throw 'installer SHA-512 does not match the official update feed' }
             $DesktopProcess = Start-Process -FilePath $DesktopInstaller -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
             if ($DesktopProcess.ExitCode -ne 0) { throw "installer exited with code $($DesktopProcess.ExitCode)" }
-            $DesktopInstalled = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
-                Where-Object { $_.DisplayName -like 'DeepSeek Harness *' -and $_.DisplayVersion -eq $DesktopVersion } | Select-Object -First 1
-            if (-not $DesktopInstalled) { throw 'installer completed but the expected version was not registered' }
+            $DesktopInstalled = Get-DshDesktopUninstallRecords -DisplayVersion $DesktopVersion |
+                Where-Object { $_.InstallLocation } |
+                Select-Object -First 1
+            if (-not $DesktopInstalled) {
+                throw 'installer completed but the expected version was not registered'
+            }
             Write-Host "  DeepSeek Harness Desktop $DesktopVersion installed"
             if (-not (Test-Path (Join-Path $DshHome 'profiles\desktop\package.json'))) {
                 Write-Host '  Launch Desktop once to initialize its profile, then re-run this script to install its plugin bundles and skills'
@@ -1176,25 +1262,44 @@ if (-not (Test-Cmd herdr)) {
 # 7b3) omp — coding agent with the IDE wired in (Windows-native). bin: `omp`,
 #      config under ~/.omp. Supersedes the retired Pi coding agent.
 # ---------------------------------------------------------------------------
-# 安装器是幂等的：binary 模式命中 latest/${TARGET}?channel=stable，source 模式
-# `bun install -g` 拉 latest。未装过 → 安装；已装过 → 同样跑安装器更新到最新。
-# omp needs a recent Bun; rerun the official installer to install/update it first.
-Write-Step 'Installing/updating Bun to latest for omp'
+# The official prebuilt binary is self-contained; Bun is only needed for the
+# optional source install. Put the target first in this process before invoking
+# upstream, then persist that order only after the downloaded binary validates.
+$OmpProcessPathBeforeInstall = $env:PATH
 try {
-    irm 'https://bun.sh/install.ps1' -ErrorAction Stop | iex -ErrorAction Stop
-    $BunInstallDir = if ($env:BUN_INSTALL) { $env:BUN_INSTALL } else { Join-Path $env:USERPROFILE '.bun' }
-    $BunExe = Join-Path $BunInstallDir 'bin\bun.exe'
-    if (-not (Test-Path -LiteralPath $BunExe)) { throw "Bun executable not found: $BunExe" }
-    $env:PATH = "$(Join-Path $BunInstallDir 'bin');$env:PATH"
-    if (Test-Cmd omp) {
+    $OmpExe = Join-Path $OmpInstallDir 'omp.exe'
+    $HadStandaloneOmp = Test-Path -LiteralPath $OmpExe
+    $env:PATH = Move-PathEntryToFront $env:PATH $OmpInstallDir
+
+    if ($HadStandaloneOmp) {
         Write-Step 'Updating omp (coding agent) to latest'
     } else {
         Write-Step 'Installing omp (coding agent)'
     }
-    irm 'https://omp.sh/install.ps1' -ErrorAction Stop | iex -ErrorAction Stop
-    if (-not (Test-Cmd omp)) { Write-Warn2 '  omp install failed or omp is not yet on PATH' }
+    $OmpInstaller = irm 'https://omp.sh/install.ps1' -ErrorAction Stop
+    & ([scriptblock]::Create([string]$OmpInstaller)) -Binary
+
+    if (-not (Test-Path -LiteralPath $OmpExe)) { throw "omp executable not found after install: $OmpExe" }
+    $OmpVersion = & $OmpExe --version 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $OmpVersion) { throw "omp executable validation failed: $OmpExe" }
+    $ActiveOmp = Get-Command omp -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $ActiveOmp -or $ActiveOmp.Source -ine $OmpExe) {
+        throw "omp resolves to $($ActiveOmp.Source) instead of $OmpExe"
+    }
+
+    $UserPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    $NewUserPath = Move-PathEntryToFront $UserPath $OmpInstallDir
+    if ($NewUserPath -ne $UserPath) {
+        [Environment]::SetEnvironmentVariable('PATH', $NewUserPath, 'User')
+        Write-Host "  moved $OmpInstallDir to the front of the user PATH"
+    }
+
+    $DefaultBunBin = Join-Path $env:USERPROFILE '.bun\bin'
+    $ConfiguredBunBin = if ($env:BUN_INSTALL) { Join-Path $env:BUN_INSTALL 'bin' } else { $DefaultBunBin }
+    Remove-LegacyOmpFiles @($DefaultBunBin, $ConfiguredBunBin)
 } catch {
-    Write-Warn2 "  Bun/omp install failed: $_"
+    $env:PATH = $OmpProcessPathBeforeInstall
+    Write-Warn2 "  omp install/update failed: $_"
 }
 
 # ---------------------------------------------------------------------------
@@ -1686,7 +1791,7 @@ if (Test-Cmd node) {
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~\.dsh\skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
-# Each bundle is installed if absent and updated to latest if present.
+# Each bundle is installed if absent and updated only when a newer revision exists.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
@@ -1722,28 +1827,57 @@ function Show-DshPluginFailure ($Output) {
     Write-Host "    $Text"
 }
 
-# Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
-# delegates to pnpm add — fine for registry specs, but git specs pin a commit and
-# re-adding retains that lock, so present plugins always go through
-# `dsh plugin update <name> --latest`. Output is captured so a refused bundle can
-# report the manager's reason without flooding the log with pnpm progress.
-function Install-OrUpdate-DshPlugin ([string]$Profile, [string]$Spec, [string]$DshCommand = 'dsh') {
-    $Name = Get-DshPluginName $Spec
-    if (& $DshCommand plugin --profile $Profile list 2>$null | Select-String -SimpleMatch -Quiet "$Name@") {
-        Write-Step "Updating dsh plugin: $Spec (profile: $Profile)"
-        $Output = & $DshCommand plugin --profile $Profile update $Name --latest 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn2 "  dsh plugin update $Name failed on $Profile"
-            Show-DshPluginFailure $Output
+# Resolve update status once per profile, then install absent plugins and update
+# only stale ones. A direct pnpm check avoids dsh treating `outdated` exit code 1
+# (updates available) as a plugin-command failure. Git specs are checked too.
+function Install-OrUpdate-DshPlugins ([string]$Profile, [string[]]$Specs, [string]$DshCommand = 'dsh') {
+    $ListOutput = (& $DshCommand plugin --profile $Profile list 2>$null | Out-String)
+    $InstalledNames = @(
+        foreach ($Spec in $Specs) {
+            $Name = Get-DshPluginName $Spec
+            if ($ListOutput.Contains("$Name@")) { $Name }
         }
-    } else {
-        Write-Step "Installing dsh plugin: $Spec (profile: $Profile)"
-        $Output = & $DshCommand plugin --profile $Profile add $Spec 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn2 "  dsh plugin add $Spec failed on $Profile"
-            Show-DshPluginFailure $Output
+    )
+
+    $CanCheckUpdates = $true
+    $Outdated = $null
+    if ($InstalledNames.Count -gt 0) {
+        $ProfileDir = Join-Path $DshHome "profiles\$Profile"
+        $OutdatedOutput = & pnpm --dir $ProfileDir outdated @InstalledNames --format json 2>$null
+        try {
+            $OutdatedText = ($OutdatedOutput -join "`n").Trim()
+            if (-not $OutdatedText) { throw 'pnpm returned no update status' }
+            $Outdated = $OutdatedText | ConvertFrom-Json
+        } catch {
+            $CanCheckUpdates = $false
+            Write-Warn2 "  could not check dsh plugin versions on $Profile; skipping installed plugin updates"
         }
     }
+
+    $Changed = $false
+    foreach ($Spec in $Specs) {
+        $Name = Get-DshPluginName $Spec
+        $Installed = $ListOutput.Contains("$Name@")
+        $NeedsUpdate = $Installed -and $CanCheckUpdates -and ($null -ne $Outdated.PSObject.Properties[$Name])
+        if (-not $Installed) {
+            Write-Step "Installing dsh plugin: $Spec (profile: $Profile)"
+            $Output = & $DshCommand plugin --profile $Profile add $Spec 2>&1
+            $Changed = $true
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn2 "  dsh plugin add $Spec failed on $Profile"
+                Show-DshPluginFailure $Output
+            }
+        } elseif ($NeedsUpdate) {
+            Write-Step "Updating dsh plugin: $Spec (profile: $Profile)"
+            $Output = & $DshCommand plugin --profile $Profile update $Name --latest 2>&1
+            $Changed = $true
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn2 "  dsh plugin update $Name failed on $Profile"
+                Show-DshPluginFailure $Output
+            }
+        }
+    }
+    if (-not $Changed -and $CanCheckUpdates) { Write-Host "  dsh plugins already current (profile: $Profile)" }
 }
 
 # pnpm prints "Issues with peer dependencies found" after every plugin operation
@@ -1797,26 +1931,19 @@ if (Test-Cmd dsh) {
         $DshProfilesSeen++
         if ($DshProfileDir.Name -eq 'dsh-tui') { $DshTuiCovered = $true }
         Set-DshProfilePeerRules $DshProfileDir.Name
-        foreach ($DshBundle in $DshBundles) {
-            Install-OrUpdate-DshPlugin $DshProfileDir.Name $DshBundle
-        }
+        $ProfileBundles = if ($DshProfileDir.Name -eq 'web') {
+            @($DshBundles) + @('dshmarket', 'dsh-context')
+        } else { $DshBundles }
+        Install-OrUpdate-DshPlugins $DshProfileDir.Name $ProfileBundles
     }
     if ($DshProfilesSeen -eq 0) {
         # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
-        foreach ($DshBundle in $DshBundles) {
-            Install-OrUpdate-DshPlugin 'web' $DshBundle
-        }
+        Install-OrUpdate-DshPlugins 'web' (@($DshBundles) + @('dshmarket', 'dsh-context'))
         Set-DshProfilePeerRules 'web'
     }
     if (-not $DshTuiCovered) {
-        foreach ($DshBundle in $DshBundles) {
-            Install-OrUpdate-DshPlugin 'dsh-tui' $DshBundle
-        }
+        Install-OrUpdate-DshPlugins 'dsh-tui' $DshBundles
         Set-DshProfilePeerRules 'dsh-tui'
-    }
-
-    foreach ($plugin in @('dshmarket', 'dsh-context')) {
-        Install-OrUpdate-DshPlugin 'web' $plugin
     }
 
     # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
@@ -1852,15 +1979,17 @@ if (Test-Cmd dsh) {
         }
     }
 
-    # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
-    # profile's @deepseek-harness-tui/dsh-tui bundle, so re-add the bundle at the
-    # installed launcher version whenever the profile already exists (it is lazily
-    # bootstrapped on first `dst`, so skip when absent).
+    # The launcher hard-fails when its version drifts from the profile bundle.
+    # Re-add only on drift; an already matching profile needs no pnpm operation.
     $DshTuiLauncher = (npm list -g --depth=0 '@deepseek-harness-tui/dsh-tui' 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1)
     if ($DshTuiLauncher -and (Test-Path (Join-Path $DshHome 'profiles\dsh-tui\package.json'))) {
-        Write-Step "Syncing dsh-tui bundle to launcher $DshTuiLauncher"
-        dsh plugin --profile dsh-tui add "@deepseek-harness-tui/dsh-tui@$DshTuiLauncher" 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$DshTuiLauncher failed (may already be synced)" }
+        $DshTuiCurrent = dsh plugin --profile dsh-tui list 2>$null |
+            Select-String -SimpleMatch -Quiet "@deepseek-harness-tui/dsh-tui@$DshTuiLauncher"
+        if (-not $DshTuiCurrent) {
+            Write-Step "Syncing dsh-tui bundle to launcher $DshTuiLauncher"
+            dsh plugin --profile dsh-tui add "@deepseek-harness-tui/dsh-tui@$DshTuiLauncher" 2>$null
+            if ($LASTEXITCODE -ne 0) { Write-Warn2 "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$DshTuiLauncher failed" }
+        }
     }
 } else {
     Write-Warn2 'dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)'
@@ -1873,7 +2002,8 @@ if (Test-Cmd dsh) {
 # modlens / agent-teams / engineering-skill-pack / mnemon / image-gen skills; the
 # ~\.dsh\skills junctions from 7e2/7e3 already reach Desktop through dsh-base.
 $DesktopProfile = Join-Path $DshHome 'profiles\desktop\package.json'
-$DesktopRecord = Get-DshDesktopUninstallRecord
+$DesktopRecord = Get-DshDesktopUninstallRecords |
+    Where-Object { $_.InstallLocation } | Select-Object -First 1
 $DesktopInstall = if ($DesktopRecord) { $DesktopRecord.InstallLocation } else {
     $DesktopFallback = Join-Path $env:LOCALAPPDATA 'Programs\DeepSeek Harness'
     if (Test-Path -LiteralPath (Join-Path $DesktopFallback 'DeepSeek Harness.exe')) { $DesktopFallback } else { $null }
@@ -1884,9 +2014,7 @@ if (Test-Path -LiteralPath $DesktopProfile) {
         # Electron owns this profile, but its pnpm settings live in the same file
         # the bundled command reads; record the expected peers before updating.
         Set-DshProfilePeerRules 'desktop'
-        foreach ($DshBundle in $DshBundles) {
-            Install-OrUpdate-DshPlugin 'desktop' $DshBundle $DesktopDsh
-        }
+        Install-OrUpdate-DshPlugins 'desktop' $DshBundles $DesktopDsh
         foreach ($retiredBot in @('ds-bot', 'dsh-bot')) {
             if (& $DesktopDsh plugin --profile desktop list 2>$null | Select-String -SimpleMatch -Quiet "$retiredBot@") {
                 & $DesktopDsh plugin --profile desktop remove $retiredBot 2>$null

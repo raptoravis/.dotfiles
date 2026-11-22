@@ -1297,7 +1297,7 @@ fi
 # The filesystem skill provider (@deepseek-ai/dsh-skill-filesystem) that reads
 # ~/.dsh/skills is already built into dsh via @deepseek-ai/dsh-base, so it is
 # not added here (its npm `latest` is a stale 0.0.1-rc.3 library, not a bundle).
-# Each bundle is installed if absent and updated to latest if present.
+# Each bundle is installed if absent and updated only when a newer revision exists.
 #
 # Profiles install per directory, so a profile booted without these skill bundles
 # composes no yunxing/modlens skill provider and its sessions list no yunxing or
@@ -1335,26 +1335,51 @@ dsh_plugin_failure_reason() {
   printf '    %s\n' "$line"
 }
 
-# Install a plugin if absent, otherwise update it to latest. `dsh plugin add`
-# delegates to pnpm add — fine for registry specs, but git specs pin a commit and
-# re-adding retains that lock, so present plugins always go through
-# `dsh plugin update <name> --latest`.
-dsh_plugin_install_or_update() {
-  local profile="$1" spec="$2" name output
-  name="$(dsh_plugin_name "$spec")"
-  if dsh plugin --profile "$profile" list 2>/dev/null | grep -qF "$name@"; then
-    log "Updating dsh plugin: $spec (profile: $profile)"
-    if ! output="$(dsh plugin --profile "$profile" update "$name" --latest 2>&1 >/dev/null)"; then
-      warn "  dsh plugin update $name failed on $profile"
-      dsh_plugin_failure_reason "$output"
+# Resolve update status once per profile, then install absent plugins and update
+# only stale ones. A direct pnpm check avoids dsh treating `outdated` exit code 1
+# (updates available) as a plugin-command failure. Git specs are checked too.
+dsh_plugins_install_or_update() {
+  local profile="$1" home="${DSH_HOME:-$HOME/.dsh}"
+  local list_output spec name output outdated_output check_ok=1 changed=0
+  local -a installed_names=()
+  shift
+
+  list_output="$(dsh plugin --profile "$profile" list 2>/dev/null || true)"
+  for spec in "$@"; do
+    name="$(dsh_plugin_name "$spec")"
+    if printf '%s\n' "$list_output" | grep -qF "$name@"; then
+      installed_names+=("$name")
     fi
-  else
-    log "Installing dsh plugin: $spec (profile: $profile)"
-    if ! output="$(dsh plugin --profile "$profile" add "$spec" 2>&1 >/dev/null)"; then
-      warn "  dsh plugin add $spec failed on $profile"
-      dsh_plugin_failure_reason "$output"
+  done
+
+  outdated_output='{}'
+  if [ "${#installed_names[@]}" -gt 0 ]; then
+    outdated_output="$(pnpm --dir "$home/profiles/$profile" outdated "${installed_names[@]}" --format json 2>/dev/null || true)"
+    if ! printf '%s' "$outdated_output" | node -e 'JSON.parse(require("fs").readFileSync(0, "utf8"))' 2>/dev/null; then
+      check_ok=0
+      warn "  could not check dsh plugin versions on $profile; skipping installed plugin updates"
     fi
   fi
+
+  for spec in "$@"; do
+    name="$(dsh_plugin_name "$spec")"
+    if ! printf '%s\n' "$list_output" | grep -qF "$name@"; then
+      log "Installing dsh plugin: $spec (profile: $profile)"
+      if ! output="$(dsh plugin --profile "$profile" add "$spec" 2>&1 >/dev/null)"; then
+        warn "  dsh plugin add $spec failed on $profile"
+        dsh_plugin_failure_reason "$output"
+      fi
+      changed=1
+    elif [ "$check_ok" -eq 1 ] && printf '%s\n' "$outdated_output" | grep -qF "\"$name\":"; then
+      log "Updating dsh plugin: $spec (profile: $profile)"
+      if ! output="$(dsh plugin --profile "$profile" update "$name" --latest 2>&1 >/dev/null)"; then
+        warn "  dsh plugin update $name failed on $profile"
+        dsh_plugin_failure_reason "$output"
+      fi
+      changed=1
+    fi
+  done
+  [ "$changed" -ne 0 ] || [ "$check_ok" -ne 1 ] || printf '  dsh plugins already current (profile: %s)\n' "$profile"
 }
 
 if cmd_exists_local dsh; then
@@ -1369,25 +1394,19 @@ if cmd_exists_local dsh; then
     [ "$dsh_profile" = "desktop" ] && continue
     dsh_profiles_seen=$((dsh_profiles_seen + 1))
     [ "$dsh_profile" = "dsh-tui" ] && dsh_tui_covered=1
-    for dsh_bundle in $dsh_bundles; do
-      dsh_plugin_install_or_update "$dsh_profile" "$dsh_bundle"
-    done
+    if [ "$dsh_profile" = "web" ]; then
+      dsh_plugins_install_or_update "$dsh_profile" $dsh_bundles dshmarket dsh-context
+    else
+      dsh_plugins_install_or_update "$dsh_profile" $dsh_bundles
+    fi
   done
   if [ "$dsh_profiles_seen" -eq 0 ]; then
     # Fresh machine: no profile on disk yet — the plugin manager creates `web` on demand.
-    for dsh_bundle in $dsh_bundles; do
-      dsh_plugin_install_or_update web "$dsh_bundle"
-    done
+    dsh_plugins_install_or_update web $dsh_bundles dshmarket dsh-context
   fi
   if [ "$dsh_tui_covered" -eq 0 ]; then
-    for dsh_bundle in $dsh_bundles; do
-      dsh_plugin_install_or_update dsh-tui "$dsh_bundle"
-    done
+    dsh_plugins_install_or_update dsh-tui $dsh_bundles
   fi
-
-  for plugin in dshmarket dsh-context; do
-    dsh_plugin_install_or_update web "$plugin"
-  done
 
   # dsh-browser-use (Browser Use Cloud bridge) has no release compatible with
   # dsh 0.2.0-rc — its peer @deepseek-ai/dsh-tools ^0.1.0-rc.6 pins it to 0.1.x.
@@ -1420,15 +1439,14 @@ if cmd_exists_local dsh; then
     rm -f "$dsh_bot_shim"
   done
 
-  # The dsh-tui launcher (`dst`) hard-fails when its version drifts from the
-  # profile's @deepseek-harness-tui/dsh-tui bundle, so re-add the bundle at the
-  # installed launcher version whenever the profile already exists (it is lazily
-  # bootstrapped on first `dst`, so skip when absent).
+  # The launcher hard-fails when its version drifts from the profile bundle.
+  # Re-add only on drift; an already matching profile needs no pnpm operation.
   dsh_tui_launcher="$(npm list -g --depth=0 @deepseek-harness-tui/dsh-tui 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)"
-  if [ -n "$dsh_tui_launcher" ] && [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/dsh-tui/package.json" ]; then
+  if [ -n "$dsh_tui_launcher" ] && [ -f "${DSH_HOME:-$HOME/.dsh}/profiles/dsh-tui/package.json" ] &&
+    ! dsh plugin --profile dsh-tui list 2>/dev/null | grep -qF "@deepseek-harness-tui/dsh-tui@$dsh_tui_launcher"; then
     log "Syncing dsh-tui bundle to launcher $dsh_tui_launcher"
     dsh plugin --profile dsh-tui add "@deepseek-harness-tui/dsh-tui@$dsh_tui_launcher" >/dev/null 2>&1 \
-      || warn "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$dsh_tui_launcher failed (may already be synced)"
+      || warn "  dsh plugin sync @deepseek-harness-tui/dsh-tui@$dsh_tui_launcher failed"
   fi
 else
   warn "dsh CLI not on PATH -- skipping dsh plugins (re-run after dsh is installed)"
