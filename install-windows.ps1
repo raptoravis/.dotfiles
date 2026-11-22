@@ -18,7 +18,7 @@ param(
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
     # Uninstall all AI agent CLIs and the agent tooling this script installs
     # (Claude Code, Codex, OpenCode, Grok, DeepSeek Harness CLI/TUI/Desktop,
-    # omp, oh-my-codex, herdr, bmad-loop, zg, hostc, claude-mem,
+    # omp, oh-my-codex, herdr, bmad-loop, hostc, claude-mem,
     # agent-browser, agent-desktop): stop their
     # processes/services, run the Desktop uninstaller, remove npm packages,
     # config/data/cache dirs, skills checkouts, Cursor skill links and PATH
@@ -135,7 +135,7 @@ if ($UninstallAgents) {
     # a live process leaves locked files behind, and the Codex sandbox helper
     # service would otherwise outlive its CLI.
     Write-Step '  stopping running agent processes'
-    foreach ($procName in @('herdr', 'zg', 'zvec-grep', 'opencode', 'dsh', 'dsh-tui', 'DeepSeek Harness')) {
+    foreach ($procName in @('herdr', 'opencode', 'dsh', 'dsh-tui', 'DeepSeek Harness')) {
         $procs = @(Get-Process -Name $procName -ErrorAction SilentlyContinue)
         foreach ($proc in $procs) {
             Write-Step "  stop $($proc.ProcessName) ($($proc.Id))"
@@ -190,7 +190,6 @@ if ($UninstallAgents) {
             '@xai-official/grok',
             '@deepseek-ai/dsh',
             '@deepseek-harness-tui/dsh-tui',
-            '@zvec/zvec-grep',
             'hostc',
             'claude-mem',
             'agent-browser',
@@ -237,7 +236,6 @@ if ($UninstallAgents) {
         (Join-Path $env:LOCALAPPDATA 'herdr'),
         # bmad-loop's native-Windows state root (run state itself is per project).
         (Join-Path $env:LOCALAPPDATA 'bmad-loop'),
-        (Join-Path $env:USERPROFILE '.zvec-grep'),
         (Join-Path $env:USERPROFILE '.agent-browser'),
         (Join-Path $env:USERPROFILE '.local\share\yunxing'),
         (Join-Path $env:USERPROFILE '.local\share\bmad-method'),
@@ -1620,8 +1618,8 @@ if ((Test-Cmd codex) -and (Test-Cmd omx)) {
     Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)'
     # Clean foreign [hooks.state] residue first so `omx setup` can reconcile its
     # trust state instead of refusing on stale/legacy entries (old oh-my-codex@
-    # plugin hooks, or project-local .codex/hooks.json a prior `codex mcp add` /
-    # zg re-serialization pulled into the OMX block). Best-effort; no-op when clean.
+    # plugin hooks or project-local .codex/hooks.json serialized into the OMX
+    # block by a prior `codex mcp add`). Best-effort; no-op when clean.
     if (Test-Cmd node) {
         $cleanOut = (node (Join-Path $DotfilesDir 'common/scripts/clean-codex-hook-trust.mjs') 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clean-codex-hook-trust failed (continuing): $cleanOut" }

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Remove foreign (non-native) [hooks.state] entries from Codex config.toml so a
 // subsequent `omx setup --scope user` can reconcile its hook trust state instead
-// of refusing to overwrite trust state it does not own. `codex mcp add` and
-// `zg install` re-serialize config.toml and can pull project-local
-// `.codex/hooks.json` or legacy `oh-my-codex@*` plugin hook trust into the
-// OMX-managed block; omx then declines to replace those entries. We keep only
-// omx's native wrapper entries (<CODEX_HOME>/hooks.json:*) and back up before
-// writing. No-op when there is nothing foreign to remove.
+// of refusing to overwrite trust state it does not own. `codex mcp add` can pull
+// project-local `.codex/hooks.json` or legacy `oh-my-codex@*` plugin hook trust
+// into the OMX-managed block while serializing config.toml; omx then declines to
+// replace those entries. We keep only omx's native wrapper entries
+// (<CODEX_HOME>/hooks.json:*) and back up before writing. No-op when there is
+// nothing foreign to remove.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

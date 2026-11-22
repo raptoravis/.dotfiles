@@ -871,8 +871,8 @@ if command -v codex >/dev/null 2>&1 && command -v omx >/dev/null 2>&1; then
   log "Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)"
   # Clean foreign [hooks.state] residue first so `omx setup` can reconcile its
   # trust state instead of refusing on stale/legacy entries (old oh-my-codex@
-  # plugin hooks, or project-local .codex/hooks.json a prior `codex mcp add` /
-  # zg re-serialization pulled into the OMX block). Best-effort; no-op when clean.
+  # plugin hooks or project-local .codex/hooks.json serialized into the OMX
+  # block by a prior `codex mcp add`). Best-effort; no-op when clean.
   if command -v node >/dev/null 2>&1; then
     if clean_out="$(node "$DOTFILES_DIR/common/scripts/clean-codex-hook-trust.mjs" 2>&1)"; then
       [ -n "$clean_out" ] && printf '  %s\n' "$clean_out"

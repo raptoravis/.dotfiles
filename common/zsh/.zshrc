@@ -77,16 +77,6 @@ if [[ -n "$WT_SESSION" ]] && (( $+commands[wslpath] )); then
     precmd_functions+=(_report_cwd_to_wt)
 fi
 
-# zg 索引提示 — 进入 git 仓库但还没建 zg 索引时，提示跑一次 `zg index`。
-# 每次显示 prompt 前刷新；建完索引（.zvec-grep 存在）后，提示自动消失。
-if (( $+commands[zg] )); then
-  _zg_index_hint() {
-    [[ -e .git && ! -e .zvec-grep ]] || return
-    print -P '%F{yellow}[zg] 此项目还没索引，跑 %Bzg index%b 建一次（agent 也能用了）%f'
-  }
-  precmd_functions+=(_zg_index_hint)
-fi
-
 # mise (runtime version manager)
 eval "$(mise activate zsh)"
 
