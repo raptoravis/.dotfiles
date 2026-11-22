@@ -1,12 +1,10 @@
 #!/usr/bin/env node
-// Remove foreign (non-native) [hooks.state] entries from Codex config.toml so a
-// subsequent `omx setup --scope user` can reconcile its hook trust state instead
-// of refusing to overwrite trust state it does not own. `codex mcp add` can pull
-// project-local `.codex/hooks.json` or legacy `oh-my-codex@*` plugin hook trust
-// into the OMX-managed block while serializing config.toml; omx then declines to
-// replace those entries. We keep only omx's native wrapper entries
-// (<CODEX_HOME>/hooks.json:*) and back up before writing. No-op when there is
-// nothing foreign to remove.
+// Remove [hooks.state] entries that `omx setup` cannot safely reconcile:
+// foreign hook files and legacy native-hook entries carrying metadata such as
+// `enabled`. OMX owns <CODEX_HOME>/hooks.json trust and emits one trusted_hash
+// per entry; stale metadata or duplicate path spellings make its conservative
+// refresh refuse to overwrite the state. Back up before writing and leave valid
+// native trusted_hash-only entries for OMX to verify or replace.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,17 +24,27 @@ const nativeHooks = norm(path.join(codexHome, 'hooks.json'));
 
 const kept = [];
 const removed = [];
-let skip = false;
 
-for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('[')) {
-        // A header line starts (or ends) a block. Skip a [hooks.state] block only
-        // when it does not reference the native Codex hooks file.
-        skip = trimmed.startsWith('[hooks.state.') && !norm(trimmed).includes(nativeHooks);
-        if (skip) removed.push(trimmed);
+for (let index = 0; index < lines.length;) {
+    const trimmed = lines[index].trim();
+    if (!trimmed.startsWith('[hooks.state.')) {
+        kept.push(lines[index]);
+        index += 1;
+        continue;
     }
-    if (!skip) kept.push(line);
+
+    let end = index + 1;
+    while (end < lines.length && !lines[end].trim().startsWith('[')) end += 1;
+    const block = lines.slice(index, end);
+    const isNative = norm(trimmed).includes(nativeHooks);
+    const hasLegacyMetadata = block.slice(1).some((line) => {
+        const assignment = line.trim().match(/^([A-Za-z0-9_-]+)\s*=/);
+        return assignment && assignment[1] !== 'trusted_hash';
+    });
+
+    if (!isNative || hasLegacyMetadata) removed.push(trimmed);
+    else kept.push(...block);
+    index = end;
 }
 
 if (removed.length === 0) process.exit(0);
@@ -46,4 +54,4 @@ const bakPath = `${cfgPath}.bak-${stamp}`;
 fs.copyFileSync(cfgPath, bakPath);
 fs.writeFileSync(cfgPath, kept.join(newline), 'utf8');
 
-console.log(`removed ${removed.length} foreign [hooks.state] entries from ${cfgPath} (backup: ${bakPath})`);
+console.log(`removed ${removed.length} conflicting [hooks.state] entries from ${cfgPath} (backup: ${bakPath})`);

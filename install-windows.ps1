@@ -86,6 +86,20 @@ function Test-SemverSafeUpgrade($a, $b) {
 }
 function Install-NpmCliIfStale ($pkg, $label) {
     $inst = npm list -g --depth=0 $pkg 2>$null | ForEach-Object { if ($_ -match '@([^@]+)$') { $matches[1] } } | Select-Object -First 1
+    # Interrupted installs can leave a package directory without package.json/version.
+    # Let npm remove that partial state before retrying instead of colliding with it.
+    if (-not $inst) {
+        $npmRoot = ((npm root -g 2>$null) | Select-Object -Last 1)
+        $packageRoot = if ($npmRoot) { Join-Path $npmRoot.Trim() $pkg } else { $null }
+        if ($packageRoot -and (Test-Path -LiteralPath $packageRoot)) {
+            Write-Step "Repairing incomplete $label install ($pkg)"
+            npm uninstall -g $pkg
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warn2 "  could not remove incomplete $label install; close running $label processes and rerun"
+                return
+            }
+        }
+    }
     if (-not $inst) {
         Write-Step "Installing $label ($pkg)"
         npm install -g $pkg
@@ -186,6 +200,7 @@ if ($UninstallAgents) {
             '@openai/codex',
             'oh-my-codex',
             '@opencode/cli',
+            'opencode-ai',
             '@openhands/agent-canvas',
             '@xai-official/grok',
             '@deepseek-ai/dsh',
@@ -1228,7 +1243,19 @@ if (Test-Cmd npm) {
     Install-NpmCliIfStale '@openai/codex' 'Codex CLI'
     # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
     Install-NpmCliIfStale 'oh-my-codex' 'oh-my-codex (omx CLI)'
-    Install-NpmCliIfStale '@opencode/cli' 'OpenCode CLI'
+    # OpenCode v2 renamed its npm package. Both packages own the `opencode` shim,
+    # so npm cannot install the replacement until the v1 package releases it.
+    $OpenCodeReady = $true
+    $LegacyOpenCodeRoot = Join-Path ((npm root -g 2>$null) | Select-Object -Last 1) 'opencode-ai'
+    if (Test-Path -LiteralPath $LegacyOpenCodeRoot) {
+        Write-Step 'Migrating OpenCode npm package: opencode-ai -> @opencode/cli'
+        npm uninstall -g opencode-ai
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn2 '  OpenCode migration failed; close running OpenCode processes and rerun'
+            $OpenCodeReady = $false
+        }
+    }
+    if ($OpenCodeReady) { Install-NpmCliIfStale '@opencode/cli' 'OpenCode CLI' }
     Install-NpmCliIfStale '@xai-official/grok' 'Grok CLI'
     # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
     # profile/state under $DshHome\profiles. Node ^22.19 || >=24.
@@ -1521,11 +1548,16 @@ if (Test-Cmd codex) {
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
 if (Test-Cmd opencode) {
+    $OpenCodeVersion = ((opencode --version 2>$null) | Select-Object -First 1)
+    $OpenCodeMajor = if ($OpenCodeVersion -match '(\d+)\.') { [int]$Matches[1] } else { 0 }
+} else {
+    $OpenCodeVersion = $null
+    $OpenCodeMajor = 0
+}
+if ($OpenCodeMajor -ge 2) {
     Write-Step 'Installing yunxing OpenCode plugin'
-    # Strip opencode v1's singular `plugin` key and any pinned `#hash` yunxing
-    # entry from `plugins`. `opencode plugin remove` only reads the plural key, and
-    # the pinned commit lacks a default export, so it breaks `plugin check`/`update`
-    # iteration; a pinned spec also makes `plugin add` accumulate duplicates.
+    # Strip opencode v1's singular `plugin` key and stale yunxing package specs.
+    # OpenCode v2 uses `plugins`; the tracked main branch updates automatically.
     $ocCfgPath = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
     if ((Test-Cmd node) -and (Test-Path $ocCfgPath)) {
         $env:OC_CFG = $ocCfgPath
@@ -1536,7 +1568,8 @@ if(!c || typeof c!=="object") process.exit(0);
 let changed=false;
 if(Object.prototype.hasOwnProperty.call(c,"plugin")){ delete c.plugin; changed=true; }
 if(Array.isArray(c.plugins)){
-  const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&s.startsWith("yunxing")&&s.includes("#"))))];
+  const target="github:raptoravis/yunxing#main";
+  const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&(s.startsWith("yunxing")||s.includes("raptoravis/yunxing"))&&s!==target)))];
   if(next.length!==c.plugins.length){ c.plugins=next; changed=true; }
 }
 if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n"); console.error("==> cleaned legacy/pinned opencode plugin entries"); }
@@ -1545,20 +1578,14 @@ if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n")
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  failed to clean legacy opencode plugin entries' }
         Remove-Item Env:OC_CFG -ErrorAction SilentlyContinue
     }
-    # Unpinned spec: `add` is idempotent only for an exact match — the cleanup above
-    # strips pinned `#hash` entries so `add` won't accumulate duplicates. Upgrades go
-    # through `plugin update` with no target (updates all outdated plugins), which
-    # never fails with "not configured" on a spec mismatch.
-    $ocErr = (opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1 | Out-String).Trim()
+    # A branch-qualified Git spec is supported by v2 and follows main for updates.
+    $ocErr = (opencode plugin add "github:raptoravis/yunxing#main" 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         if ($ocErr) { Write-Warn2 "  opencode plugin add failed: $ocErr" }
         else { Write-Warn2 '  opencode plugin add failed' }
     }
-    $ocErr = (opencode plugin update 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        if ($ocErr) { Write-Warn2 "  opencode plugin update failed: $ocErr" }
-        else { Write-Warn2 '  opencode plugin update failed' }
-    }
+} elseif ($OpenCodeVersion) {
+    Write-Warn2 "OpenCode v2 is required for yunxing; found $OpenCodeVersion (finish the CLI migration, then re-run)"
 } else {
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
@@ -2066,7 +2093,7 @@ if (Test-Cmd git) {
 
 # ---------------------------------------------------------------------------
 # 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
-#      agent skills (skills\<name>\SKILL.md). Clone it once and link every skill
+#      agent skills (skills\<module>\<name>\SKILL.md). Clone it once and link every skill
 #      directory into each agent's global skills dir, so claude/codex/grok/
 #      dsh/dst/desktop/opencode/cursor/omp all see them. v7 is the preview line
 #      on the default branch (main), not yet tagged. The per-project "bmad
@@ -2089,7 +2116,7 @@ if (Test-Cmd git) {
         git clone --depth=1 --branch main --quiet https://github.com/bmad-code-org/BMAD-METHOD.git $BmadSkillsSrc 2>$null
         if ($LASTEXITCODE -ne 0) { Write-Warn2 '  BMAD-METHOD clone failed' }
     }
-    if (Test-Path (Join-Path $BmadSkillsSrc 'skills\bmad\SKILL.md')) {
+    if (Test-Path (Join-Path $BmadSkillsSrc 'skills\core-tools\bmad\SKILL.md')) {
         Write-Step 'Linking BMAD-METHOD skills into coding agents (claude/codex/grok/dsh/dst/desktop/opencode/cursor/omp)'
         $BmadSkillDests = @(
             (Join-Path $env:USERPROFILE '.claude\skills'),
@@ -2101,6 +2128,7 @@ if (Test-Cmd git) {
             (Join-Path $env:USERPROFILE '.omp\agent\skills')
         )
         $BmadSkillDirs = @(Get-ChildItem -Path (Join-Path $BmadSkillsSrc 'skills') -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-ChildItem -Path $_.FullName -Directory -ErrorAction SilentlyContinue } |
             Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') })
         $BmadSkillNames = @()
         foreach ($BmadSkillDir in $BmadSkillDirs) {
@@ -2115,7 +2143,7 @@ if (Test-Cmd git) {
             }
         }
         if ($BmadSkillNames.Count -eq 0) {
-            Write-Warn2 '  BMAD-METHOD\skills\*\SKILL.md missing -- skipping agent links'
+            Write-Warn2 '  BMAD-METHOD\skills\*\*\SKILL.md missing -- skipping agent links'
         } else {
             Write-Step "Linked $($BmadSkillNames.Count) BMAD-METHOD skills into coding agents (claude/codex/grok/dsh/dst/desktop/opencode/cursor/omp)"
             # Drop junctions left for a skill upstream no longer ships.
@@ -2129,7 +2157,7 @@ if (Test-Cmd git) {
             }
         }
     } else {
-        Write-Warn2 '  BMAD-METHOD/skills/bmad/SKILL.md missing -- skipping agent links'
+        Write-Warn2 '  BMAD-METHOD/skills/core-tools/bmad/SKILL.md missing -- skipping agent links'
     }
 } else {
     Write-Warn2 'git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)'

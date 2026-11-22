@@ -31,7 +31,7 @@ class ApplyOpenCodeTest(unittest.TestCase):
                 json.dumps(
                     {
                         '$schema': 'https://opencode.ai/config.json',
-                        'plugin': ['yunxing@git+https://github.com/raptoravis/yunxing.git'],
+                        'plugins': ['github:raptoravis/yunxing#main'],
                         'mcp': {'context7': {'type': 'local'}},
                     }
                 ),
@@ -51,7 +51,7 @@ class ApplyOpenCodeTest(unittest.TestCase):
                 aicodingagentconfig.apply_opencode('test', provider, 'test-stamp', False)
 
             result = json.loads(config_path.read_text(encoding='utf-8'))
-            assert result['plugin'] == ['yunxing@git+https://github.com/raptoravis/yunxing.git']
+            assert result['plugins'] == ['github:raptoravis/yunxing#main']
             assert result['mcp'] == {'context7': {'type': 'local'}}
             assert result['model'] == 'test/test-model'
 

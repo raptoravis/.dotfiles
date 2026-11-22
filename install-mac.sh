@@ -48,7 +48,7 @@ if (( UNINSTALL_AGENTS )); then
 
   # 1) npm global uninstall
   if command -v npm >/dev/null 2>&1; then
-    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "@openhands/agent-canvas" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
+    for pkg in "@anthropic-ai/claude-code" "@openai/codex" "@opencode/cli" "opencode-ai" "@openhands/agent-canvas" "@xai-official/grok" "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
       log "  npm uninstall -g $pkg"
       npm uninstall -g "$pkg" 2>/dev/null || warn "  $pkg was not installed globally (or uninstall failed)"
     done
@@ -443,6 +443,14 @@ if command -v npm >/dev/null 2>&1; then
     local pkg="$1" label="$2" inst latest
     shift 2
     inst=$(npm list -g --depth=0 "$pkg" 2>/dev/null | sed -nE 's/.*@([^@]+)$/\1/p' | head -1)
+    # Repair interrupted installs that left a package directory without a version.
+    if [[ -z "$inst" && -d "$(npm root -g 2>/dev/null)/$pkg" ]]; then
+      log "Repairing incomplete $label install ($pkg)"
+      npm uninstall -g "$pkg" || {
+        warn "  could not remove incomplete $label install; close running $label processes and rerun"
+        return
+      }
+    fi
     if [[ -z "$inst" ]]; then
       clear_brew_cask_conflict "$pkg"
       log "Installing $label ($pkg)"
@@ -500,7 +508,14 @@ if command -v npm >/dev/null 2>&1; then
   npm_install_if_stale @openai/codex "Codex CLI"
   # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
   npm_install_if_stale oh-my-codex "oh-my-codex (omx CLI)"
-  npm_install_if_stale @opencode/cli "OpenCode CLI"
+  # OpenCode v2 renamed its npm package; remove v1 first because both own `opencode`.
+  if [[ -d "$(npm root -g 2>/dev/null)/opencode-ai" ]]; then
+    log "Migrating OpenCode npm package: opencode-ai -> @opencode/cli"
+    npm uninstall -g opencode-ai || warn "  OpenCode migration failed; close running OpenCode processes and rerun"
+  fi
+  if [[ ! -d "$(npm root -g 2>/dev/null)/opencode-ai" ]]; then
+    npm_install_if_stale @opencode/cli "OpenCode CLI"
+  fi
   npm_install_if_stale @xai-official/grok "Grok CLI"
   # DeepSeek Harness — official DeepSeek native agent framework. bin: `dsh`,
   # profile/state under ${DSH_HOME:-~/.dsh}/profiles. Node ^22.19 || >=24.
@@ -767,10 +782,15 @@ else
 fi
 
 # OpenCode — native plugin module (one-step; no marketplace concept).
+opencode_version=""
+opencode_major=0
 if command -v opencode >/dev/null 2>&1; then
-  # 清理 opencode v1 遗留的 `plugin` 单数键（pin 到 commit hash 的残留）。v2 用
-  # `plugins` 复数键，`opencode plugin remove` 只认复数键，旧 pin 条目会留成坏记录
-  # （该 commit 的 yunxing 缺 default export），让 `plugin check`/`update` 遍历时失败。
+  opencode_version="$(opencode --version 2>/dev/null | head -1)"
+  if [[ "$opencode_version" =~ ([0-9]+)\. ]]; then opencode_major="${BASH_REMATCH[1]}"; fi
+fi
+if (( opencode_major >= 2 )); then
+  # Remove opencode v1's singular `plugin` key and stale yunxing package specs.
+  # OpenCode v2 uses `plugins`; the tracked main branch updates automatically.
   OC_CFG="$HOME/.config/opencode/opencode.json"
   if [ -f "$OC_CFG" ] && command -v node >/dev/null 2>&1; then
     OC_CFG="$OC_CFG" node -e '
@@ -780,21 +800,17 @@ if command -v opencode >/dev/null 2>&1; then
       let changed=false;
       if(Object.prototype.hasOwnProperty.call(c,"plugin")){ delete c.plugin; changed=true; }
       if(Array.isArray(c.plugins)){
-        const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&s.startsWith("yunxing")&&s.includes("#"))))];
+        const target="github:raptoravis/yunxing#main";
+        const next=[...new Set(c.plugins.filter(s=>!(typeof s==="string"&&(s.startsWith("yunxing")||s.includes("raptoravis/yunxing"))&&s!==target)))];
         if(next.length!==c.plugins.length){ c.plugins=next; changed=true; }
       }
       if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n"); console.error("==> cleaned legacy/pinned opencode plugin entries"); }
     ' || warn "  failed to clean legacy opencode plugin entries"
   fi
   log "Installing yunxing OpenCode plugin"
-  # Unpinned spec: `add` is idempotent only for an exact match — a pinned
-  # `#hash` entry from a prior run is treated as a different plugin and would
-  # accumulate duplicates, so the cleanup above strips those first. Upgrades go
-  # through `plugin update` with no target (updates all outdated plugins), which
-  # never fails with "not configured" on a spec mismatch.
-  # Capture stderr so a transient failure (e.g. git fetch/network) is visible
-  # instead of a bare warning — mirrors the codex section below.
-  oc_err="$(opencode plugin add "yunxing@git+https://github.com/raptoravis/yunxing.git" 2>&1)"
+  # A branch-qualified Git spec is supported by v2 and follows main for updates.
+  # Capture stderr so a transient failure (e.g. git fetch/network) is visible.
+  oc_err="$(opencode plugin add "github:raptoravis/yunxing#main" 2>&1)"
   if [ $? -ne 0 ]; then
     if [ -n "$oc_err" ]; then
       warn "  opencode plugin add failed: $oc_err"
@@ -802,14 +818,8 @@ if command -v opencode >/dev/null 2>&1; then
       warn "  opencode plugin add failed"
     fi
   fi
-  oc_err="$(opencode plugin update 2>&1)"
-  if [ $? -ne 0 ]; then
-    if [ -n "$oc_err" ]; then
-      warn "  opencode plugin update failed: $oc_err"
-    else
-      warn "  opencode plugin update failed"
-    fi
-  fi
+elif [ -n "$opencode_version" ]; then
+  warn "OpenCode v2 is required for yunxing; found $opencode_version (finish the CLI migration, then re-run)"
 else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
@@ -1427,7 +1437,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 7e4) BMad Method (bmad-code-org/BMAD-METHOD) — v7 ships the method as plain
-#      agent skills (skills/*/SKILL.md). Clone it once and link every skill
+#      agent skills (skills/*/*/SKILL.md). Clone it once and link every skill
 #      directory into each agent's global skills dir, so claude/codex/grok/
 #      dsh/dst/desktop/opencode/cursor/omp all see them. v7 is the preview line
 #      on the default branch (main), not yet tagged. The per-project "bmad
@@ -1449,7 +1459,7 @@ if command -v git >/dev/null 2>&1; then
     git clone --depth=1 --branch main --quiet https://github.com/bmad-code-org/BMAD-METHOD.git "$BMAD_SKILLS_SRC" \
       || warn "  BMAD-METHOD clone failed"
   fi
-  if [ -f "$BMAD_SKILLS_SRC/skills/bmad/SKILL.md" ]; then
+  if [ -f "$BMAD_SKILLS_SRC/skills/core-tools/bmad/SKILL.md" ]; then
     bmad_skill_dests=(
       "$HOME/.claude/skills"
       "${CODEX_HOME:-$HOME/.codex}/skills"
@@ -1461,7 +1471,7 @@ if command -v git >/dev/null 2>&1; then
     )
     bmad_skill_names=" "
     bmad_skill_count=0
-    for bmad_skill_md in "$BMAD_SKILLS_SRC"/skills/*/SKILL.md; do
+    for bmad_skill_md in "$BMAD_SKILLS_SRC"/skills/*/*/SKILL.md; do
       [ -e "$bmad_skill_md" ] || continue
       bmad_skill_dir="$(dirname "$bmad_skill_md")"
       bmad_skill_name="$(basename "$bmad_skill_dir")"
@@ -1474,7 +1484,7 @@ if command -v git >/dev/null 2>&1; then
       bmad_skill_count=$((bmad_skill_count + 1))
     done
     if [ "$bmad_skill_count" -eq 0 ]; then
-      warn "  BMAD-METHOD/skills/*/SKILL.md missing — skipping agent links"
+      warn "  BMAD-METHOD/skills/*/*/SKILL.md missing — skipping agent links"
     else
       log "Linked $bmad_skill_count BMAD-METHOD skills into claude/codex/grok/dsh(dst,desktop)/opencode/cursor/omp"
       # Drop links left for a skill upstream no longer ships (removed/renamed).
@@ -1493,7 +1503,7 @@ if command -v git >/dev/null 2>&1; then
       done
     fi
   else
-    warn "  BMAD-METHOD/skills/bmad/SKILL.md missing — skipping agent links"
+    warn "  BMAD-METHOD/skills/core-tools/bmad/SKILL.md missing — skipping agent links"
   fi
 else
   warn "git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)"
