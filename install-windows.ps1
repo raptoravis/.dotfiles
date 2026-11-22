@@ -308,7 +308,7 @@ if ($UninstallAgents) {
         Write-Warn2 'npm not on PATH -- skipping npm uninstall step'
     }
 
-    # 3b) uv-tool CLIs — bmad-loop installs as a `uv tool` (see 7e5 below), so it
+    # 3b) uv-tool CLIs — bmad-loop was installed as a `uv tool`, so it
     #     has no npm package to uninstall.
     if (Test-Cmd uv) {
         Write-Step '  uv tool uninstall bmad-loop'
@@ -1053,8 +1053,7 @@ foreach ($t in $CargoTools.Keys) {
 }
 
 # psmux - native-Windows terminal multiplexer, deliberately outside the
-# skip-if-present loop above: bmad-loop's Windows backend needs psmux >= 3.4.0
-# and tracks the newest release, so install it when missing and upgrade it when
+# skip-if-present loop above. Install it when missing and upgrade it when
 # crates.io is ahead (plain `cargo install` never upgrades an existing binary).
 $PsmuxFloor = [version]'3.4.0'
 function Get-PsmuxVersion {
@@ -1099,13 +1098,12 @@ if (-not $psmuxInstalled -or $psmuxInstalled -lt $psmuxTarget) {
     Write-Host "  psmux already installed ($psmuxInstalled)"
 }
 
-# Re-read after the install so a failed upgrade is visible now, not on the
-# first `bmad-loop run`.
+# Verify the installed version after attempting an install or upgrade.
 $psmuxAfter = Get-PsmuxVersion
 if (-not $psmuxAfter) {
-    Write-Warn2 "  psmux not on PATH - bmad-loop's native Windows backend cannot drive runs"
+    Write-Warn2 "  psmux not on PATH"
 } elseif ($psmuxAfter -lt $PsmuxFloor) {
-    Write-Warn2 "  psmux $psmuxAfter is below the $PsmuxFloor floor bmad-loop requires"
+    Write-Warn2 "  psmux $psmuxAfter is below the $PsmuxFloor minimum"
 } elseif ($psmuxLatest -and $psmuxAfter -lt $psmuxLatest) {
     Write-Warn2 "  psmux $psmuxAfter is older than $psmuxLatest on crates.io - upgrade failed?"
 }
@@ -2289,86 +2287,6 @@ if (Test-Cmd git) {
     }
 } else {
     Write-Warn2 'git not on PATH -- skipping BMAD-METHOD skills (re-run after git is installed)'
-}
-
-# ---------------------------------------------------------------------------
-# 7e5) bmad-loop - deterministic orchestrator for the BMAD implementation phase
-#      (story -> dev -> verify -> review -> commit, unattended). Upstream ships
-#      it from Git only (no PyPI, no npm), so it installs as a uv tool with the
-#      TUI extra. Windows drives the native path, not WSL: the bundled psmux
-#      backend launches the agent sessions, which needs psmux >= 3.4.0 and
-#      pwsh >= 7.3 on PATH; bmad-loop run refuses to start below either.
-#      Policy (verify commands, worktree isolation, review CLI) is per project
-#      in .bmad-loop/policy.toml, written by "bmad-loop init" - nothing to set
-#      up here. BMAD v7 support ships only on the default branch (the newest
-#      vX.Y.Z tag still predates it), so this tracks main and refreshes it on
-#      every run.
-# ---------------------------------------------------------------------------
-$BmadLoopRepo = 'https://github.com/bmad-code-org/bmad-loop.git'
-$BmadLoopPython = '3.14'   # upstream verifies 3.11-3.14; a 3.15 default is untested
-
-# psmux is the native-Windows multiplexer bmad-loop drives. Section 6 installs
-# it and keeps it on the newest release (>= 3.4.0); verify it here so a broken
-# upgrade surfaces next to the tool that needs it. Releases below 3.4.0 read as
-# unavailable, and bmad-loop run then refuses to start.
-$psmuxVersion = $null
-if (Test-Cmd psmux) {
-    $psmuxRaw = psmux -V 2>$null | Select-Object -First 1
-    if ($psmuxRaw -match '(\d+\.\d+\.\d+)') { $psmuxVersion = [version]$Matches[1] }
-}
-if (-not $psmuxVersion) {
-    Write-Warn2 "  psmux not found - bmad-loop's native Windows backend needs psmux >= $PsmuxFloor (re-run this script; winget install psmux as a fallback)"
-} elseif ($psmuxVersion -lt $PsmuxFloor) {
-    Write-Warn2 "  psmux $psmuxVersion is below bmad-loop's $PsmuxFloor floor"
-}
-
-# psmux runs every window under pwsh; bmad-loop wants 7.3 or newer.
-if (Test-Cmd pwsh) {
-    $pwshVer = $null
-    try {
-        $pwshVer = [version]((& (Get-Command pwsh).Source -NoProfile -Command '$PSVersionTable.PSVersion.ToString()').Trim())
-    } catch { }
-    if ($pwshVer -and $pwshVer -lt [version]'7.3') {
-        Write-Warn2 "  pwsh $pwshVer is below bmad-loop's 7.3 floor (winget install Microsoft.PowerShell)"
-    }
-} else {
-    Write-Warn2 "  pwsh not on PATH - bmad-loop's psmux backend needs PowerShell 7.3+"
-}
-
-if (-not (Test-Cmd uv)) {
-    Write-Warn2 'uv not on PATH - skipping bmad-loop (re-run after uv is installed)'
-} else {
-    # BMAD v7 support ships only on the default branch (the newest vX.Y.Z tag
-    # still predates it), so track main and refresh it on every run. main is not
-    # versioned -- the tool reports the same version as the last release tag --
-    # so there is no tag to version-compare against.
-    $BmadLoopRef = 'main'
-    $BmadLoopSpec = "bmad-loop[tui] @ git+$BmadLoopRepo@$BmadLoopRef"
-
-    # uv tool shims land in `uv tool dir --bin`; refresh this session's PATH so a
-    # tool installed by an earlier run is visible even when the shell predates it.
-    $UvToolBin = @(uv tool dir --bin 2>$null) | Select-Object -First 1
-    if ($UvToolBin -and (Test-Path $UvToolBin) -and ($UvToolBin -notin ($env:Path -split ';'))) {
-        $env:Path = "$UvToolBin;$env:Path"
-    }
-
-    $bmadLoopInstalled = Test-Cmd bmad-loop
-
-    if (-not $bmadLoopInstalled) {
-        Write-Step "Installing bmad-loop[tui] ($BmadLoopRef, Python $BmadLoopPython)"
-        uv tool install --python $BmadLoopPython $BmadLoopSpec
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  bmad-loop install failed' }
-    } else {
-        Write-Step "Refreshing bmad-loop from $BmadLoopRef"
-        # --force moves an existing env (possibly a vX.Y.Z release) onto main.
-        uv tool install --force --python $BmadLoopPython $BmadLoopSpec
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  bmad-loop refresh failed' }
-    }
-
-    if (Test-Cmd bmad-loop) {
-        Write-Host '  per project: bmad-loop init --cli claude; bmad-loop validate; bmad-loop run'
-        Write-Host '  native Windows backend: psmux (bmad-loop mux should report platform default for win32)'
-    }
 }
 
 # ---------------------------------------------------------------------------
