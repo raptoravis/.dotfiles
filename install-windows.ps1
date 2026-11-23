@@ -623,16 +623,17 @@ function Stop-ScoopAppProcesses($pkg) {
     }
 }
 
-# Package name -> process name, where they differ (default: same as package).
+# Package name -> process names, where they differ (default: same as package).
 # Used to detect a running app and skip its update instead of letting scoop
 # print a wall of "instances still running" errors.
 $ScoopProcName = @{
     'nodejs-lts' = 'node'
     'neovim'     = 'nvim'
+    'windows-terminal' = @('WindowsTerminal', 'OpenConsole')
 }
 function Test-ScoopAppRunning($pkg) {
-    $proc = if ($script:ScoopProcName.ContainsKey($pkg)) { $script:ScoopProcName[$pkg] } else { $pkg }
-    [bool](Get-Process -Name $proc -ErrorAction SilentlyContinue)
+    $processNames = if ($script:ScoopProcName.ContainsKey($pkg)) { $script:ScoopProcName[$pkg] } else { $pkg }
+    [bool](Get-Process -Name $processNames -ErrorAction SilentlyContinue)
 }
 
 function Install-ScoopPackages($label, $pkgs) {
@@ -677,6 +678,11 @@ function Install-ScoopPackages($label, $pkgs) {
                 # Interactive/long-running app (nvim, node...): don't kill it,
                 # don't let scoop spam errors -- just skip this update.
                 Write-Host "  $p already installed -- running, skip update"
+                if ($p -eq 'windows-terminal') {
+                    Write-Warn2 '  Save your work and close all Windows Terminal windows.'
+                    Write-Host '  Press Win+R and run: conhost.exe powershell.exe'
+                    Write-Host '  In the new PowerShell window, run: scoop update windows-terminal'
+                }
             } else {
                 Write-Host "  $p already installed -- updating"
                 scoop update $p
