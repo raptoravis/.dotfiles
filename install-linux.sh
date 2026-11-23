@@ -842,8 +842,6 @@ if command -v npm >/dev/null 2>&1; then
   # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
   npm_install_if_stale @anthropic-ai/claude-code "Claude Code CLI"
   npm_install_if_stale @openai/codex "Codex CLI"
-  # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
-  npm_install_if_stale oh-my-codex "oh-my-codex (omx CLI)"
   # OpenCode v2 renamed its npm package; remove v1 first because both own `opencode`.
   if [[ -d "$(npm root -g 2>/dev/null)/opencode-ai" ]]; then
     log "Migrating OpenCode npm package: opencode-ai -> @opencode/cli"
@@ -1192,32 +1190,6 @@ else
   warn "opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)"
 fi
 
-# oh-my-claudecode + oh-my-codex (Yeachan-Heo)
-#   oh-my-claudecode — Claude Code multi-agent plugin. Marketplace name "omc"
-#   (from .claude-plugin/marketplace.json), plugin selector
-#   "oh-my-claudecode@omc"; same install shape as yunxing.
-#   oh-my-codex — Codex orchestration layer. The npm package (installed above)
-#   ships the `omx` CLI; `omx setup --scope user` wires the plugin + hooks into
-#   the user's codex config (idempotent; re-run keeps it current).
-# Claude Code — oh-my-claudecode plugin.
-if cmd_exists_local claude; then
-  log "Installing oh-my-claudecode Claude Code plugin (marketplace: omc)"
-  claude plugin marketplace add Yeachan-Heo/oh-my-claudecode >/dev/null 2>&1 \
-    || warn "  claude marketplace add oh-my-claudecode failed (may already be registered)"
-  # `install` is idempotent and won't pull newer code; refresh + `update` to keep current.
-  claude plugin marketplace update omc >/dev/null 2>&1 \
-    || warn "  claude marketplace update omc failed"
-  if claude plugin list 2>/dev/null | grep -q 'oh-my-claudecode@omc'; then
-    claude plugin update oh-my-claudecode@omc >/dev/null 2>&1 \
-      || warn "  claude plugin update oh-my-claudecode failed"
-  else
-    claude plugin install oh-my-claudecode@omc >/dev/null 2>&1 \
-      || warn "  claude plugin install oh-my-claudecode failed (may already be enabled)"
-  fi
-else
-  warn "claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)"
-fi
-
 # claude-hud — Claude Code HUD plugin (jarrodwatts/claude-hud). Marketplace name
 # "claude-hud", plugin selector "claude-hud@claude-hud"; same install shape as yunxing.
 if cmd_exists_local claude; then
@@ -1235,41 +1207,6 @@ if cmd_exists_local claude; then
   fi
 else
   warn "claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)"
-fi
-
-# Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
-# user's codex config (idempotent; re-run keeps it current).
-#
-# stdin + stdout are detached from the TTY because `omx setup` only prompts when
-# BOTH are terminals (persisted-preference review, legacy vs plugin skill
-# delivery). Detached, it reuses the choices recorded in ./.omx/setup-scope.json,
-# so an existing install is kept as-is instead of blocking on a prompt that the
-# redirection below would hide.
-if cmd_exists_local codex && cmd_exists_local omx; then
-  log "Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)"
-  # Clean foreign [hooks.state] residue first so `omx setup` can reconcile its
-  # trust state instead of refusing on stale/legacy entries (old oh-my-codex@
-  # plugin hooks or project-local .codex/hooks.json serialized into the OMX
-  # block by a prior `codex mcp add`). Best-effort; no-op when clean.
-  if command -v node >/dev/null 2>&1; then
-    if clean_out="$(node "$DOTFILES_DIR/common/scripts/clean-codex-hook-trust.mjs" 2>&1)"; then
-      [ -n "$clean_out" ] && printf '  %s\n' "$clean_out"
-    else
-      warn "  clean-codex-hook-trust failed (continuing): $clean_out"
-    fi
-  fi
-  # Capture stderr so a real failure (e.g. a corrupted OMX hook trust state in
-  # config.toml) is visible instead of a bare warning.
-  omx_err="$(omx setup --scope user </dev/null 2>&1)"
-  if [ $? -ne 0 ]; then
-    if [ -n "$omx_err" ]; then
-      warn "  omx setup --scope user failed: $omx_err"
-    else
-      warn "  omx setup --scope user failed"
-    fi
-  fi
-else
-  warn "codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)"
 fi
 
 # Apply local policy after plugin setup, which may generate global instructions.

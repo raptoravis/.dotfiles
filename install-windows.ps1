@@ -18,7 +18,7 @@ param(
     [string]$ProxyUrl = 'http://127.0.0.1:7890',
     # Uninstall all AI agent CLIs and the agent tooling this script installs
     # (Claude Code, Codex, OpenCode, Grok, DeepSeek Harness CLI/TUI/Desktop,
-    # omp, oh-my-codex, herdr, bmad-loop, hostc, claude-mem,
+    # omp, herdr, bmad-loop, hostc, claude-mem,
     # agent-browser, agent-desktop): stop their
     # processes/services, run the Desktop uninstaller, remove npm packages,
     # config/data/cache dirs, skills checkouts, Cursor skill links and PATH
@@ -284,7 +284,6 @@ if ($UninstallAgents) {
         $AgentPackages = @(
             '@anthropic-ai/claude-code',
             '@openai/codex',
-            'oh-my-codex',
             '@opencode/cli',
             'opencode-ai',
             '@openhands/agent-canvas',
@@ -1344,8 +1343,6 @@ if (Test-Cmd npm) {
     # 只在未安装或远端有新版时才 npm install；已是最新则跳过，重跑脚本不再白升级。
     Install-NpmCliIfStale '@anthropic-ai/claude-code' 'Claude Code CLI'
     Install-NpmCliIfStale '@openai/codex' 'Codex CLI'
-    # oh-my-codex — Yeachan-Heo multi-agent orchestration layer for Codex. bin: `omx`.
-    Install-NpmCliIfStale 'oh-my-codex' 'oh-my-codex (omx CLI)'
     # OpenCode v2 renamed its npm package. Both packages own the `opencode` shim,
     # so npm cannot install the replacement until the v1 package releases it.
     $OpenCodeReady = $true
@@ -1693,30 +1690,6 @@ if(changed){ fs.writeFileSync(process.env.OC_CFG, JSON.stringify(c,null,2)+"\n")
     Write-Warn2 'opencode CLI not on PATH -- skipping OpenCode plugin install (re-run after opencode is installed)'
 }
 
-# oh-my-claudecode + oh-my-codex (Yeachan-Heo)
-#   oh-my-claudecode — Claude Code multi-agent plugin. Marketplace name "omc",
-#   plugin selector "oh-my-claudecode@omc"; same install shape as yunxing.
-#   oh-my-codex — Codex orchestration layer. The npm package (installed above)
-#   ships the `omx` CLI; `omx setup --scope user` wires the plugin + hooks into
-#   the user's codex config (idempotent; re-run keeps it current).
-# Claude Code — oh-my-claudecode plugin.
-if (Test-Cmd claude) {
-    Write-Step 'Installing oh-my-claudecode Claude Code plugin (marketplace: omc)'
-    claude plugin marketplace add Yeachan-Heo/oh-my-claudecode 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude marketplace add oh-my-claudecode failed (may already be registered)' }
-    claude plugin marketplace update omc 2>$null
-    if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude marketplace update omc failed' }
-    if (claude plugin list 2>$null | Select-String -Quiet 'oh-my-claudecode@omc') {
-        claude plugin update oh-my-claudecode@omc 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude plugin update oh-my-claudecode failed' }
-    } else {
-        claude plugin install oh-my-claudecode@omc 2>$null
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 '  claude plugin install oh-my-claudecode failed (may already be enabled)' }
-    }
-} else {
-    Write-Warn2 'claude CLI not on PATH -- skipping oh-my-claudecode (re-run after claude is installed)'
-}
-
 # claude-hud — Claude Code HUD plugin (jarrodwatts/claude-hud). Marketplace name
 # "claude-hud", plugin selector "claude-hud@claude-hud"; same install shape as yunxing.
 if (Test-Cmd claude) {
@@ -1734,34 +1707,6 @@ if (Test-Cmd claude) {
     }
 } else {
     Write-Warn2 'claude CLI not on PATH -- skipping claude-hud (re-run after claude is installed)'
-}
-
-# Codex — oh-my-codex. `omx setup --scope user` wires the plugin + hooks into the
-# user's codex config (idempotent; re-run keeps it current).
-#
-# stdin + stdout are detached from the console because `omx setup` only prompts
-# when BOTH are terminals (persisted-preference review, legacy vs plugin skill
-# delivery). Detached, it reuses the choices recorded in .\.omx\setup-scope.json,
-# so an existing install is kept as-is instead of blocking on a prompt the
-# suppression below would hide.
-if ((Test-Cmd codex) -and (Test-Cmd omx)) {
-    Write-Step 'Wiring oh-my-codex into Codex (omx setup --scope user; keeping recorded choices)'
-    # Clean foreign [hooks.state] residue first so `omx setup` can reconcile its
-    # trust state instead of refusing on stale/legacy entries (old oh-my-codex@
-    # plugin hooks or project-local .codex/hooks.json serialized into the OMX
-    # block by a prior `codex mcp add`). Best-effort; no-op when clean.
-    if (Test-Cmd node) {
-        $cleanOut = (node (Join-Path $DotfilesDir 'common/scripts/clean-codex-hook-trust.mjs') 2>&1 | Out-String).Trim()
-        if ($LASTEXITCODE -ne 0) { Write-Warn2 "  clean-codex-hook-trust failed (continuing): $cleanOut" }
-        elseif ($cleanOut) { Write-Host "  $cleanOut" }
-    }
-    $omxErr = ($null | omx setup --scope user 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        if ($omxErr) { Write-Warn2 "  omx setup --scope user failed: $omxErr" }
-        else { Write-Warn2 '  omx setup --scope user failed' }
-    }
-} else {
-    Write-Warn2 'codex/omx not on PATH -- skipping oh-my-codex setup (re-run after oh-my-codex is installed)'
 }
 
 # Apply local policy after plugin setup, which may generate global instructions.
