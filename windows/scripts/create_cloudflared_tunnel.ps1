@@ -449,7 +449,16 @@ $lines = @(
     "tunnel: $TunnelName"
     "credentials-file: `"$credsForwardSlash`""
     "ha-connections: $HaConnections"
-    "protocol: http2"
+)
+# The com host's HTTP/2 edge handshake can fail with EOF. QUIC over IPv4
+# restored both edge connections on that host.
+if ($Preset -eq 'com') {
+    $lines += 'protocol: quic'
+    $lines += 'edge-ip-version: "4"'
+} else {
+    $lines += 'protocol: http2'
+}
+$lines += @(
     ''
     'ingress:'
 )

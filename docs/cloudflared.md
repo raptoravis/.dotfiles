@@ -32,7 +32,7 @@ cloudflared tunnel route dns home app.example.com
 tunnel: home
 credentials-file: /home/you/.cloudflared/<UUID>.json   # Windows 用反斜杠绝对路径
 ha-connections: 2   # 免费版服务端硬上限 2，写明可消 warning；默认 4 会提示 "I can give you at most 2"
-protocol: http2      # 强制 TCP/443，绕开代理/TUN 对 UDP(QUIC) 的干扰
+protocol: http2      # 使用 TCP 7844，适用于 UDP 7844 不通的网络
 
 ingress:
   - hostname: app.example.com
@@ -44,6 +44,11 @@ ingress:
 ```
 
 ## 启动
+
+Windows 的 `install-windows.ps1` 安装 `cloudflared` 软件包。隧道配置由
+`windows/scripts/create_cloudflared_tunnel.ps1` 生成，使用 `-InstallService` 时会复制到
+Windows 服务的配置目录。`-Preset com` 使用 `protocol: quic` 和 `edge-ip-version: "4"`，
+以避免该主机上出现过的 HTTP/2 边缘握手 `EOF` 和 `1033`。`-Preset home` 使用 HTTP/2。
 
 ```bash
 # 前台跑（调试用）
@@ -109,7 +114,7 @@ curl -sH 'accept: application/dns-json' \
 | `failed to sufficiently increase receive buffer size` | Linux UDP buffer 偏小，无害；想消除：`sudo sysctl -w net.core.rmem_max=7500000 net.core.wmem_max=7500000` |
 | `error="Unauthorized"` | `cert.pem` 过期或换号了，重新 `cloudflared tunnel login` |
 | `failed to dial to edge with quic: timeout` + `ip=198.18.x.x` | cloudflared 解析到了 fake-ip（被代理软件 DNS 劫持）。给 Clash / sing-box 加直连规则：`DOMAIN-SUFFIX,argotunnel.com,DIRECT`、`DOMAIN-SUFFIX,cftunnel.com,DIRECT`、`DOMAIN-SUFFIX,cloudflareclient.com,DIRECT` |
-| `failed to dial to edge with quic: timeout: no recent network activity`（ip 是真实 CF 段 `198.41.x.x` / `2606:4700`，不是 `198.18.x.x`） | 不是 DNS 劫持，而是 TUN 代理在丢大 UDP 包（MTU 不匹配黑洞）。给 config 加 `protocol: http2` 走 TCP/443 绕开最稳；或给 TUN 设正确 MTU |
+| `failed to dial to edge with quic: timeout: no recent network activity`（IP 是 Cloudflare 地址，例如 `198.41.x.x` 或 `2606:4700`） | 检查 UDP 7844 连通性和 TUN MTU。若网络只允许 TCP 7844，可用 `protocol: http2` |
 | `You requested 4 HA connections but I can give you at most 2` | 免费版服务端硬上限 2。在 `config.yml` 加 `ha-connections: 2` |
 | `"cloudflared tunnel run" accepts only one argument` | `--ha-connections 2` 之类的 flag 必须放在 `run` 之后、tunnel 名之前：`cloudflared tunnel run --ha-connections 2 home` |
 | 1016 Origin DNS error | CF 边缘没找到 hostname → tunnel 的有效路由。99% 是 DNS 这条 CNAME 缺失 / 灰云 / 指向已删 tunnel UUID。dashboard 看 zone 里 CNAME 的 target 和云朵颜色 |
